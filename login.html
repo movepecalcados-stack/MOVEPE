@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); margin:0; }
+    .login-box { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:40px 36px; width:100%; max-width:360px; box-shadow:0 8px 32px rgba(0,0,0,0.12); }
+    .login-logo { text-align:center; margin-bottom:28px; }
+    .login-logo-nome { font-size:28px; font-weight:900; color:var(--primary); letter-spacing:1px; }
+    .login-logo-sub { font-size:13px; color:var(--text-muted); margin-top:2px; }
+    .login-erro { display:none; color:var(--danger); font-size:13px; font-weight:600; text-align:center; margin-bottom:12px; padding:8px; background:rgba(239,68,68,0.08); border-radius:6px; }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-nome">MOVE PÉ</div>
+      <div class="login-logo-sub">Gestão de Loja</div>
+    </div>
+    <div id="loginErro" class="login-erro">Senha incorreta. Tente novamente.</div>
+    <div class="form-group">
+      <label class="form-label">Senha de acesso</label>
+      <input type="password" id="inputSenha" class="form-control" placeholder="Digite a senha..."
+        autofocus onkeydown="if(event.key==='Enter') Login.entrar()">
+    </div>
+    <button class="btn btn-primary btn-lg btn-full" onclick="Login.entrar()" style="margin-top:8px">
+      🔐 Entrar
+    </button>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script>
+    // Se não há senha configurada, vai direto ao dashboard
+    if (!localStorage.getItem('movePe_senha')) location.replace('dashboard.html');
+
+    // Se já está autenticado, vai direto ao dashboard
+    if (sessionStorage.getItem('movePe_auth')) location.replace('dashboard.html');
+
+    const Login = {
+      entrar: () => {
+        const digitada = document.getElementById('inputSenha').value;
+        const salva = localStorage.getItem('movePe_senha');
+        if (digitada === salva) {
+          sessionStorage.setItem('movePe_auth', '1');
+          location.replace('dashboard.html');
+        } else {
+          document.getElementById('loginErro').style.display = '';
+          document.getElementById('inputSenha').value = '';
+          document.getElementById('inputSenha').focus();
+        }
+      }
+    };
+  </script>
+</body>
+</html>

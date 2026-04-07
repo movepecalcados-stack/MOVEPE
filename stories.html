@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stories — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* ---- TEMPLATES SELECTOR ---- */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .template-card {
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      background: var(--card-bg);
+    }
+    .template-card:hover { border-color: var(--primary); }
+    .template-card.ativo { border-color: var(--primary); background: rgba(99,102,241,.08); }
+    .template-card .tc-thumb {
+      width: 100%;
+      aspect-ratio: 9/16;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    .template-card .tc-label { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+
+    /* ---- STORY PREVIEW ---- */
+    .story-preview-wrap {
+      position: sticky;
+      top: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .story-preview-wrap canvas {
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.25);
+      display: block;
+      max-width: 100%;
+    }
+    .story-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ---- LAYOUT ---- */
+    .stories-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .stories-layout { grid-template-columns: 1fr; }
+      .template-grid { grid-template-columns: repeat(2, 1fr); }
+      .story-preview-wrap { position: static; }
+    }
+
+    /* ---- COLOR PICKER CHIPS ---- */
+    .color-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .color-chip {
+      width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+      border: 3px solid transparent; transition: border-color .15s;
+    }
+    .color-chip.ativo { border-color: var(--primary); }
+
+    .section-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 16px 0 8px;
+    }
+    .section-title:first-child { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">📸 Stories do Instagram</div>
+      <div class="topbar-info">
+        <span class="text-muted fs-sm">Crie stories profissionais para divulgar seus produtos</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="stories-layout">
+
+        <!-- ===== PAINEL DE CONTROLES ===== -->
+        <div>
+
+          <!-- TEMPLATES -->
+          <div class="card">
+            <div class="card-title">🎨 Escolha o Template</div>
+            <div class="template-grid" id="templateGrid"></div>
+
+            <!-- COR DO TEMA -->
+            <div class="section-title">Cor do Tema</div>
+            <div class="color-chips" id="colorChips"></div>
+          </div>
+
+          <!-- CONTEÚDO -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title">✏️ Conteúdo</div>
+
+            <div class="section-title">Produto (opcional)</div>
+            <div class="form-row" style="align-items:flex-end;gap:8px">
+              <div class="form-group" style="flex:1;margin:0">
+                <select class="form-control" id="selectProduto" onchange="Stories.onProdutoChange()">
+                  <option value="">— Digitar manualmente —</option>
+                </select>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="Stories.limparProduto()" title="Limpar">✕</button>
+            </div>
+
+            <div class="section-title">Título principal</div>
+            <input class="form-control" id="inputTitulo" maxlength="60"
+              placeholder="Ex: Tênis Air Force One" oninput="Stories.renderPreview()">
+
+            <div class="section-title">Subtítulo / detalhe</div>
+            <input class="form-control" id="inputSub" maxlength="80"
+              placeholder="Ex: Disponível nos tamanhos 36 ao 44" oninput="Stories.renderPreview()">
+
+            <div id="secaoDesconto" style="display:none">
+              <div class="section-title">Desconto (%)</div>
+              <div class="form-row" style="gap:8px">
+                <input class="form-control" id="inputDescPct" type="number" min="0" max="99"
+                  placeholder="Ex: 20" style="flex:1" oninput="Stories.renderPreview()">
+                <span class="text-muted" style="line-height:38px;font-size:13px">% OFF</span>
+              </div>
+            </div>
+
+            <div class="section-title">Preço</div>
+            <div class="form-row" style="gap:8px">
+              <div class="form-group" style="flex:1;margin:0">
+                <label class="fs-sm text-muted">De (original)</label>
+                <input class="form-control" id="inputPrecoOriginal" type="number" min="0" step="0.01"
+                  placeholder="0,00" oninput="Stories.renderPreview()">
+              </div>
+              <div class="form-group" style="flex:1;margin:0">
+                <label class="fs-sm text-muted">Por (final)</label>
+                <input class="form-control" id="inputPreco" type="number" min="0" step="0.01"
+                  placeholder="0,00" oninput="Stories.renderPreview()">
+              </div>
+            </div>
+
+            <div class="section-title">Chamada para ação (CTA)</div>
+            <input class="form-control" id="inputCta" maxlength="60"
+              placeholder="Ex: Venha conferir! 🔥" oninput="Stories.renderPreview()">
+
+            <div class="section-title" style="margin-top:16px">Rodapé (contato/endereço)</div>
+            <input class="form-control" id="inputRodape" maxlength="80"
+              placeholder="Ex: (85) 99999-9999 · @movepecalcados" oninput="Stories.renderPreview()">
+          </div>
+
+        </div>
+
+        <!-- ===== PREVIEW + DOWNLOAD ===== -->
+        <div class="story-preview-wrap">
+          <div style="font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Preview</div>
+          <canvas id="storyCanvas"></canvas>
+          <div class="story-actions">
+            <button class="btn btn-primary" onclick="Stories.download()">⬇️ Baixar PNG</button>
+            <button class="btn btn-outline" onclick="Stories.copiarTexto()">📋 Copiar Legenda</button>
+          </div>
+          <div id="legendaCopiada" style="font-size:12px;color:var(--success);display:none;text-align:center">✅ Legenda copiada!</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/stories.js"></script>
+</body>
+</html>

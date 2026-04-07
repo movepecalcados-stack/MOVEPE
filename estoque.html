@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estoque — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">📦 Estoque</div>
+      <div class="topbar-info">
+        <button class="btn btn-primary" id="btnNovoProduto">+ Novo Produto</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- STATS -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total de Peças</div>
+          <div class="stat-value" id="statPecas">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Valor em Estoque (Venda)</div>
+          <div class="stat-value primary" id="statValorVenda">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Valor em Estoque (Custo)</div>
+          <div class="stat-value" id="statValorCusto">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Estoque Baixo</div>
+          <div class="stat-value danger" id="statBaixo">0</div>
+        </div>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="buscaInput" class="form-control" placeholder="Buscar por nome, marca, SKU...">
+        </div>
+        <select id="filtroTipo" class="form-control" style="width:180px">
+          <option value="">Todos os Tipos</option>
+          <option value="calcado_adulto">Calçado Adulto</option>
+          <option value="calcado_infantil">Calçado Infantil</option>
+          <option value="roupa">Roupa</option>
+        </select>
+        <input type="text" id="filtroTamanho" class="form-control" placeholder="Filtrar tamanho..." style="width:140px">
+      </div>
+
+      <!-- GRID DE PRODUTOS -->
+      <div class="estoque-grid" id="estoquegrid">
+        <div class="loading" style="grid-column:1/-1"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PRODUTO -->
+  <div class="modal-overlay" id="modalProduto" style="display:none">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span class="modal-title" id="modalProdutoTitulo">Novo Produto</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalProduto')">✕</button>
+      </div>
+      <form id="formProduto">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nome do Produto *</label>
+            <input type="text" name="nome" class="form-control" required placeholder="Ex: Tênis Nike Air Max">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo *</label>
+            <select name="tipo" class="form-control">
+              <option value="calcado_adulto">Calçado Adulto</option>
+              <option value="calcado_infantil">Calçado Infantil</option>
+              <option value="roupa">Roupa</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Marca</label>
+            <input type="text" name="marca" class="form-control" placeholder="Ex: Nike">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <input type="text" name="categoria" class="form-control" placeholder="Ex: Esportivo">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">SKU</label>
+            <input type="text" name="sku" class="form-control" placeholder="Ex: TEN001">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Código de Barras</label>
+            <input type="text" name="codigoBarras" class="form-control" placeholder="EAN/UPC">
+          </div>
+        </div>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label class="form-label">Preço de Venda (R$) *</label>
+            <input type="number" name="precoVenda" class="form-control" step="0.01" min="0" required placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Preço de Custo (R$)</label>
+            <input type="number" name="precoCusto" class="form-control" step="0.01" min="0" placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estoque Mínimo</label>
+            <input type="number" name="estoqueMinimo" class="form-control" min="0" value="5">
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section-header">
+          <span class="section-title">Tamanhos e Estoque</span>
+          <button type="button" class="btn btn-outline btn-sm" id="btnAdicionarVariacao">+ Adicionar Tamanho</button>
+        </div>
+        <div id="variacoesCont" style="max-height:200px;overflow-y:auto">
+          <div class="text-muted fs-sm" style="padding:8px">Nenhum tamanho adicionado</div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="btnCancelar">Cancelar</button>
+          <button type="submit" class="btn btn-primary">💾 Salvar Produto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/estoque.js"></script>
+</body>
+</html>

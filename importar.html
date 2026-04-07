@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Importar — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">📥 Importar</div>
+    </div>
+
+    <div class="content">
+
+      <div class="card">
+        <div class="card-title">📋 Instruções</div>
+        <p class="text-muted fs-sm" style="line-height:1.8">
+          1. No Tiny, exporte <strong>Contatos</strong> em CSV e <strong>Contas a Receber</strong> em CSV<br>
+          2. Selecione os arquivos abaixo<br>
+          3. Clique em <strong>Importar</strong> e aguarde
+        </p>
+      </div>
+
+      <div class="stats-grid" style="margin-top:16px">
+        <div class="card">
+          <div class="card-title">👥 Clientes (contatos.csv)</div>
+          <div style="margin-top:12px">
+            <label class="btn btn-outline" style="cursor:pointer;display:inline-block">
+              📂 Selecionar arquivo
+              <input type="file" id="fileClientes" accept=".csv" style="display:none" onchange="Imp.previewClientes(this)">
+            </label>
+            <div id="previewClientes" class="text-muted fs-sm" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">💳 Crediário (contas_receber.csv)</div>
+          <div style="margin-top:12px">
+            <label class="btn btn-outline" style="cursor:pointer;display:inline-block">
+              📂 Selecionar arquivo
+              <input type="file" id="fileCrediario" accept=".csv" style="display:none" onchange="Imp.previewCrediario(this)">
+            </label>
+            <div id="previewCrediario" class="text-muted fs-sm" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMPORTAR PRODUTOS -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">👟 Produtos (produtos_XXXX.csv)</div>
+        <p class="text-muted fs-sm" style="margin:8px 0 12px">
+          Importa todos os produtos ativos com nome, preço, marca, categoria e estoque por tamanho.
+        </p>
+        <label class="btn btn-outline" style="cursor:pointer;display:inline-block">
+          📂 Selecionar arquivo de produtos
+          <input type="file" id="fileProdutos" accept=".csv" style="display:none" onchange="Imp.previewProdutos(this)">
+        </label>
+        <div id="previewProdutos" class="text-muted fs-sm" style="margin-top:10px"></div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="btnImportarProdutos" onclick="Imp.importarProdutos()" disabled>
+            👟 Importar Produtos
+          </button>
+          <button class="btn btn-outline" id="btnAtualizarEstoque" onclick="Imp.atualizarEstoque()" disabled>
+            🔄 Só atualizar estoque
+          </button>
+        </div>
+        <div id="logProdutos" style="margin-top:12px"></div>
+      </div>
+
+      <!-- IMPORTAR PRODUTOS DOS PEDIDOS -->
+      <div class="card" style="margin-top:16px;border-color:var(--primary)">
+        <div class="card-title">👟 Vincular Produtos aos Crediários (planilha_vendas.csv)</div>
+        <p class="text-muted fs-sm" style="margin:8px 0 12px">
+          Importa os produtos de cada pedido e vincula aos crediários já cadastrados. Faça isso <strong>depois</strong> de importar clientes e crediários.
+        </p>
+        <label class="btn btn-outline" style="cursor:pointer;display:inline-block">
+          📂 Selecionar planilha_vendas CSV
+          <input type="file" id="filePedidos" accept=".csv" style="display:none" onchange="Imp.previewPedidos(this)">
+        </label>
+        <div id="previewPedidos" class="text-muted fs-sm" style="margin-top:10px"></div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary" id="btnImportarPedidos" onclick="Imp.importarPedidos()" disabled>
+            👟 Vincular Produtos
+          </button>
+        </div>
+        <div id="logPedidos" style="margin-top:12px"></div>
+      </div>
+
+      <div id="resumo" style="display:none;margin-top:16px"></div>
+
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="btn btn-primary" id="btnImportar" onclick="Imp.importar()" disabled>
+          📥 Importar tudo
+        </button>
+      </div>
+
+      <div id="logImport" style="margin-top:16px"></div>
+
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script>
+    const Imp = (() => {
+      let _clientes = [];
+      let _crediario = [];
+      let _pedidos = [];
+      let _produtos = [];
+
+      // Parse CSV respeitando campos entre aspas
+      const parseCSV = (text) => {
+        const lines = text.split('\n').filter(l => l.trim());
+        const headers = parseLine(lines[0]);
+        return lines.slice(1).map(line => {
+          const vals = parseLine(line);
+          const obj = {};
+          headers.forEach((h, i) => { obj[h.trim()] = (vals[i] || '').trim(); });
+          return obj;
+        }).filter(r => Object.values(r).some(v => v));
+      };
+
+      const parseLine = (line) => {
+        const result = [];
+        let cur = '';
+        let inQuote = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') { inQuote = !inQuote; continue; }
+          if (c === ',' && !inQuote) { result.push(cur); cur = ''; continue; }
+          cur += c;
+        }
+        result.push(cur);
+        return result;
+      };
+
+      const readFile = (file) => new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsText(file, 'UTF-8');
+      });
+
+      const fmtData = (br) => {
+        // dd/mm/yyyy → yyyy-mm-dd
+        if (!br || !br.includes('/')) return '';
+        const [d, m, y] = br.split('/');
+        if (!d || !m || !y) return '';
+        return `${y.padStart(4,'0')}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      };
+
+      const fmtValor = (s) => {
+        if (!s) return 0;
+        return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+      };
+
+      return {
+        previewClientes: async (input) => {
+          const file = input.files[0];
+          if (!file) return;
+          const text = await readFile(file);
+          const rows = parseCSV(text);
+          _clientes = rows.filter(r => r['Nome'] && r['Situação'] === 'Ativo');
+          document.getElementById('previewClientes').innerHTML =
+            `<span style="color:var(--success)">✅ ${_clientes.length} clientes ativos encontrados</span>`;
+          Imp._checkReady();
+        },
+
+        previewCrediario: async (input) => {
+          const file = input.files[0];
+          if (!file) return;
+          const text = await readFile(file);
+          const rows = parseCSV(text);
+          _crediario = rows.filter(r => r['Cliente']);
+          const abertas = _crediario.filter(r => r['Situação'] !== 'Paga');
+          const pagas = _crediario.filter(r => r['Situação'] === 'Paga');
+          document.getElementById('previewCrediario').innerHTML =
+            `<span style="color:var(--success)">✅ ${_crediario.length} contas encontradas</span><br>
+             <span style="color:var(--warning)">⚠️ ${abertas.length} em aberto/parcial</span> &nbsp;
+             <span style="color:var(--text-muted)">${pagas.length} pagas (histórico)</span>`;
+          Imp._checkReady();
+        },
+
+        _checkReady: () => {
+          const ok = _clientes.length > 0 || _crediario.length > 0;
+          document.getElementById('btnImportar').disabled = !ok;
+          if (ok) {
+            document.getElementById('resumo').style.display = '';
+            document.getElementById('resumo').innerHTML = `
+              <div class="card" style="border-color:var(--primary)">
+                <div class="card-title" style="color:var(--primary)">📋 Resumo do que será importado</div>
+                <ul style="margin:10px 0 0 16px;line-height:2;color:var(--text-muted)">
+                  <li><strong style="color:var(--text)">${_clientes.length}</strong> clientes</li>
+                  <li><strong style="color:var(--text)">${_crediario.filter(r=>r['Situação']!=='Paga').length}</strong> contas em aberto/parcial (crediário)</li>
+                  <li><strong style="color:var(--text)">${_crediario.filter(r=>r['Situação']==='Paga').length}</strong> contas pagas (histórico)</li>
+                </ul>
+              </div>`;
+          }
+        },
+
+        importar: async () => {
+          const btn = document.getElementById('btnImportar');
+          btn.disabled = true;
+          btn.textContent = '⏳ Importando...';
+          const log = document.getElementById('logImport');
+          log.innerHTML = '';
+
+          let cliOk = 0, cliSkip = 0;
+          const mapaClientes = {}; // nome → id
+
+          // Importar clientes
+          if (_clientes.length > 0) {
+            const existentes = DB.Clientes.listar();
+            const cpfsExistentes = new Set(existentes.map(c => c.cpf).filter(Boolean));
+            const nomesExistentes = new Set(existentes.map(c => c.nome.toLowerCase().trim()));
+
+            for (const row of _clientes) {
+              const nome = (row['Nome'] || '').trim();
+              const cpf = (row['CNPJ / CPF'] || '').trim();
+              const tel = (row['Celular'] || row['Fone'] || '').trim();
+              const email = (row['E-mail'] || '').trim();
+              const end = [row['Endereço'], row['Número'], row['Bairro'], row['Cidade'], row['Estado']]
+                .filter(Boolean).join(', ');
+
+              if (!nome) continue;
+
+              // Pula se já existe por CPF ou nome
+              if (cpf && cpfsExistentes.has(cpf)) {
+                const ex = existentes.find(c => c.cpf === cpf);
+                if (ex) mapaClientes[nome.toLowerCase()] = ex.id;
+                cliSkip++;
+                continue;
+              }
+              if (!cpf && nomesExistentes.has(nome.toLowerCase())) {
+                const ex = existentes.find(c => c.nome.toLowerCase().trim() === nome.toLowerCase());
+                if (ex) mapaClientes[nome.toLowerCase()] = ex.id;
+                cliSkip++;
+                continue;
+              }
+
+              const novo = DB.Clientes.salvar({ nome, cpf, telefone: tel, email, endereco: end });
+              mapaClientes[nome.toLowerCase()] = novo.id;
+              cliOk++;
+            }
+            log.innerHTML += `<div class="card" style="margin-bottom:10px">
+              <span style="color:var(--success)">✅ Clientes importados: <strong>${cliOk}</strong></span>
+              &nbsp; <span class="text-muted">(${cliSkip} já existiam)</span>
+            </div>`;
+          }
+
+          // Importar crediário — agrupar por pedido
+          let credOk = 0;
+          if (_crediario.length > 0) {
+            // Recarrega clientes (incluindo os recém importados)
+            const todosClientes = DB.Clientes.listar();
+
+            // Agrupa parcelas por pedido (extrai número do pedido do histórico)
+            const pedidos = {};
+            for (const row of _crediario) {
+              const hist = row['Histórico'] || '';
+              const matchPedido = hist.match(/pedido de venda n[ºo°]\s*(\d+)/i);
+              const numPedido = matchPedido ? matchPedido[1] : (row['Número documento'] || row['ID']);
+              if (!pedidos[numPedido]) pedidos[numPedido] = [];
+              pedidos[numPedido].push(row);
+            }
+
+            for (const [numPedido, parcelas] of Object.entries(pedidos)) {
+              // Pega nome do cliente da primeira parcela
+              const nomeCliente = (parcelas[0]['Cliente'] || '').trim();
+
+              // Tenta encontrar cliente no sistema
+              const clienteEncontrado = todosClientes.find(c =>
+                c.nome.toLowerCase().trim() === nomeCliente.toLowerCase().trim()
+              );
+              const clienteId = clienteEncontrado ? clienteEncontrado.id : null;
+
+              // Monta parcelas
+              const parcelasImport = parcelas.map(p => {
+                const situacao = (p['Situação'] || '').toLowerCase();
+                const vencimento = fmtData(p['Data Vencimento']);
+                const valor = fmtValor(p['Valor documento']);
+                const saldo = fmtValor(p['Saldo']);
+                const dataPag = fmtData(p['Data Liquidação']);
+
+                let status = 'pendente';
+                if (situacao === 'paga') status = 'pago';
+                else if (situacao === 'parcial') status = 'pendente'; // ainda tem saldo
+
+                return {
+                  vencimento,
+                  valor,
+                  saldo: saldo,
+                  status,
+                  dataPagamento: status === 'pago' && dataPag ? dataPag : undefined,
+                  origem: 'tiny'
+                };
+              });
+
+              const total = parcelasImport.reduce((s, p) => s + p.valor, 0);
+              const emissao = fmtData(parcelas[0]['Data Emissão']);
+
+              DB.Crediario.salvar({
+                clienteId: clienteId || null,
+                clienteNome: nomeCliente,
+                total,
+                parcelas: parcelasImport,
+                formaPagamento: 'crediario',
+                observacao: `Importado do Tiny — Pedido nº ${numPedido}`,
+                criadoEm: emissao ? emissao + 'T00:00:00.000Z' : new Date().toISOString(),
+                origem: 'tiny'
+              });
+              credOk++;
+            }
+
+            log.innerHTML += `<div class="card">
+              <span style="color:var(--success)">✅ Crediários importados: <strong>${credOk}</strong> pedidos</span>
+            </div>`;
+          }
+
+          // Força sincronização completa com Firebase antes de navegar
+          btn.textContent = '☁️ Sincronizando com Firebase...';
+          log.innerHTML += `<div class="card" style="margin-top:10px" id="logSync">
+            <span style="color:var(--text-muted)">🔄 Enviando dados para o Firebase, aguarde...</span>
+          </div>`;
+
+          DB.Sync.syncAll();
+
+          // Aguarda 4 segundos para garantir que o Firebase recebeu tudo
+          setTimeout(() => {
+            btn.textContent = '✅ Importação concluída!';
+            document.getElementById('logSync').innerHTML = `
+              <strong style="color:var(--success)">✅ Importação e sincronização finalizadas!</strong><br>
+              <span class="text-muted fs-sm">
+                Agora pode fechar e reabrir o sistema normalmente.<br>
+                Acesse <a href="clientes.html" style="color:var(--primary)">Clientes</a> e
+                <a href="crediario.html" style="color:var(--primary)">Crediário</a> para verificar os dados.
+              </span>`;
+          }, 4000);
+        },
+
+        previewProdutos: async (input) => {
+          const file = input.files[0];
+          if (!file) return;
+          const text = await readFile(file);
+          const rows = parseCSV(text);
+          _produtos = rows.filter(r => r['Situação'] === 'Ativo');
+          const pais = _produtos.filter(r => r['Tipo do produto'] === 'V' || !r['Código do pai']);
+          const variacoes = _produtos.filter(r => r['Tipo do produto'] === 'S' && r['Código do pai']);
+          document.getElementById('previewProdutos').innerHTML =
+            `<span style="color:var(--success)">✅ ${pais.length} produtos · ${variacoes.length} variações (tamanhos)</span>`;
+          document.getElementById('btnImportarProdutos').disabled = false;
+          document.getElementById('btnAtualizarEstoque').disabled = false;
+        },
+
+        importarProdutos: async () => {
+          const btn = document.getElementById('btnImportarProdutos');
+          const log = document.getElementById('logProdutos');
+          btn.disabled = true;
+          btn.textContent = '⏳ Importando...';
+
+          const fmtPreco = s => parseFloat((s||'0').replace(/\./g,'').replace(',','.')) || 0;
+
+          const extrairTamanho = (variacoes) => {
+            if (!variacoes) return null;
+            const m = variacoes.match(/Tamanho[:\s]+([^\|]+)/i);
+            return m ? m[1].trim() : null;
+          };
+
+          const extrairCategoria = (cat) => {
+            if (!cat) return '';
+            // "MARCAS > NIKE" → "NIKE", ou usa direto
+            const partes = cat.split('>');
+            return partes[partes.length - 1].trim();
+          };
+
+          // Agrupa variações por produto pai (Código do pai)
+          const varPorPai = {};
+          _produtos.filter(r => r['Tipo do produto'] === 'S' && r['Código do pai']).forEach(r => {
+            const pai = r['Código do pai'].trim();
+            if (!varPorPai[pai]) varPorPai[pai] = [];
+            varPorPai[pai].push(r);
+          });
+
+          // Produtos pai
+          const pais = _produtos.filter(r => r['Tipo do produto'] === 'V');
+          // Produtos simples sem variações (não V, não S com pai)
+          const simples = _produtos.filter(r => r['Tipo do produto'] !== 'V' && r['Tipo do produto'] !== 'S');
+
+          const existentes = DB.Produtos.listar();
+          const skusExistentes = new Set(existentes.map(p => p.sku).filter(Boolean));
+
+          let importados = 0, pulados = 0;
+
+          const salvarProduto = (nome, sku, preco, precoCusto, marca, categoria, variacoes) => {
+            if (skusExistentes.has(sku)) { pulados++; return; }
+            DB.Produtos.salvar({
+              nome: nome.trim(),
+              sku: sku.trim(),
+              precoVenda: preco,
+              precoCusto,
+              marca,
+              categoria,
+              variacoes,
+              ativo: true,
+              origem: 'tiny'
+            });
+            importados++;
+          };
+
+          // Importa produtos com variações
+          pais.forEach(pai => {
+            const sku = (pai['Código (SKU)'] || '').trim();
+            const nome = (pai['Descrição'] || '').trim();
+            const preco = fmtPreco(pai['Preço']);
+            const precoCusto = fmtPreco(pai['Preço de custo']);
+            const marca = (pai['Marca'] || extrairCategoria(pai['Categoria'])).trim();
+            const categoria = extrairCategoria(pai['Categoria']);
+            const filhos = varPorPai[sku] || [];
+
+            if (filhos.length === 0) {
+              // Pai sem filhos — produto simples
+              const estoque = parseFloat(pai['Estoque']) || 0;
+              salvarProduto(nome, sku, preco, precoCusto, marca, categoria, { 'Único': estoque });
+              return;
+            }
+
+            // Monta variacoes { tamanho: estoque }
+            const varObj = {};
+            filhos.forEach(f => {
+              const tam = extrairTamanho(f['Variações']);
+              const est = parseFloat(f['Estoque']) || 0;
+              if (tam) varObj[tam] = est;
+            });
+
+            salvarProduto(nome, sku, preco, precoCusto, marca, categoria, varObj);
+          });
+
+          // Importa produtos simples
+          simples.forEach(r => {
+            const sku = (r['Código (SKU)'] || '').trim();
+            const nome = (r['Descrição'] || '').trim();
+            const preco = fmtPreco(r['Preço']);
+            const precoCusto = fmtPreco(r['Preço de custo']);
+            const marca = (r['Marca'] || extrairCategoria(r['Categoria'])).trim();
+            const categoria = extrairCategoria(r['Categoria']);
+            const estoque = parseFloat(r['Estoque']) || 0;
+            salvarProduto(nome, sku, preco, precoCusto, marca, categoria, { 'Único': estoque });
+          });
+
+          DB.Sync.syncAll();
+
+          setTimeout(() => {
+            btn.textContent = '✅ Concluído!';
+            log.innerHTML = `<div class="card" style="border-color:var(--success)">
+              <strong style="color:var(--success)">✅ ${importados} produtos importados!</strong>
+              ${pulados > 0 ? `<br><span class="text-muted fs-sm">${pulados} já existiam e foram ignorados.</span>` : ''}
+              <br><span class="text-muted fs-sm">⚠️ O estoque é de outubro/2025 — revise as quantidades no Estoque.</span>
+            </div>`;
+          }, 3000);
+        },
+
+        atualizarEstoque: async () => {
+          const btn = document.getElementById('btnAtualizarEstoque');
+          const log = document.getElementById('logProdutos');
+          btn.disabled = true;
+          btn.textContent = '⏳ Atualizando...';
+
+          const extrairTamanho = (variacoes) => {
+            if (!variacoes) return null;
+            const m = variacoes.match(/Tamanho[:\s]+([^\|]+)/i);
+            return m ? m[1].trim() : null;
+          };
+
+          // Monta mapa: SKUpai → { tamanho: estoque }
+          const varPorPai = {};
+          _produtos.filter(r => r['Tipo do produto'] === 'S' && r['Código do pai']).forEach(r => {
+            const pai = r['Código do pai'].trim();
+            const tam = extrairTamanho(r['Variações']);
+            const est = parseFloat(r['Estoque']) || 0;
+            if (!varPorPai[pai]) varPorPai[pai] = {};
+            if (tam) varPorPai[pai][tam] = est;
+          });
+
+          // Mapa SKU → estoque para simples
+          const estSimples = {};
+          _produtos.filter(r => r['Tipo do produto'] !== 'S').forEach(r => {
+            const sku = (r['Código (SKU)'] || '').trim();
+            estSimples[sku] = parseFloat(r['Estoque']) || 0;
+          });
+
+          const produtos = DB.Produtos.listar();
+          let atualizados = 0, naoEncontrados = 0;
+
+          // Mapa SKU → preço de venda do arquivo atual
+          const precoPorSku = {};
+          _produtos.filter(r => r['Tipo do produto'] === 'V').forEach(r => {
+            const sku = (r['Código (SKU)'] || '').trim();
+            precoPorSku[sku] = parseFloat((r['Preço']||'0').replace(/\./g,'').replace(',','.')) || 0;
+          });
+
+          produtos.forEach(prod => {
+            if (!prod.sku) return;
+            const sku = prod.sku.trim();
+            let novasVars = null;
+            let updates = {};
+
+            if (varPorPai[sku]) {
+              novasVars = { ...prod.variacoes };
+              Object.entries(varPorPai[sku]).forEach(([tam, est]) => {
+                novasVars[tam] = est;
+              });
+            } else if (estSimples[sku] !== undefined) {
+              novasVars = { 'Único': estSimples[sku] };
+            } else {
+              naoEncontrados++;
+              return;
+            }
+
+            // Corrige campo preco → precoVenda se necessário
+            if (prod.preco && !prod.precoVenda) {
+              updates.precoVenda = prod.preco;
+            }
+            if (precoPorSku[sku]) {
+              updates.precoVenda = precoPorSku[sku];
+            }
+
+            DB.Produtos.salvar({ ...prod, ...updates, variacoes: novasVars });
+            atualizados++;
+          });
+
+          DB.Sync.syncAll();
+
+          setTimeout(() => {
+            btn.textContent = '✅ Concluído!';
+            log.innerHTML = `<div class="card" style="border-color:var(--success)">
+              <strong style="color:var(--success)">✅ Estoque atualizado em ${atualizados} produtos!</strong>
+              ${naoEncontrados > 0 ? `<br><span class="text-muted fs-sm">${naoEncontrados} produtos não encontrados no arquivo.</span>` : ''}
+            </div>`;
+          }, 2500);
+        },
+
+        previewPedidos: async (input) => {
+          const file = input.files[0];
+          if (!file) return;
+          const text = await readFile(file);
+          const rows = parseCSV(text);
+          _pedidos = rows.filter(r => r['Número do pedido'] && r['Descrição']);
+          // Agrupa por pedido
+          const pedidosUnicos = new Set(_pedidos.map(r => r['Número do pedido']));
+          document.getElementById('previewPedidos').innerHTML =
+            `<span style="color:var(--success)">✅ ${_pedidos.length} itens em ${pedidosUnicos.size} pedidos</span>`;
+          document.getElementById('btnImportarPedidos').disabled = false;
+        },
+
+        importarPedidos: async () => {
+          const btn = document.getElementById('btnImportarPedidos');
+          const log = document.getElementById('logPedidos');
+          btn.disabled = true;
+          btn.textContent = '⏳ Vinculando...';
+          log.innerHTML = '';
+
+          if (_pedidos.length === 0) {
+            log.innerHTML = '<span style="color:var(--danger)">Selecione o arquivo primeiro.</span>';
+            btn.disabled = false;
+            btn.textContent = '👟 Vincular Produtos';
+            return;
+          }
+
+          // Agrupa itens por número do pedido
+          const itensPorPedido = {};
+          _pedidos.forEach(row => {
+            const num = row['Número do pedido'];
+            if (!itensPorPedido[num]) itensPorPedido[num] = [];
+            itensPorPedido[num].push({
+              nome: (row['Descrição'] || '').trim(),
+              quantidade: parseFloat(row['Quantidade']) || 1,
+              precoUnitario: parseFloat((row['Valor unitário'] || '0').replace(/\./g,'').replace(',','.')) || 0,
+              sku: (row['Código (SKU)'] || '').trim()
+            });
+          });
+
+          // Busca crediários importados do Tiny e vincula os itens pelo número do pedido
+          const credList = DB.Crediario.listar();
+          let vinculados = 0;
+          let semPedido = 0;
+
+          credList.forEach(cred => {
+            if (!cred.observacao) return;
+            const match = cred.observacao.match(/Pedido n[ºo°]\s*(\d+)/i);
+            if (!match) return;
+            const numPedido = match[1];
+            const itens = itensPorPedido[numPedido];
+            if (!itens || itens.length === 0) { semPedido++; return; }
+            cred.itens = itens;
+            DB.Crediario.salvar(cred);
+            vinculados++;
+          });
+
+          DB.Sync.syncAll();
+
+          setTimeout(() => {
+            btn.textContent = '✅ Concluído!';
+            log.innerHTML = `<div class="card" style="border-color:var(--success)">
+              <strong style="color:var(--success)">✅ ${vinculados} crediários vinculados com produtos!</strong><br>
+              <span class="text-muted fs-sm">${semPedido} pedidos não encontrados (podem ser vendas à vista).</span>
+            </div>`;
+          }, 2000);
+        }
+      };
+    })();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      Utils.renderNav('importar.html');
+    });
+  </script>
+</body>
+</html>

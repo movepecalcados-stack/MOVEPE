@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Financeiro — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">💵 Financeiro</div>
+      <div class="topbar-info">
+        <span class="text-muted fs-sm">Mês atual · Somente leitura</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- STATS -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Entradas (mês)</div>
+          <div class="stat-value success" id="statEntradas">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Saídas (mês)</div>
+          <div class="stat-value danger" id="statSaidas">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Saldo (mês)</div>
+          <div class="stat-value" id="statSaldo">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">A Receber (crediário)</div>
+          <div class="stat-value warning" id="statAReceber">R$ 0,00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Taxas de Cartão (mês)</div>
+          <div class="stat-value danger" id="statTaxasCartao">R$ 0,00</div>
+          <div class="stat-sub" id="statTaxasSub" style="color:var(--danger)">estimado</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Receita Líquida (mês)</div>
+          <div class="stat-value" id="statReceitaLiquida">R$ 0,00</div>
+          <div class="stat-sub" style="color:var(--text-muted)">após taxas</div>
+        </div>
+      </div>
+
+      <!-- TAXAS DE CARTÃO -->
+      <div class="card" style="margin-bottom:20px" id="cardTaxas">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div class="card-title" style="margin:0">💳 Taxas de Cartão por Forma</div>
+          <input type="month" id="inputMesTaxas" class="form-control" style="width:auto" onchange="Financeiro.renderTaxasCartao()">
+        </div>
+        <div id="taxasConteudo"></div>
+      </div>
+
+      <!-- GRÁFICO 6 MESES -->
+      <div class="card mb-16" style="margin-bottom:20px">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Entradas vs Saídas — Últimos 6 Meses</span>
+          <div id="graficoLegenda" style="display:flex;gap:16px"></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-bars" id="grafico6Meses">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMISSÕES -->
+      <div class="card" style="margin-bottom:20px" id="cardComissoes" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div class="card-title" style="margin:0">👤 Comissões por Vendedor</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="month" id="inputMesComissao" class="form-control" style="width:auto">
+            <button class="btn btn-outline btn-sm" onclick="Financeiro.imprimirComissoes()">🖨️ Imprimir</button>
+          </div>
+        </div>
+        <div id="comissoesConteudo"></div>
+      </div>
+
+      <!-- MOVIMENTAÇÕES -->
+      <div class="section-header">
+        <span class="section-title">Todas as Movimentações</span>
+      </div>
+      <div class="card" style="padding:0">
+        <div id="movimentacoesCont">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/financeiro.js"></script>
+</body>
+</html>

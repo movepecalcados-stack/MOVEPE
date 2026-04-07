@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">🏠 Dashboard</div>
+      <div class="topbar-info">
+        <span id="dataHoje" class="text-muted fs-sm"></span>
+      </div>
+    </div>
+
+    <!-- BANNER BACKUP AUTOMÁTICO -->
+    <div id="backupBanner" style="display:none;background:#fff8e1;border-bottom:2px solid #f59e0b;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">💾</span>
+        <div>
+          <div style="font-weight:700;color:#92400e;font-size:13px" id="backupBannerTitulo"></div>
+          <div style="font-size:12px;color:#b45309">Seus dados estão seguros no Firebase, mas um backup local é sempre bom ter.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button onclick="Dashboard.fazerBackup()" style="background:#f59e0b;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px">💾 Baixar backup agora</button>
+        <button onclick="document.getElementById('backupBanner').style.display='none'" style="background:none;border:1px solid #d97706;color:#92400e;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px">Agora não</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- STATS LINHA 1 -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Vendas Hoje</div>
+          <div class="stat-value primary" id="statVendasHoje">R$ 0,00</div>
+          <div class="stat-sub" id="statQtdHoje">0 venda(s)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Faturamento do Mês</div>
+          <div class="stat-value success" id="statFaturamentoMes">R$ 0,00</div>
+          <div class="stat-sub" id="statQtdMes">0 venda(s)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Estoque Baixo</div>
+          <div class="stat-value warning" id="statEstoqueBaixo">0</div>
+          <div class="stat-sub"><a href="estoque.html" style="color:var(--warning)">Ver estoque →</a></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Inadimplentes</div>
+          <div class="stat-value danger" id="statInadimplentes">0</div>
+          <div class="stat-sub" id="statTotalInad" style="color:var(--danger)">R$ 0,00 em atraso</div>
+        </div>
+      </div>
+
+      <!-- STATS LINHA 2 -->
+      <div class="stats-grid" style="margin-top:0">
+        <div class="stat-card">
+          <div class="stat-label">Ticket Médio Hoje</div>
+          <div class="stat-value" id="statTicketMedio" style="color:var(--primary)">R$ 0,00</div>
+          <div class="stat-sub" id="statTicketSub">sem vendas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Crediário Recebido Hoje</div>
+          <div class="stat-value success" id="statCredHoje">R$ 0,00</div>
+          <div class="stat-sub" id="statCredQtd">0 recebimento(s)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Status do Caixa</div>
+          <div class="stat-value" id="statCaixaValor" style="color:var(--success)">—</div>
+          <div class="stat-sub" id="statCaixaSub">verificando...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total de Clientes</div>
+          <div class="stat-value" id="statTotalClientes" style="color:var(--primary)">0</div>
+          <div class="stat-sub"><a href="clientes.html" style="color:var(--text-muted)">Ver clientes →</a></div>
+        </div>
+      </div>
+
+      <!-- ATALHOS RÁPIDOS -->
+      <div class="card" style="margin-top:0;margin-bottom:20px">
+        <div class="card-title">⚡ Atalhos Rápidos</div>
+        <div id="atalhosGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px"></div>
+      </div>
+
+      <!-- META DO MÊS -->
+      <div id="cardMetaMes" style="display:none;margin-bottom:20px">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="card-title" style="margin:0">🎯 Meta do Mês</div>
+            <div id="metaPct" style="font-size:22px;font-weight:800;color:var(--primary)">0%</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-bottom:6px">
+            <span id="metaAtual">R$ 0,00 faturado</span>
+            <span id="metaAlvo">Meta: R$ 0,00</span>
+          </div>
+          <div style="background:var(--border);border-radius:6px;height:14px;overflow:hidden;margin-bottom:12px">
+            <div id="metaBarraFill" style="height:100%;width:0%;background:var(--primary);border-radius:6px;transition:width 0.6s"></div>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Falta para meta</div>
+              <div id="metaFalta" style="font-weight:700;font-size:15px;color:var(--danger)">—</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Dias restantes</div>
+              <div id="metaDiasRestantes" style="font-weight:700;font-size:15px">—</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Média diária necessária</div>
+              <div id="metaMediaNecessaria" style="font-weight:700;font-size:15px;color:var(--warning)">—</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Média diária atual</div>
+              <div id="metaMediaAtual" style="font-weight:700;font-size:15px;color:var(--success)">—</div>
+            </div>
+          </div>
+          <div id="metaMsgBatida" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.1);border:1px solid var(--success);border-radius:8px;font-size:14px;font-weight:700;color:var(--success);text-align:center">
+            🎉 Meta do mês batida! Parabéns!
+          </div>
+        </div>
+      </div>
+
+      <!-- GRID PRINCIPAL -->
+      <div class="dashboard-grid">
+
+        <!-- GRÁFICO 7 DIAS -->
+        <div class="card">
+          <div class="card-title">Vendas dos Últimos 7 Dias</div>
+          <div class="chart-container">
+            <div class="chart-bars" id="grafico7Dias">
+              <div class="loading"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ALERTAS INADIMPLENTES -->
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;gap:8px">
+            Inadimplentes
+            <span class="badge badge-danger" id="alertasBadge" style="display:none">0</span>
+          </div>
+          <div id="alertasLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+          <div style="margin-top:12px">
+            <a href="crediario.html" class="btn btn-outline btn-sm btn-full">Ver Crediário →</a>
+          </div>
+        </div>
+
+        <!-- ESTOQUE BAIXO -->
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;gap:8px">
+            Estoque Crítico
+            <span class="badge badge-warning" id="estoqueBaixoBadge" style="display:none">0</span>
+          </div>
+          <div id="estoqueBaixoLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+          <div style="margin-top:12px">
+            <a href="estoque.html" class="btn btn-outline btn-sm btn-full">Ver Estoque →</a>
+          </div>
+        </div>
+
+        <!-- ANIVERSARIANTES -->
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;gap:8px">
+            🎂 Aniversariantes
+            <span class="badge" id="anivBadge" style="display:none;background:var(--primary);color:#fff">0</span>
+          </div>
+          <div id="anivLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+          <div style="margin-top:12px">
+            <a href="clientes.html" class="btn btn-outline btn-sm btn-full">Ver Clientes →</a>
+          </div>
+        </div>
+
+        <!-- FORMAS DE PAGAMENTO HOJE -->
+        <div class="card">
+          <div class="card-title">💳 Pagamentos de Hoje</div>
+          <div id="pgtoHojeLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+        <!-- VENCENDO EM 7 DIAS -->
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;gap:8px">
+            📅 Vencendo em 7 dias
+            <span class="badge" id="vencBadge" style="display:none;background:var(--warning);color:#fff">0</span>
+          </div>
+          <div id="vencLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+          <div style="margin-top:12px">
+            <a href="whatsapp.html" class="btn btn-outline btn-sm btn-full">💬 WhatsApp Automático →</a>
+          </div>
+        </div>
+
+        <!-- TOP 5 PRODUTOS -->
+        <div class="card dashboard-full">
+          <div class="card-title">Top 5 Produtos Mais Vendidos</div>
+          <div id="top5Lista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+        <!-- ÚLTIMAS VENDAS -->
+        <div class="card dashboard-full">
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+            <span>🕐 Últimas Vendas</span>
+            <a href="historico.html" style="font-size:12px;color:var(--primary)">Ver todas →</a>
+          </div>
+          <div id="ultimasVendasLista">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script>
+    document.getElementById('dataHoje').textContent = Utils.hojeFormatado();
+  </script>
+</body>
+</html>

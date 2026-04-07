@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Histórico — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">🕐 Histórico de Vendas</div>
+      <div class="topbar-info">
+        <span class="stat-value primary" id="statTotalFaturamento" style="font-size:18px">R$ 0,00</span>
+        <span class="text-muted fs-sm" id="statTotalVendas">0 vendas</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- FILTROS -->
+      <div class="search-bar">
+        <div class="search-input-wrap" style="flex:2">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="buscaInput" class="form-control" placeholder="Buscar por cliente, produto ou ID da venda...">
+        </div>
+        <div class="form-group" style="margin:0">
+          <input type="date" id="inputDataInicio" class="form-control" placeholder="De">
+        </div>
+        <div class="form-group" style="margin:0">
+          <input type="date" id="inputDataFim" class="form-control" placeholder="Até">
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnLimparFiltros">Limpar</button>
+      </div>
+
+      <!-- PERÍODOS RÁPIDOS -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-outline btn-sm" onclick="Historico.filtroPeriodo('hoje')">Hoje</button>
+        <button class="btn btn-outline btn-sm" onclick="Historico.filtroPeriodo('semana')">Esta semana</button>
+        <button class="btn btn-outline btn-sm" onclick="Historico.filtroPeriodo('mes')">Este mês</button>
+        <button class="btn btn-outline btn-sm" onclick="Historico.filtroPeriodo('mes_passado')">Mês passado</button>
+        <div style="margin-left:auto">
+          <button class="btn btn-outline btn-sm" id="btnImprimirRelatorio" onclick="Historico.imprimirRelatorio()">🖨️ Imprimir Relatório</button>
+        </div>
+      </div>
+
+      <!-- RESUMO DO PERÍODO -->
+      <div id="resumoPeriodo" style="display:none;margin-bottom:16px">
+        <div class="stats-grid" id="resumoStats"></div>
+      </div>
+
+      <!-- LISTA -->
+      <div id="historicoLista">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DEVOLUÇÃO / TROCA -->
+  <div class="modal-overlay" id="modalDevTroca" style="display:none">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span class="modal-title">🔄 Devolução / Troca</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalDevTroca')">✕</button>
+      </div>
+
+      <div id="devTrocaVendaInfo" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px"></div>
+
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">Selecione os itens a devolver:</div>
+      <div id="devTrocaItens" style="margin-bottom:16px"></div>
+
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <div style="display:flex;gap:12px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="devTrocaTipo" value="devolucao" checked onchange="Historico.devTrocaTipoChange()"> Devolução (reembolso)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="devTrocaTipo" value="troca" onchange="Historico.devTrocaTipoChange()"> Troca (vale-troca)
+          </label>
+        </div>
+      </div>
+
+      <div id="devTrocaReembolsoSecao">
+        <div class="form-group">
+          <label class="form-label">Forma de Reembolso</label>
+          <select id="devTrocaFormaReembolso" class="form-control">
+            <option value="dinheiro">💵 Dinheiro</option>
+            <option value="pix">📱 PIX</option>
+            <option value="credito_loja">🎫 Crédito na Loja</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="devTrocaNovoItemSecao" style="display:none">
+        <div style="font-weight:600;font-size:13px;margin-bottom:8px">Selecione o novo produto/tamanho:</div>
+        <div class="search-input-wrap" style="margin-bottom:10px">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="devTrocaBuscaProd" class="form-control" placeholder="Buscar produto para troca..."
+            oninput="Historico.devTrocaBuscarProduto(this.value)">
+        </div>
+        <div id="devTrocaProdGrid" style="max-height:200px;overflow-y:auto;margin-bottom:10px"></div>
+        <div id="devTrocaNovoItemSel" style="display:none;padding:10px;background:var(--primary-dim);border-radius:8px;font-size:13px;margin-bottom:8px">
+          <span style="color:var(--text-muted)">Novo item selecionado:</span>
+          <strong id="devTrocaNovoItemLabel"></strong>
+          <button onclick="Historico.devTrocaLimparNovoItem()"
+            style="float:right;background:none;border:none;color:var(--text-muted);cursor:pointer">✕</button>
+        </div>
+      </div>
+
+      <div id="devTrocaResumo" style="padding:10px;background:var(--primary-dim);border-radius:8px;font-size:13px;margin-bottom:8px;display:none"></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalDevTroca')">Cancelar</button>
+        <button class="btn btn-warning btn-lg" onclick="Historico.confirmarDevTroca()">✅ Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/historico.js"></script>
+</body>
+</html>

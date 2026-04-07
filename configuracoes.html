@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">⚙️ Configurações</div>
+    </div>
+
+    <div class="content">
+
+      <!-- STATS DO SISTEMA -->
+      <div class="stats-grid" id="statsistema"></div>
+
+      <!-- VENDEDORES -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">👤 Vendedores e Comissões</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Cadastre os vendedores e defina o percentual de comissão de cada um.
+        </p>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Nome do Vendedor</label>
+            <input type="text" id="inputVendedorNome" class="form-control" placeholder="Ex: João Silva">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Comissão (%)</label>
+            <input type="number" id="inputVendedorComissao" class="form-control" min="0" max="100" step="0.5" placeholder="Ex: 5">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary" onclick="Config.adicionarVendedor()">+ Adicionar</button>
+          </div>
+        </div>
+        <div id="listaVendedores" style="margin-top:12px"></div>
+      </div>
+
+      <!-- META DE VENDAS -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">🎯 Meta de Vendas</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Defina a meta mensal de faturamento. Acompanhe o progresso no Dashboard.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Meta Mensal (R$)</label>
+            <input type="number" id="inputMetaMensal" class="form-control" min="0" step="100" placeholder="Ex: 10000">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary" onclick="Config.salvarMeta()">💾 Salvar Meta</button>
+          </div>
+        </div>
+        <div id="metaSalvaInfo" style="display:none;margin-top:8px;font-size:13px;color:var(--success);font-weight:600"></div>
+      </div>
+
+      <!-- BACKUP -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">💾 Backup dos Dados</div>
+
+        <!-- Status do último backup -->
+        <div id="backupStatusBar" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;font-weight:600"></div>
+
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Faça backup regularmente. O arquivo JSON pode ser salvo em pen drive ou na nuvem e importado depois.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="Config.exportar()">
+            📥 Exportar / Baixar Backup
+          </button>
+          <label class="btn btn-outline" style="cursor:pointer">
+            📤 Importar Backup
+            <input type="file" accept=".json" id="inputImportarBackup" style="display:none" onchange="Config.selecionarImportar(this)">
+          </label>
+        </div>
+      </div>
+
+      <!-- INFORMAÇÕES DE ARMAZENAMENTO -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">📊 Armazenamento</div>
+        <div id="storageInfo" class="text-muted fs-sm" style="margin-top:4px"></div>
+        <div id="storageBar" style="margin-top:12px;background:var(--card-border);border-radius:4px;height:8px;overflow:hidden">
+          <div id="storageBarFill" style="height:100%;background:var(--primary);border-radius:4px;transition:width 0.4s"></div>
+        </div>
+      </div>
+
+      <!-- SINCRONIZAÇÃO FIREBASE -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">☁️ Sincronização entre Computadores</div>
+        <p class="text-muted fs-sm" style="margin-bottom:12px">
+          Configure o Firebase para manter os dados sincronizados em tempo real em 2 ou mais computadores.
+        </p>
+        <div id="syncStatusCard" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;font-weight:600"></div>
+        <div id="fbConfigForm">
+          <div class="form-group">
+            <label class="form-label">Configuração do Firebase (JSON)</label>
+            <textarea id="fbConfigInput" class="form-control" rows="8" placeholder='Cole aqui o objeto firebaseConfig copiado do Console do Firebase:&#10;{&#10;  "apiKey": "...",&#10;  "authDomain": "...",&#10;  "projectId": "...",&#10;  "storageBucket": "...",&#10;  "messagingSenderId": "...",&#10;  "appId": "..."&#10;}' style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="Config.conectarFirebase()">☁️ Conectar e Sincronizar</button>
+            <button class="btn btn-outline btn-danger" onclick="Config.desconectarFirebase()" id="btnDesconectar" style="display:none">✕ Desconectar</button>
+          </div>
+        </div>
+        <div style="margin-top:14px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.7">
+            <strong style="color:var(--text)">Como configurar:</strong><br>
+            1. Acesse <strong>console.firebase.google.com</strong> e crie um projeto gratuito<br>
+            2. Vá em "Firestore Database" e crie o banco (modo teste)<br>
+            3. Em "Configurações do projeto" copie o <code>firebaseConfig</code><br>
+            4. Cole acima e clique em Conectar<br>
+            5. Repita os passos no segundo computador com a mesma config
+          </div>
+        </div>
+      </div>
+
+      <!-- SENHA DE ACESSO -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">🔐 Senha de Acesso</div>
+        <div id="senhaStatusInfo" style="margin-bottom:14px;font-size:13px"></div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group">
+            <label class="form-label" id="labelSenha">Nova senha</label>
+            <input type="password" id="inputSenhaNova" class="form-control" placeholder="Digite a senha...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirmar senha</label>
+            <input type="password" id="inputSenhaConfirm" class="form-control" placeholder="Repita a senha...">
+          </div>
+          <div class="form-group" style="display:flex;gap:8px;align-items:flex-end">
+            <button class="btn btn-primary" onclick="Config.salvarSenha()">💾 Salvar Senha</button>
+            <button class="btn btn-outline btn-danger" id="btnRemoverSenha" onclick="Config.removerSenha()" style="display:none">🔓 Remover Senha</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAXAS DA MAQUININHA -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">💳 Taxas da Maquininha</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Informe as taxas cobradas pela sua maquininha. O sistema calculará automaticamente o custo por venda e o valor líquido que você recebe.
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Débito (%)</label>
+            <input type="number" id="taxaDebito" class="form-control" min="0" max="15" step="0.01" placeholder="Ex: 1.50">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Crédito 1x (%)</label>
+            <input type="number" id="taxaCredito1x" class="form-control" min="0" max="15" step="0.01" placeholder="Ex: 2.50">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Crédito 2–6x (%)</label>
+            <input type="number" id="taxaCredito2a6" class="form-control" min="0" max="15" step="0.01" placeholder="Ex: 3.50">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Crédito 7–12x (%)</label>
+            <input type="number" id="taxaCredito7a12" class="form-control" min="0" max="15" step="0.01" placeholder="Ex: 4.50">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">PIX (%)</label>
+            <input type="number" id="taxaPix" class="form-control" min="0" max="5" step="0.01" placeholder="Ex: 0.99">
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="Config.salvarTaxas()">💾 Salvar Taxas</button>
+          <span id="taxasSalvasInfo" style="display:none;font-size:13px;color:var(--success);font-weight:600">✅ Taxas salvas!</span>
+        </div>
+      </div>
+
+      <!-- ZONA DE PERIGO -->
+      <div class="card" style="margin-top:16px;border-color:var(--danger)">
+        <div class="card-title" style="color:var(--danger)">⚠️ Zona de Perigo</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Estas ações são irreversíveis. Faça um backup antes de continuar.
+        </p>
+        <button class="btn btn-danger" onclick="Config.limparTudo()">
+          🗑️ Apagar Todos os Dados
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL PREVIEW IMPORTAÇÃO -->
+  <div class="modal-overlay" id="modalImportPreview" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">📤 Confirmar Importação</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalImportPreview')">✕</button>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+          O arquivo contém os seguintes dados que <strong style="color:var(--danger)">substituirão</strong> os dados atuais:
+        </div>
+        <div id="importPreviewConteudo" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px"></div>
+        <div id="importPreviewDataBackup" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
+      </div>
+      <div style="padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid var(--danger);border-radius:8px;font-size:12px;color:var(--danger);margin-bottom:16px">
+        ⚠️ Esta ação não pode ser desfeita. Recomendamos exportar um backup atual antes de continuar.
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalImportPreview')">Cancelar</button>
+        <button class="btn btn-danger btn-lg" onclick="Config.confirmarImportar()">Substituir e Importar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script>
+    let _arquivoImportar = null;
+
+    const Config = {
+      init: () => {
+        Utils.renderNav('configuracoes.html');
+        Utils.initModais();
+        Config.renderStats();
+        Config.renderStorage();
+        Config.renderBackupStatus();
+        Config.carregarMeta();
+        Config.renderVendedores();
+        Config.renderSenhaStatus();
+        Config.atualizarStatusFirebase();
+        Config.carregarTaxas();
+      },
+
+      renderStats: () => {
+        const produtos = DB.Produtos.listar().length;
+        const clientes = DB.Clientes.listar().length;
+        const vendas = DB.Vendas.listar().length;
+        const crediarios = DB.Crediario.listar().length;
+        document.getElementById('statsistema').innerHTML = `
+          <div class="stat-card">
+            <div class="stat-label">Produtos</div>
+            <div class="stat-value">${produtos}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Clientes</div>
+            <div class="stat-value">${clientes}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Vendas</div>
+            <div class="stat-value primary">${vendas}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Crediários</div>
+            <div class="stat-value warning">${crediarios}</div>
+          </div>`;
+      },
+
+      renderStorage: () => {
+        let totalBytes = 0;
+        for (let key in localStorage) {
+          if (key.startsWith('movePe_')) totalBytes += (localStorage[key] || '').length * 2;
+        }
+        const kb = (totalBytes / 1024).toFixed(1);
+        const maxKb = 5120;
+        const pct = Math.min(100, (totalBytes / 1024 / maxKb * 100)).toFixed(1);
+        document.getElementById('storageInfo').textContent = `Usando ${kb} KB de ~${maxKb} KB disponíveis no navegador (${pct}%)`;
+        document.getElementById('storageBarFill').style.width = pct + '%';
+        if (pct > 80) document.getElementById('storageBarFill').style.background = 'var(--danger)';
+      },
+
+      renderVendedores: () => {
+        const lista = DB.Config.get('vendedores', []);
+        const cont = document.getElementById('listaVendedores');
+        if (lista.length === 0) {
+          cont.innerHTML = '<div class="text-muted fs-sm">Nenhum vendedor cadastrado.</div>';
+          return;
+        }
+        cont.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:8px 0;text-align:left">Nome</th>
+            <th style="padding:8px;text-align:center">Comissão</th>
+            <th style="width:40px"></th>
+          </tr></thead>
+          <tbody>${lista.map((v, i) => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 0;font-weight:600">${v.nome}</td>
+              <td style="padding:8px;text-align:center">
+                <span class="badge badge-primary">${v.comissao}%</span>
+              </td>
+              <td style="padding:8px 0;text-align:right">
+                <button class="btn btn-danger btn-sm" onclick="Config.removerVendedor(${i})">✕</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      },
+
+      adicionarVendedor: () => {
+        const nome = document.getElementById('inputVendedorNome').value.trim();
+        const comissao = parseFloat(document.getElementById('inputVendedorComissao').value) || 0;
+        if (!nome) { Utils.toast('Digite o nome do vendedor', 'error'); return; }
+        if (comissao < 0 || comissao > 100) { Utils.toast('Comissão deve ser entre 0 e 100%', 'error'); return; }
+        const lista = DB.Config.get('vendedores', []);
+        if (lista.some(v => v.nome.toLowerCase() === nome.toLowerCase())) {
+          Utils.toast('Vendedor já cadastrado', 'warning'); return;
+        }
+        lista.push({ nome, comissao });
+        DB.Config.set('vendedores', lista);
+        document.getElementById('inputVendedorNome').value = '';
+        document.getElementById('inputVendedorComissao').value = '';
+        Config.renderVendedores();
+        Utils.toast('Vendedor adicionado!', 'success');
+      },
+
+      removerVendedor: (idx) => {
+        if (!Utils.confirmar('Remover este vendedor?')) return;
+        const lista = DB.Config.get('vendedores', []);
+        lista.splice(idx, 1);
+        DB.Config.set('vendedores', lista);
+        Config.renderVendedores();
+        Utils.toast('Vendedor removido', 'success');
+      },
+
+      renderSenhaStatus: () => {
+        const temSenha = !!localStorage.getItem('movePe_senha');
+        const info = document.getElementById('senhaStatusInfo');
+        const btnRemover = document.getElementById('btnRemoverSenha');
+        const label = document.getElementById('labelSenha');
+        if (temSenha) {
+          info.innerHTML = '<span style="color:var(--success);font-weight:600">🔐 Senha ativa — o sistema exige autenticação ao abrir.</span>';
+          btnRemover.style.display = '';
+          label.textContent = 'Alterar senha';
+        } else {
+          info.innerHTML = '<span style="color:var(--text-muted)">🔓 Sem senha — qualquer pessoa pode acessar o sistema.</span>';
+          btnRemover.style.display = 'none';
+          label.textContent = 'Nova senha';
+        }
+      },
+
+      salvarSenha: () => {
+        const nova = document.getElementById('inputSenhaNova').value;
+        const confirm = document.getElementById('inputSenhaConfirm').value;
+        if (!nova) { Utils.toast('Digite uma senha', 'error'); return; }
+        if (nova.length < 4) { Utils.toast('Senha deve ter pelo menos 4 caracteres', 'error'); return; }
+        if (nova !== confirm) { Utils.toast('As senhas não coincidem', 'error'); return; }
+        localStorage.setItem('movePe_senha', nova);
+        sessionStorage.setItem('movePe_auth', '1');
+        document.getElementById('inputSenhaNova').value = '';
+        document.getElementById('inputSenhaConfirm').value = '';
+        Config.renderSenhaStatus();
+        Utils.toast('Senha salva com sucesso!', 'success');
+      },
+
+      removerSenha: () => {
+        if (!Utils.confirmar('Remover a senha de acesso? O sistema ficará sem proteção.')) return;
+        localStorage.removeItem('movePe_senha');
+        sessionStorage.removeItem('movePe_auth');
+        Config.renderSenhaStatus();
+        Utils.toast('Senha removida', 'success');
+      },
+
+      carregarMeta: () => {
+        const meta = DB.Config.get('metaMensal', 0);
+        if (meta > 0) {
+          document.getElementById('inputMetaMensal').value = meta;
+          document.getElementById('metaSalvaInfo').style.display = '';
+          document.getElementById('metaSalvaInfo').textContent = `Meta atual: ${Utils.moeda(meta)} / mês`;
+        }
+      },
+
+      salvarMeta: () => {
+        const val = parseFloat(document.getElementById('inputMetaMensal').value) || 0;
+        if (val <= 0) { Utils.toast('Digite um valor válido para a meta', 'error'); return; }
+        DB.Config.set('metaMensal', val);
+        const info = document.getElementById('metaSalvaInfo');
+        info.style.display = '';
+        info.textContent = `Meta atual: ${Utils.moeda(val)} / mês`;
+        Utils.toast('Meta salva com sucesso!', 'success');
+      },
+
+      exportar: () => {
+        DB.exportar();
+        Config.renderBackupStatus();
+        Utils.toast('Backup exportado com sucesso!', 'success');
+      },
+
+      renderBackupStatus: () => {
+        const bar = document.getElementById('backupStatusBar');
+        const iso = DB.ultimoBackup();
+        if (!iso) {
+          bar.style.display = 'block';
+          bar.style.background = 'rgba(239,68,68,0.1)';
+          bar.style.color = 'var(--danger)';
+          bar.style.border = '1px solid var(--danger)';
+          bar.textContent = '⚠️ Nenhum backup realizado ainda. Recomendamos exportar agora!';
+          return;
+        }
+        const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+        const dtFmt = new Date(iso).toLocaleString('pt-BR');
+        bar.style.display = 'block';
+        if (dias === 0) {
+          bar.style.background = 'rgba(34,197,94,0.1)';
+          bar.style.color = 'var(--success)';
+          bar.style.border = '1px solid var(--success)';
+          bar.textContent = `✅ Último backup: hoje às ${new Date(iso).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}`;
+        } else if (dias <= 3) {
+          bar.style.background = 'rgba(234,179,8,0.1)';
+          bar.style.color = 'var(--warning)';
+          bar.style.border = '1px solid var(--warning)';
+          bar.textContent = `⚠️ Último backup há ${dias} dia${dias>1?'s':''} (${dtFmt})`;
+        } else {
+          bar.style.background = 'rgba(239,68,68,0.1)';
+          bar.style.color = 'var(--danger)';
+          bar.style.border = '1px solid var(--danger)';
+          bar.textContent = `🔴 Backup desatualizado! Último backup há ${dias} dias (${dtFmt})`;
+        }
+      },
+
+      selecionarImportar: async (input) => {
+        const arquivo = input.files[0];
+        if (!arquivo) return;
+        try {
+          const dados = await DB.lerArquivoBackup(arquivo);
+          if (!dados || typeof dados !== 'object') throw new Error('inválido');
+          _arquivoImportar = arquivo;
+
+          const linhas = [
+            { label: 'Produtos', val: (dados.produtos || []).length, icon: '👟' },
+            { label: 'Clientes', val: (dados.clientes || []).length, icon: '👥' },
+            { label: 'Vendas',   val: (dados.vendas   || []).length, icon: '🛒' },
+            { label: 'Crediários', val: (dados.crediario || []).length, icon: '📋' },
+          ];
+          document.getElementById('importPreviewConteudo').innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              ${linhas.map(l => `
+                <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:6px">
+                  <span style="font-size:20px">${l.icon}</span>
+                  <div>
+                    <div style="font-size:12px;color:var(--text-muted)">${l.label}</div>
+                    <div style="font-weight:700;font-size:16px">${l.val}</div>
+                  </div>
+                </div>`).join('')}
+            </div>`;
+          document.getElementById('importPreviewDataBackup').textContent =
+            dados.exportadoEm
+              ? `Arquivo gerado em: ${new Date(dados.exportadoEm).toLocaleString('pt-BR')}`
+              : '';
+          Utils.abrirModal('modalImportPreview');
+        } catch (e) {
+          Utils.toast('Arquivo inválido ou corrompido', 'error');
+        }
+        input.value = '';
+      },
+
+      confirmarImportar: async () => {
+        if (!_arquivoImportar) return;
+        Utils.fecharModal('modalImportPreview');
+        try {
+          await DB.importar(_arquivoImportar);
+          _arquivoImportar = null;
+          Utils.toast('Backup importado! Recarregando...', 'success');
+          setTimeout(() => location.reload(), 1500);
+        } catch (e) {
+          Utils.toast('Erro ao importar: arquivo inválido', 'error');
+        }
+      },
+
+      conectarFirebase: () => {
+        const input = document.getElementById('fbConfigInput').value.trim();
+        if (!input) { Utils.toast('Cole a configuração do Firebase antes', 'error'); return; }
+        try {
+          // Aceita tanto JSON puro quanto objeto JavaScript (sem aspas nas chaves)
+          let cfg;
+          try { cfg = JSON.parse(input); } catch(e) {
+            cfg = (new Function('return (' + input + ')'))();
+          }
+          if (!cfg.apiKey || !cfg.projectId) throw new Error('Config incompleta');
+          localStorage.setItem('movePe_fb_config', JSON.stringify(cfg));
+          Utils.toast('Configuração salva! Conectando...', 'success');
+          setTimeout(() => {
+            DB.Sync.init();
+            Config.atualizarStatusFirebase();
+          }, 500);
+        } catch (e) {
+          Utils.toast('JSON inválido. Verifique a configuração.', 'error');
+        }
+      },
+
+      desconectarFirebase: () => {
+        if (!Utils.confirmar('Desconectar do Firebase? Os dados locais serão mantidos.')) return;
+        localStorage.removeItem('movePe_fb_config');
+        Utils.toast('Desconectado do Firebase', 'warning');
+        Config.atualizarStatusFirebase();
+      },
+
+      atualizarStatusFirebase: () => {
+        const card = document.getElementById('syncStatusCard');
+        const btnDesc = document.getElementById('btnDesconectar');
+        const input = document.getElementById('fbConfigInput');
+        const cfg = localStorage.getItem('movePe_fb_config');
+        if (cfg) {
+          try {
+            const parsed = JSON.parse(cfg);
+            input.value = JSON.stringify(parsed, null, 2);
+            card.style.display = 'block';
+            card.style.background = 'rgba(34,197,94,0.1)';
+            card.style.color = 'var(--success)';
+            card.style.border = '1px solid var(--success)';
+            card.textContent = '✅ Firebase configurado — Projeto: ' + (parsed.projectId || '');
+            btnDesc.style.display = '';
+          } catch(e) {}
+        } else {
+          card.style.display = 'none';
+          btnDesc.style.display = 'none';
+          input.value = '';
+        }
+      },
+
+      carregarTaxas: () => {
+        const t = DB.Config.get('taxasCartao', {});
+        if (t.debito)       document.getElementById('taxaDebito').value      = t.debito;
+        if (t.credito1x)    document.getElementById('taxaCredito1x').value   = t.credito1x;
+        if (t.credito2a6)   document.getElementById('taxaCredito2a6').value  = t.credito2a6;
+        if (t.credito7a12)  document.getElementById('taxaCredito7a12').value = t.credito7a12;
+        if (t.pix)          document.getElementById('taxaPix').value         = t.pix;
+      },
+
+      salvarTaxas: () => {
+        const taxas = {
+          debito:      parseFloat(document.getElementById('taxaDebito').value)      || 0,
+          credito1x:   parseFloat(document.getElementById('taxaCredito1x').value)   || 0,
+          credito2a6:  parseFloat(document.getElementById('taxaCredito2a6').value)  || 0,
+          credito7a12: parseFloat(document.getElementById('taxaCredito7a12').value) || 0,
+          pix:         parseFloat(document.getElementById('taxaPix').value)         || 0,
+        };
+        DB.Config.set('taxasCartao', taxas);
+        const info = document.getElementById('taxasSalvasInfo');
+        info.style.display = '';
+        setTimeout(() => { info.style.display = 'none'; }, 3000);
+        Utils.toast('Taxas salvas com sucesso!', 'success');
+      },
+
+      limparTudo: () => {
+        if (!Utils.confirmar('⚠️ ATENÇÃO! Isso vai apagar TODOS os dados (produtos, clientes, vendas, crediário, caixa).\n\nTem certeza absoluta? Esta ação não pode ser desfeita!')) return;
+        if (!Utils.confirmar('ÚLTIMA CONFIRMAÇÃO: Apagar tudo mesmo?')) return;
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('movePe_'));
+        keys.forEach(k => localStorage.removeItem(k));
+        Utils.toast('Dados apagados', 'warning');
+        setTimeout(() => location.href = 'index.html', 1500);
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', Config.init);
+  </script>
+</body>
+</html>
