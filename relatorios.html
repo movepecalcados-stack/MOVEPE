@@ -4,11 +4,109 @@
   <meta charset="UTF-8">
   <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redirecionando... — MOVE PÉ</title>
-  <meta http-equiv="refresh" content="0;url=financeiro.html">
+  <title>Relatórios — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .tab-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+    .tab-btn { padding:8px 18px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--card); color:var(--text-muted); font-size:13px; font-weight:600; cursor:pointer; transition:all .18s; font-family:inherit; }
+    .tab-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .tab-btn.ativo { background:var(--primary-dim); border-color:var(--primary); color:var(--primary); }
+    .tab-content { display:none; }
+    .tab-content.ativo { display:block; }
+    .sub-tab-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+    .sub-tab-btn { padding:6px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; font-family:inherit; }
+    .sub-tab-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .sub-tab-btn.ativo { background:var(--primary-dim); border-color:var(--primary); color:var(--primary); }
+    .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
+    .ranking-item { display:flex; align-items:center; gap:14px; padding:12px 16px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); box-shadow:var(--shadow-sm); margin-bottom:8px; }
+    .rank-pos { font-size:22px; font-weight:800; min-width:32px; text-align:center; color:var(--text-muted); }
+    .rank-pos.ouro { color:#f59e0b; } .rank-pos.prata { color:#94a3b8; } .rank-pos.bronze { color:#c07940; }
+    .rank-info { flex:1; min-width:0; }
+    .rank-nome { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rank-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+    .rank-stats { text-align:right; }
+    .rank-qty { font-size:18px; font-weight:800; color:var(--primary); }
+    .rank-rev { font-size:12px; color:var(--text-muted); margin-top:2px; }
+  </style>
 </head>
 <body>
-  <p>Redirecionando para <a href="financeiro.html">Financeiro</a>...</p>
-  <script>window.location.replace('financeiro.html');</script>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">📊 Relatórios</div>
+      <div class="topbar-info">
+        <button class="btn btn-outline btn-sm" id="btn-imprimir-rel">🖨️ Imprimir</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- FILTRO DE PERÍODO -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600">De:</label>
+            <input type="date" id="rel-inicio" class="form-control" style="width:auto">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600">Até:</label>
+            <input type="date" id="rel-fim" class="form-control" style="width:auto">
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-gerar">🔍 Gerar</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <button class="btn btn-outline btn-sm" onclick="RelatoriosPage.atalho('hoje')">Hoje</button>
+            <button class="btn btn-outline btn-sm" onclick="RelatoriosPage.atalho('semana')">Esta semana</button>
+            <button class="btn btn-outline btn-sm" onclick="RelatoriosPage.atalho('mes')">Este mês</button>
+            <button class="btn btn-outline btn-sm" onclick="RelatoriosPage.atalho('mes_passado')">Mês passado</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABAS PRINCIPAIS -->
+      <div class="tab-bar">
+        <button class="tab-btn" data-tab="vendas">💰 Vendas</button>
+        <button class="tab-btn" data-tab="graficos">📈 Gráficos</button>
+        <button class="tab-btn" data-tab="produtos">🏆 Mais Vendidos</button>
+        <button class="tab-btn" data-tab="estoque">📦 Estoque</button>
+        <button class="tab-btn" data-tab="inadimplentes">⚠️ Inadimplentes</button>
+      </div>
+
+      <!-- TAB: VENDAS -->
+      <div class="tab-content" id="tab-vendas">
+        <div id="rel-vendas-content"></div>
+      </div>
+
+      <!-- TAB: GRÁFICOS -->
+      <div class="tab-content" id="tab-graficos">
+        <div class="sub-tab-bar">
+          <button class="sub-tab-btn ativo" data-subtab="diario" onclick="RelatoriosPage.setSubTab('diario',this)">📅 Diário (7 dias)</button>
+          <button class="sub-tab-btn" data-subtab="semanal" onclick="RelatoriosPage.setSubTab('semanal',this)">📆 Semanal (8 sem.)</button>
+          <button class="sub-tab-btn" data-subtab="mensal" onclick="RelatoriosPage.setSubTab('mensal',this)">📊 Mensal (12 meses)</button>
+        </div>
+        <div id="rel-graficos-content"></div>
+      </div>
+
+      <!-- TAB: PRODUTOS MAIS VENDIDOS -->
+      <div class="tab-content" id="tab-produtos">
+        <div id="rel-produtos-content"></div>
+      </div>
+
+      <!-- TAB: ESTOQUE -->
+      <div class="tab-content" id="tab-estoque">
+        <div id="rel-estoque-content"></div>
+      </div>
+
+      <!-- TAB: INADIMPLENTES -->
+      <div class="tab-content" id="tab-inadimplentes">
+        <div id="rel-inadimplentes-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/relatorios.js"></script>
 </body>
 </html>

@@ -6,6 +6,7 @@ let _produtoEditando = null;
 let _filtroTipo = '';
 let _filtroTamanho = '';
 let _busca = '';
+let _fotoBase64 = null;
 
 const Estoque = {
 
@@ -88,6 +89,9 @@ const Estoque = {
       const total = DB.Produtos.estoqueTotal(p);
       const baixo = total <= (p.estoqueMinimo || 5);
       const variacoes = p.variacoes || {};
+      const fotoHtml = p.foto
+        ? `<img src="${p.foto}" style="width:100%;height:130px;object-fit:cover;display:block;border-bottom:1px solid var(--border)" loading="lazy">`
+        : `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;font-size:36px;background:var(--bg);border-bottom:1px solid var(--border)">👟</div>`;
       const tamanhosHtml = Object.entries(variacoes)
         .sort((a, b) => {
           const pa = a[0].split('||'); const pb = b[0].split('||');
@@ -106,7 +110,9 @@ const Estoque = {
         }).join('');
 
       return `
-        <div class="estoque-card ${baixo ? 'low-stock' : ''}">
+        <div class="estoque-card ${baixo ? 'low-stock' : ''}" style="padding:0;overflow:hidden">
+          ${fotoHtml}
+          <div style="padding:12px;display:flex;flex-direction:column;gap:8px;flex:1">
           <div class="estoque-card-header">
             <div>
               <div class="estoque-card-nome">${p.nome}</div>
@@ -126,6 +132,7 @@ const Estoque = {
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="Estoque.abrirForm('${p.id}')">✏️ Editar</button>
             <button class="btn btn-danger btn-sm" onclick="Estoque.excluir('${p.id}')">🗑</button>
+          </div>
           </div>
         </div>`;
     }).join('');
@@ -147,6 +154,19 @@ const Estoque = {
     f.precoVenda.value = _produtoEditando ? _produtoEditando.precoVenda : '';
     f.precoCusto.value = _produtoEditando ? (_produtoEditando.precoCusto || '') : '';
     f.estoqueMinimo.value = _produtoEditando ? (_produtoEditando.estoqueMinimo || 5) : 5;
+    f.descricao.value = _produtoEditando ? (_produtoEditando.descricao || '') : '';
+
+    // Foto
+    _fotoBase64 = _produtoEditando ? (_produtoEditando.foto || null) : null;
+    document.getElementById('inputFotoProduto').value = '';
+    if (_fotoBase64) {
+      document.getElementById('fotoPreviewImg').src = _fotoBase64;
+      document.getElementById('fotoPreviewBox').style.display = 'block';
+      document.getElementById('fotoUploadZone').style.display = 'none';
+    } else {
+      document.getElementById('fotoPreviewBox').style.display = 'none';
+      document.getElementById('fotoUploadZone').style.display = 'block';
+    }
 
     // Renderizar variacoes
     const variacoes = _produtoEditando ? (_produtoEditando.variacoes || {}) : {};
@@ -214,6 +234,37 @@ const Estoque = {
     return variacoes;
   },
 
+  selecionarFoto: (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Comprimir: máx 900px largura, JPEG 80%
+        const maxW = 900;
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        _fotoBase64 = canvas.toDataURL('image/jpeg', 0.80);
+        document.getElementById('fotoPreviewImg').src = _fotoBase64;
+        document.getElementById('fotoPreviewBox').style.display = 'block';
+        document.getElementById('fotoUploadZone').style.display = 'none';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  removerFoto: () => {
+    _fotoBase64 = null;
+    document.getElementById('inputFotoProduto').value = '';
+    document.getElementById('fotoPreviewBox').style.display = 'none';
+    document.getElementById('fotoUploadZone').style.display = 'block';
+  },
+
   salvar: (e) => {
     e.preventDefault();
     const f = document.getElementById('formProduto');
@@ -230,6 +281,8 @@ const Estoque = {
       precoVenda: parseFloat(f.precoVenda.value) || 0,
       precoCusto: parseFloat(f.precoCusto.value) || 0,
       estoqueMinimo: parseInt(f.estoqueMinimo.value) || 5,
+      descricao: f.descricao.value.trim(),
+      foto: _fotoBase64,
       variacoes,
       ativo: true
     };

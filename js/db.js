@@ -25,7 +25,7 @@ const DB = (() => {
   let _onReadyCallbacks = [];
   let _collectionsLoaded = {};
 
-  const COLS = ['produtos', 'clientes', 'vendas', 'crediario', 'caixa', 'fluxo'];
+  const COLS = ['produtos', 'clientes', 'vendas', 'crediario', 'caixa', 'fluxo', 'despesas'];
 
   const Sync = {
 
@@ -509,6 +509,57 @@ const DB = (() => {
     }
   };
 
+  // ---- DESPESAS ----
+  const Despesas = {
+    listar: () => _get('despesas'),
+
+    listarPorMes: (mes) => {
+      return _get('despesas').filter(d => {
+        if (d.recorrente) return true; // fixas recorrentes sempre aparecem
+        return (d.vencimento || '').startsWith(mes);
+      });
+    },
+
+    buscar: (id) => _get('despesas').find(d => d.id === id),
+
+    salvar: (desp) => {
+      const lista = _get('despesas');
+      const idx = lista.findIndex(d => d.id === desp.id);
+      if (idx >= 0) {
+        lista[idx] = { ...lista[idx], ...desp };
+      } else {
+        desp.id = genId();
+        desp.criadoEm = new Date().toISOString();
+        lista.push(desp);
+      }
+      _set('despesas', lista);
+      const salvo = idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      Sync.save('despesas', salvo);
+      return salvo;
+    },
+
+    excluir: (id) => {
+      _set('despesas', _get('despesas').filter(d => d.id !== id));
+      Sync.delete('despesas', id);
+    },
+
+    marcarPago: (id) => {
+      const lista = _get('despesas');
+      const idx = lista.findIndex(d => d.id === id);
+      if (idx < 0) return;
+      lista[idx].pago = true;
+      lista[idx].dataPagamento = new Date().toISOString();
+      _set('despesas', lista);
+      Sync.save('despesas', lista[idx]);
+    },
+
+    totalMes: (mes) => {
+      return _get('despesas')
+        .filter(d => d.recorrente || (d.vencimento || '').startsWith(mes))
+        .reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    }
+  };
+
   // ---- BACKUP ----
   const exportar = () => {
     const agora = new Date();
@@ -577,5 +628,5 @@ const DB = (() => {
   // Inicializa Firebase ao carregar a página
   document.addEventListener('DOMContentLoaded', Sync.init);
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
 })();

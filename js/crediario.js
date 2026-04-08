@@ -877,25 +877,76 @@ ${linhaH}
 
     const hoje = Utils.hoje();
     const atrasadas = pendentes.filter(p => p.vencimento < hoje);
-    const linhasParcelas = pendentes.map(p => {
-      const { diasComJuros, juros } = calcularJuros(p.vencimento, p.valor);
+    const primeiroNome = (cred.clienteNome || '').split(' ')[0];
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ Calçados');
+    const totalParcelas = cred.parcelas.length;
+
+    const linhasParcelas = pendentes.map((p, idx) => {
+      const { juros } = calcularJuros(p.vencimento, p.valor);
       const valor = (parseFloat(p.valor) || 0) + juros;
-      const status = p.vencimento < hoje
-        ? `venceu em ${Utils.data(p.vencimento)}`
+      const numParcela = p.numero || (idx + 1);
+      const atrasada = p.vencimento < hoje;
+      const status = atrasada
+        ? `venceu em ${Utils.data(p.vencimento)} ⚠️`
         : `vence em ${Utils.data(p.vencimento)}`;
-      return `📋 Parcela ${p.numero||''}/${cred.parcelas.length} — ${status} — ${Utils.moeda(valor)}${juros>0?' (c/ juros)':''}`;
-    }).join('\n');
+      return `${atrasada ? '🔴' : '🟡'} Parcela ${numParcela}/${totalParcelas} — ${status}\n    💰 ${Utils.moeda(valor)}${juros > 0 ? ' (inclui juros)' : ''}`;
+    }).join('\n\n');
 
     const totalComJuros = pendentes.reduce((s, p) => {
       const { juros } = calcularJuros(p.vencimento, p.valor);
       return s + (parseFloat(p.valor) || 0) + juros;
     }, 0);
 
-    const saudacao = atrasadas.length > 0
-      ? `Olá, ${cred.clienteNome}! 😊\n\nAqui é da *MOVE PÉ Calçados*. Identificamos parcelas em atraso no seu crediário:`
-      : `Olá, ${cred.clienteNome}! 😊\n\nAqui é da *MOVE PÉ Calçados*. Este é um lembrete das suas parcelas em aberto:`;
+    let mensagem;
 
-    const mensagem = `${saudacao}\n\n${linhasParcelas}\n\n💰 *Total a pagar: ${Utils.moeda(totalComJuros)}*\n\nPor favor, entre em contato para regularizar. Obrigado! 🙏`;
+    if (atrasadas.length === 0) {
+      // Lembrete amigável — sem atraso
+      mensagem =
+`Oi, ${primeiroNome}! Tudo bem? 😊
+
+Aqui é da *${nomeLoja}*, passando só para lembrar das suas parcelas que estão chegando:
+
+${linhasParcelas}
+
+💳 *Total: ${Utils.moeda(totalComJuros)}*
+
+Se precisar de algum ajuste ou tiver alguma dúvida, é só chamar a gente! 😊
+📞 ${foneNumeros ? '' : ''}Estamos aqui para ajudar.`;
+
+    } else if (atrasadas.length <= 2) {
+      // 1ª ou 2ª cobrança — tom amigável mas claro
+      mensagem =
+`Oi, ${primeiroNome}! 😊
+
+Aqui é da *${nomeLoja}*. Tudo bem com você?
+
+Passando para avisar que identificamos parcelas em atraso no seu crediário:
+
+${linhasParcelas}
+
+💰 *Total com juros: ${Utils.moeda(totalComJuros)}*
+
+Sabemos que imprevistos acontecem! Entre em contato com a gente para a gente encontrar a melhor forma de resolver isso juntos. 🤝
+
+Estamos aqui para ajudar! 😊`;
+
+    } else {
+      // Cobrança com aviso de SPC/Serasa — tom firme mas respeitoso
+      mensagem =
+`Oi, ${primeiroNome}.
+
+Aqui é da *${nomeLoja}*. Tentamos entrar em contato anteriormente e ainda não conseguimos resolver as parcelas em aberto:
+
+${linhasParcelas}
+
+💰 *Total com juros: ${Utils.moeda(totalComJuros)}*
+
+Precisamos te informar que débitos não regularizados podem levar à inclusão do seu nome nos órgãos de proteção ao crédito, como *SPC e Serasa*, o que pode dificultar compras a prazo e financiamentos.
+
+Queremos muito evitar isso e resolver de forma tranquila! Entre em contato *hoje* para a gente encontrar uma solução:
+
+📞 Aguardamos seu retorno. 🙏`;
+    }
 
     const numero = foneNumeros.length === 11 ? `55${foneNumeros}` : foneNumeros.startsWith('55') ? foneNumeros : `55${foneNumeros}`;
     const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;

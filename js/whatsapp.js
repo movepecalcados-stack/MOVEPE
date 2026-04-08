@@ -6,40 +6,85 @@
 // ---- TEMPLATES ----
 const WA_TEMPLATES = [
   {
-    id: 'cobranca',
-    label: 'Cobrança Vencida',
-    icon: '⚠️',
-    filtroSugerido: 'inadimplentes',
-    mensagem:
-`Olá, {nome}! 😊
-
-Passando para avisar que identificamos uma parcela em atraso do seu crediário na *{loja}*.
-
-💰 Valor: *{valor}*
-📅 Vencimento: *{vencimento}* ({diasAtraso} dias em atraso)
-
-Por favor, entre em contato conosco para regularizar sua situação!
-
-📞 {telLoja}
-
-Obrigado! 🙏`,
-  },
-  {
     id: 'vencendo',
-    label: 'Aviso de Vencimento',
+    label: '📅 Lembrete Amigável',
     icon: '📅',
     filtroSugerido: 'vencendo',
     mensagem:
-`Olá, {nome}! 😊
+`Oi, {nome}! Tudo bem? 😊
 
-Lembrando que sua parcela do crediário na *{loja}* está prestes a vencer.
+Passando aqui rapidinho só pra te lembrar que sua parcela do crediário na *{loja}* vence em breve.
 
 💰 Valor: *{valor}*
 📅 Vencimento: *{vencimento}*
 
-Evite atraso e regularize antes do vencimento! 👍
+Se quiser já adiantar o pagamento ou tiver alguma dúvida, é só nos chamar aqui ou ligar:
+📞 {telLoja}
 
-📞 {telLoja}`,
+Qualquer coisa a gente resolve junto! 😊`,
+  },
+  {
+    id: 'cobranca',
+    label: '⚠️ 1ª Cobrança',
+    icon: '⚠️',
+    filtroSugerido: 'inadimplentes',
+    mensagem:
+`Oi, {nome}! 😊
+
+Tudo bem? Aqui é da *{loja}*, passando para dar um aviso importante.
+
+Identificamos que há uma parcela do seu crediário em atraso:
+
+💰 Valor: *{valor}*
+📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+
+Sabemos que imprevistos acontecem, e estamos aqui para ajudar! Entre em contato com a gente para a gente encontrar a melhor forma de regularizar, tá?
+
+📞 {telLoja}
+
+Obrigado pela atenção! 🙏`,
+  },
+  {
+    id: 'cobranca2',
+    label: '🔔 2ª Cobrança',
+    icon: '🔔',
+    filtroSugerido: 'inadimplentes',
+    mensagem:
+`Oi, {nome}, bom dia! 😊
+
+Aqui é da *{loja}* novamente. Percebemos que a parcela abaixo ainda está em aberto:
+
+💰 Valor: *{valor}*
+📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+
+Gostaríamos muito de resolver isso de forma tranquila, sem complicação pra nenhum dos dois lados. 🤝
+
+⚠️ Para evitar qualquer transtorno futuro, pedimos que entre em contato o quanto antes para regularizar.
+
+📞 {telLoja}
+
+Estamos à disposição! 😊`,
+  },
+  {
+    id: 'cobranca_serasa',
+    label: '🚨 Aviso SPC/Serasa',
+    icon: '🚨',
+    filtroSugerido: 'inadimplentes',
+    mensagem:
+`Oi, {nome}. Aqui é da *{loja}*.
+
+Tentamos entrar em contato antes e ainda não conseguimos resolver a parcela em aberto:
+
+💰 Valor: *{valor}*
+📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+
+Precisamos te informar que débitos não regularizados podem resultar na inclusão do seu nome nos órgãos de proteção ao crédito, como *SPC e Serasa*, o que pode dificultar compras a prazo, financiamentos e cartões no futuro.
+
+Queremos muito evitar isso! Entre em contato *hoje* para a gente encontrar uma solução:
+
+📞 {telLoja}
+
+Estamos esperando seu retorno. 🙏`,
   },
   {
     id: 'aniversario',

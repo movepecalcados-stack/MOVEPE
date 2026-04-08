@@ -125,15 +125,25 @@ const PDV = {
   },
 
   renderProdutos: (busca = '') => {
-    const prods = busca.trim()
-      ? DB.Produtos.buscarPorTexto(busca)
-      : DB.Produtos.listarAtivos();
-
     const grid = document.getElementById('produtosGrid');
+
+    if (!busca.trim()) {
+      grid.innerHTML = `
+        <div style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;gap:12px;color:var(--text-muted)">
+          <div style="font-size:48px">🔍</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text)">Buscar produto</div>
+          <div style="font-size:13px;text-align:center">Digite o nome, marca ou SKU<br>do produto na barra acima</div>
+        </div>`;
+      return;
+    }
+
+    const prods = DB.Produtos.buscarPorTexto(busca);
+
     if (prods.length === 0) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
         <div class="empty-icon">🔍</div>
         <div class="empty-title">Nenhum produto encontrado</div>
+        <div class="empty-sub">Tente outro nome, marca ou SKU</div>
       </div>`;
       return;
     }
@@ -165,23 +175,37 @@ const PDV = {
 
       return `
         <div class="produto-card ${baixo ? 'low-stock' : ''}">
-          <div>
-            <div class="produto-nome">${p.nome}</div>
-            ${p.marca ? `<div class="produto-sku">${p.marca}${p.categoria ? ' · ' + p.categoria : ''}</div>` : ''}
-            ${p.sku ? `<div class="produto-sku">SKU: ${p.sku}</div>` : ''}
-          </div>
-          <div class="produto-preco">${Utils.moeda(p.precoVenda)}</div>
-          <span class="produto-tipo-badge">${Utils.labelTipo(p.tipo)}</span>
-          ${Object.keys(variacoes).length > 0 ? `
-            <div>
-              <div class="text-muted fs-sm" style="margin-bottom:4px">Selecione o tamanho:</div>
-              <div class="tamanhos-grid">${tamanhosHtml}</div>
-            </div>
-          ` : ''}
-          <div class="produto-card-add">
-            <button class="btn btn-primary btn-sm btn-full" onclick="PDV.adicionarAoCarrinho('${p.id}')">
-              + Adicionar
+          <div style="position:relative">
+            ${p.foto
+              ? `<img class="produto-card-foto" src="${p.foto}" loading="lazy">`
+              : `<div class="produto-card-sem-foto">👟</div>`
+            }
+            <button onclick="PDV.abrirFotoPdv('${p.id}')" title="Adicionar/trocar foto"
+              style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;backdrop-filter:blur(2px)">
+              📷 ${p.foto ? 'Trocar' : 'Adicionar foto'}
             </button>
+          </div>
+          <div class="produto-card-body">
+            <div>
+              <div class="produto-nome">${p.nome}</div>
+              ${p.marca ? `<div class="produto-sku">${p.marca}${p.categoria ? ' · ' + p.categoria : ''}</div>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+              <div class="produto-preco">${Utils.moeda(p.precoVenda)}</div>
+              <span class="produto-tipo-badge">${Utils.labelTipo(p.tipo)}</span>
+            </div>
+            ${baixo ? `<span style="font-size:10px;color:var(--danger);font-weight:700">⚠ Estoque baixo</span>` : ''}
+            ${Object.keys(variacoes).length > 0 ? `
+              <div>
+                <div class="text-muted fs-sm" style="margin-bottom:4px">Tamanho:</div>
+                <div class="tamanhos-grid">${tamanhosHtml}</div>
+              </div>
+            ` : ''}
+            <div class="produto-card-add">
+              <button class="btn btn-primary btn-sm btn-full" onclick="PDV.adicionarAoCarrinho('${p.id}')">
+                + Adicionar
+              </button>
+            </div>
           </div>
         </div>`;
     }).join('');
@@ -237,6 +261,7 @@ const PDV = {
         cor: corLabel || '',
         sku: prod.sku || '',
         precoUnitario: prod.precoVenda,
+        precoCusto: parseFloat(prod.precoCusto) || 0,
         quantidade: 1,
         total: prod.precoVenda
       });
@@ -376,6 +401,8 @@ const PDV = {
     _clienteSelecionado = DB.Clientes.buscar(id);
     Utils.fecharModal('modalClientes');
     PDV.atualizarClienteDisplay();
+    PDV._atualizarClientePagamento();
+    if (PDV._voltarAoPagamento) { PDV._voltarAoPagamento = false; setTimeout(() => PDV.abrirPagamento(), 50); }
   },
 
   atualizarClienteDisplay: () => {
@@ -392,6 +419,125 @@ const PDV = {
     }
   },
 
+  // Abre busca de cliente a partir do modal de pagamento e volta a ele depois
+  abrirBuscaClientePagamento: () => {
+    PDV._voltarAoPagamento = true;
+    Utils.fecharModal('modalPagamento');
+    PDV.abrirBuscaCliente();
+  },
+
+  toggleFormNovoCliente: () => {
+    const form = document.getElementById('formNovoClienteRapido');
+    const visivel = form.style.display !== 'none';
+    form.style.display = visivel ? 'none' : 'block';
+    if (!visivel) {
+      document.getElementById('ncNome').value = '';
+      document.getElementById('ncTelefone').value = '';
+      document.getElementById('ncCpf').value = '';
+      setTimeout(() => document.getElementById('ncNome').focus(), 50);
+    }
+  },
+
+  salvarNovoClienteRapido: () => {
+    const nome = document.getElementById('ncNome').value.trim();
+    if (!nome) { Utils.toast('Digite o nome do cliente!', 'warning'); document.getElementById('ncNome').focus(); return; }
+    const telefone = document.getElementById('ncTelefone').value.trim();
+    const cpf = document.getElementById('ncCpf').value.trim();
+    const cli = DB.Clientes.salvar({ nome, telefone, cpf });
+    _clienteSelecionado = cli;
+    PDV.atualizarClienteDisplay();
+    PDV._atualizarClientePagamento();
+    Utils.fecharModal('modalClientes');
+    Utils.toast(`✅ ${nome} cadastrado e vinculado à venda!`, 'success');
+    if (PDV._voltarAoPagamento) { PDV._voltarAoPagamento = false; PDV.abrirPagamento(); }
+  },
+
+  _atualizarClientePagamento: () => {
+    const info = document.getElementById('pagClienteInfo');
+    const nome = document.getElementById('pagClienteNome');
+    const detalhe = document.getElementById('pagClienteDetalhe');
+    const btn = document.getElementById('btnPagIdentificar');
+    if (!info) return;
+    if (_clienteSelecionado) {
+      nome.textContent = `👤 ${_clienteSelecionado.nome}`;
+      nome.style.color = 'var(--success)';
+      const tel = _clienteSelecionado.telefone ? ' · ' + _clienteSelecionado.telefone : '';
+      const cpf = _clienteSelecionado.cpf ? ' · CPF: ' + _clienteSelecionado.cpf : '';
+      detalhe.textContent = `Compra vinculada ao histórico ✓${tel}${cpf}`;
+      info.style.borderColor = 'var(--success)';
+      info.style.background = 'var(--success-dim)';
+      if (btn) btn.textContent = 'Trocar';
+    } else {
+      nome.textContent = 'Venda sem identificação';
+      nome.style.color = 'var(--text)';
+      detalhe.textContent = 'Identifique o cliente para garantia e histórico de compras';
+      info.style.borderColor = 'var(--border)';
+      info.style.background = 'var(--bg)';
+      if (btn) btn.textContent = 'Identificar';
+    }
+  },
+
+  // === FOTO DO PRODUTO (PDV) ===
+  _fotoPdvProdutoId: null,
+  _fotoPdvBase64: null,
+
+  abrirFotoPdv: (produtoId) => {
+    const prod = DB.Produtos.buscar(produtoId);
+    if (!prod) return;
+    PDV._fotoPdvProdutoId = produtoId;
+    PDV._fotoPdvBase64 = prod.foto || null;
+    document.getElementById('fotoPdvNomeProduto').textContent = `📦 ${prod.nome}${prod.marca ? ' — ' + prod.marca : ''}`;
+    document.getElementById('inputFotoPdv').value = '';
+    if (PDV._fotoPdvBase64) {
+      document.getElementById('fotoPdvPreviewImg').src = PDV._fotoPdvBase64;
+      document.getElementById('fotoPdvPreviewBox').style.display = 'block';
+      document.getElementById('fotoPdvUploadZone').style.display = 'none';
+    } else {
+      document.getElementById('fotoPdvPreviewBox').style.display = 'none';
+      document.getElementById('fotoPdvUploadZone').style.display = 'block';
+    }
+    Utils.abrirModal('modalFotoPdv');
+  },
+
+  selecionarFotoPdv: (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 900;
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        PDV._fotoPdvBase64 = canvas.toDataURL('image/jpeg', 0.80);
+        document.getElementById('fotoPdvPreviewImg').src = PDV._fotoPdvBase64;
+        document.getElementById('fotoPdvPreviewBox').style.display = 'block';
+        document.getElementById('fotoPdvUploadZone').style.display = 'none';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  removerFotoPdv: () => {
+    PDV._fotoPdvBase64 = null;
+    document.getElementById('inputFotoPdv').value = '';
+    document.getElementById('fotoPdvPreviewBox').style.display = 'none';
+    document.getElementById('fotoPdvUploadZone').style.display = 'block';
+  },
+
+  salvarFotoPdv: () => {
+    const prod = DB.Produtos.buscar(PDV._fotoPdvProdutoId);
+    if (!prod) return;
+    DB.Produtos.salvar({ ...prod, foto: PDV._fotoPdvBase64 });
+    Utils.fecharModal('modalFotoPdv');
+    PDV.renderProdutos(document.getElementById('buscaInput').value);
+    Utils.toast('Foto salva!', 'success');
+  },
+
   abrirPagamento: () => {
     if (_carrinho.length === 0) { Utils.toast('Carrinho vazio!', 'warning'); return; }
     if (!Utils.verificarCaixa()) { Utils.toast('Abra o caixa antes de vender!', 'error'); return; }
@@ -403,6 +549,7 @@ const PDV = {
     const total = Math.max(0, subtotal - descontoVal);
     document.getElementById('pagTotal').textContent = Utils.moeda(total);
     document.getElementById('inputValorPago').value = total.toFixed(2);
+    PDV._atualizarClientePagamento();
     document.getElementById('inputTroco').value = '';
     document.getElementById('inputNumeroParcelas').value = '1';
     document.getElementById('inputParcelasCartao').value = '1';

@@ -110,6 +110,16 @@
         <button class="modal-close" id="btnCancelarPagamento">✕</button>
       </div>
       <div>
+        <!-- CLIENTE VINCULADO -->
+        <div id="pagClienteInfo" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);margin-bottom:14px">
+          <span style="font-size:22px">👤</span>
+          <div style="flex:1;min-width:0">
+            <div id="pagClienteNome" style="font-size:13px;font-weight:700;color:var(--text)">Venda sem identificação</div>
+            <div id="pagClienteDetalhe" style="font-size:11px;color:var(--text-muted);margin-top:1px">Identifique o cliente para garantia e histórico de compras</div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btnPagIdentificar" onclick="PDV.abrirBuscaClientePagamento()">Identificar</button>
+        </div>
+
         <div class="d-flex justify-between align-center mb-16">
           <span class="text-muted">Total a Pagar:</span>
           <span style="font-size:24px;font-weight:800;color:var(--primary)" id="pagTotal">R$ 0,00</span>
@@ -243,8 +253,37 @@
         <span class="modal-title">👥 Selecionar Cliente</span>
         <button class="modal-close" onclick="Utils.fecharModal('modalClientes')">✕</button>
       </div>
-      <input type="text" id="buscaClienteInput" class="form-control" placeholder="Buscar por nome, CPF ou telefone..." style="margin-bottom:12px">
-      <div id="resultadoClientes" style="max-height:340px;overflow-y:auto"></div>
+
+      <!-- BUSCA -->
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="buscaClienteInput" class="form-control" placeholder="Buscar por nome, CPF ou telefone..." style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="PDV.toggleFormNovoCliente()" id="btnToggleNovoCliente">➕ Novo</button>
+      </div>
+
+      <!-- FORM RÁPIDO NOVO CLIENTE -->
+      <div id="formNovoClienteRapido" style="display:none;background:var(--bg);border:1px solid var(--primary);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:12px">➕ Cadastrar Novo Cliente</div>
+        <div class="form-group">
+          <label class="form-label">Nome Completo *</label>
+          <input type="text" id="ncNome" class="form-control" placeholder="Nome do cliente">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Telefone / WhatsApp</label>
+            <input type="text" id="ncTelefone" class="form-control" placeholder="(00) 00000-0000" maxlength="15" oninput="Utils.mascaraTelefone && Utils.mascaraTelefone(this)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CPF</label>
+            <input type="text" id="ncCpf" class="form-control" placeholder="000.000.000-00" maxlength="14">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+          <button class="btn btn-outline btn-sm" onclick="PDV.toggleFormNovoCliente()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" onclick="PDV.salvarNovoClienteRapido()">✅ Salvar e Selecionar</button>
+        </div>
+      </div>
+
+      <div id="resultadoClientes" style="max-height:300px;overflow-y:auto"></div>
     </div>
   </div>
 
@@ -258,6 +297,34 @@
         <button id="btnPosVendaImprimir" class="btn btn-outline btn-full" style="display:none">🖨️ Imprimir Comprovante</button>
         <button id="btnPosVendaWhatsApp" class="btn btn-full" style="display:none;background:#25D366;color:#fff">💬 Enviar por WhatsApp</button>
         <button class="btn btn-primary btn-full" onclick="Utils.fecharModal('modalPosVenda')">Nova Venda</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL FOTO PRODUTO (PDV) ===== -->
+  <div class="modal-overlay" id="modalFotoPdv" style="display:none">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <span class="modal-title">📷 Foto do Produto</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalFotoPdv')">✕</button>
+      </div>
+      <div id="fotoPdvNomeProduto" style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:14px"></div>
+      <input type="file" id="inputFotoPdv" accept="image/*" style="display:none" onchange="PDV.selecionarFotoPdv(this)">
+      <div id="fotoPdvUploadZone" onclick="document.getElementById('inputFotoPdv').click()"
+        style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer;color:var(--text-muted);transition:all .18s"
+        onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
+        <div style="font-size:36px;margin-bottom:8px">📷</div>
+        <div style="font-weight:600;font-size:13px">Clique para adicionar foto</div>
+        <div style="font-size:11px;margin-top:4px">A foto será comprimida automaticamente</div>
+      </div>
+      <div id="fotoPdvPreviewBox" style="display:none;margin-top:12px;position:relative">
+        <img id="fotoPdvPreviewImg" style="width:100%;max-height:220px;object-fit:contain;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);display:block">
+        <button onclick="PDV.removerFotoPdv()" style="position:absolute;top:6px;right:6px;background:var(--danger);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px">✕</button>
+      </div>
+      <div class="modal-footer" style="margin-top:16px">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalFotoPdv')">Cancelar</button>
+        <button class="btn btn-primary" onclick="PDV.salvarFotoPdv()">💾 Salvar Foto</button>
       </div>
     </div>
   </div>

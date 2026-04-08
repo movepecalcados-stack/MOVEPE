@@ -14,84 +14,212 @@
     <div class="topbar">
       <div class="topbar-title">💵 Financeiro</div>
       <div class="topbar-info">
-        <span class="text-muted fs-sm">Mês atual · Somente leitura</span>
+        <input type="month" id="inputMesGlobal" class="form-control" style="width:auto">
       </div>
     </div>
 
     <div class="content">
-      <!-- STATS -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Entradas (mês)</div>
-          <div class="stat-value success" id="statEntradas">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Saídas (mês)</div>
-          <div class="stat-value danger" id="statSaidas">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Saldo (mês)</div>
-          <div class="stat-value" id="statSaldo">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">A Receber (crediário)</div>
-          <div class="stat-value warning" id="statAReceber">R$ 0,00</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Taxas de Cartão (mês)</div>
-          <div class="stat-value danger" id="statTaxasCartao">R$ 0,00</div>
-          <div class="stat-sub" id="statTaxasSub" style="color:var(--danger)">estimado</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Receita Líquida (mês)</div>
-          <div class="stat-value" id="statReceitaLiquida">R$ 0,00</div>
-          <div class="stat-sub" style="color:var(--text-muted)">após taxas</div>
-        </div>
+
+      <!-- TABS -->
+      <div class="tabs" style="margin-bottom:20px">
+        <button class="tab-btn active" onclick="Fin.setTab('resumo',this)">📊 Resumo</button>
+        <button class="tab-btn" onclick="Fin.setTab('dre',this)">📋 DRE</button>
+        <button class="tab-btn" onclick="Fin.setTab('precificacao',this)">🏷️ Precificação</button>
+        <button class="tab-btn" onclick="Fin.setTab('contas',this)">📅 Contas</button>
+        <button class="tab-btn" onclick="Fin.setTab('metas',this)">🎯 Metas</button>
+        <button class="tab-btn" onclick="Fin.setTab('diagnostico',this)">🩺 Diagnóstico</button>
       </div>
 
-      <!-- TAXAS DE CARTÃO -->
-      <div class="card" style="margin-bottom:20px" id="cardTaxas">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-          <div class="card-title" style="margin:0">💳 Taxas de Cartão por Forma</div>
-          <input type="month" id="inputMesTaxas" class="form-control" style="width:auto" onchange="Financeiro.renderTaxasCartao()">
+      <!-- ===== ABA RESUMO ===== -->
+      <div id="tab-resumo">
+        <div class="stats-grid" id="statsResumo"></div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Entradas vs Saídas — Últimos 6 Meses</span>
+            <div id="graficoLegenda" style="display:flex;gap:16px"></div>
+          </div>
+          <div class="chart-container">
+            <div class="chart-bars" id="grafico6Meses"></div>
+          </div>
         </div>
-        <div id="taxasConteudo"></div>
+        <div class="section-header" style="margin-top:20px">
+          <span class="section-title">Movimentações do Mês</span>
+        </div>
+        <div class="card" style="padding:0" id="cardMovs"></div>
       </div>
 
-      <!-- GRÁFICO 6 MESES -->
-      <div class="card mb-16" style="margin-bottom:20px">
-        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-          <span>Entradas vs Saídas — Últimos 6 Meses</span>
-          <div id="graficoLegenda" style="display:flex;gap:16px"></div>
-        </div>
-        <div class="chart-container">
-          <div class="chart-bars" id="grafico6Meses">
-            <div class="loading"><div class="spinner"></div></div>
+      <!-- ===== ABA DRE ===== -->
+      <div id="tab-dre" style="display:none">
+        <div class="card" id="dreConteudo"></div>
+        <div class="card" style="margin-top:16px" id="dreMargens"></div>
+      </div>
+
+      <!-- ===== ABA PRECIFICAÇÃO ===== -->
+      <div id="tab-precificacao" style="display:none">
+        <div style="display:grid;grid-template-columns:400px 1fr;gap:20px;align-items:start" id="precLayout">
+
+          <!-- Calculadora -->
+          <div class="card">
+            <div class="card-title">🏷️ Calculadora de Preço</div>
+            <div class="form-group">
+              <label class="form-label">Custo do Produto (R$)</label>
+              <input type="number" id="precCusto" class="form-control" step="0.01" placeholder="0,00" oninput="Fin.calcPreco()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">% Despesas Fixas sobre o preço</label>
+              <input type="number" id="precDesp" class="form-control" step="0.1" value="20" oninput="Fin.calcPreco()">
+              <div class="text-muted fs-sm" style="margin-top:4px">Estimativa do custo fixo da loja por produto vendido</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Lucro Desejado (%)</label>
+              <input type="number" id="precLucro" class="form-control" step="0.1" value="30" oninput="Fin.calcPreco()">
+            </div>
+            <hr class="divider">
+            <div id="precResultado"></div>
+          </div>
+
+          <!-- Análise de produtos -->
+          <div class="card">
+            <div class="card-title">📊 Margem por Produto (estoque atual)</div>
+            <div id="tabelaMargens"></div>
           </div>
         </div>
       </div>
 
-      <!-- COMISSÕES -->
-      <div class="card" style="margin-bottom:20px" id="cardComissoes" style="display:none">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-          <div class="card-title" style="margin:0">👤 Comissões por Vendedor</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="month" id="inputMesComissao" class="form-control" style="width:auto">
-            <button class="btn btn-outline btn-sm" onclick="Financeiro.imprimirComissoes()">🖨️ Imprimir</button>
+      <!-- ===== ABA CONTAS ===== -->
+      <div id="tab-contas" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm tab-btn-sub active" onclick="Fin.setSubContas('pagar',this)">📤 A Pagar</button>
+            <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('receber',this)">📥 A Receber</button>
+          </div>
+          <div style="display:flex;gap:8px" id="btnNovaDespesa">
+            <button class="btn btn-outline btn-sm" onclick="Fin.abrirScannerBoleto()">📷 Escanear Boleto</button>
+            <button class="btn btn-primary btn-sm" onclick="Fin.abrirFormDespesa(null)">+ Nova Despesa</button>
           </div>
         </div>
-        <div id="comissoesConteudo"></div>
-      </div>
-
-      <!-- MOVIMENTAÇÕES -->
-      <div class="section-header">
-        <span class="section-title">Todas as Movimentações</span>
-      </div>
-      <div class="card" style="padding:0">
-        <div id="movimentacoesCont">
-          <div class="loading"><div class="spinner"></div></div>
+        <div id="contasPagar">
+          <div class="card" style="padding:0" id="listaDespesas"></div>
+        </div>
+        <div id="contasReceber" style="display:none">
+          <div class="card" style="padding:0" id="listaReceber"></div>
         </div>
       </div>
+
+      <!-- ===== ABA DIAGNÓSTICO ===== -->
+      <div id="tab-diagnostico" style="display:none">
+        <div id="diagnosticoConteudo"></div>
+      </div>
+
+      <!-- ===== ABA METAS ===== -->
+      <div id="tab-metas" style="display:none">
+        <div style="display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start" id="metasLayout">
+          <div class="card">
+            <div class="card-title">🎯 Definir Metas do Mês</div>
+            <div class="form-group">
+              <label class="form-label">Meta de Faturamento (R$)</label>
+              <input type="number" id="metaFaturamento" class="form-control" step="100" placeholder="Ex: 20000" oninput="Fin.salvarMetas()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Meta de Lucro Líquido (R$)</label>
+              <input type="number" id="metaLucro" class="form-control" step="100" placeholder="Ex: 5000" oninput="Fin.salvarMetas()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Despesas Fixas Mensais (R$)</label>
+              <input type="number" id="metaDespFixas" class="form-control" step="100" placeholder="Ex: 8000" oninput="Fin.salvarMetas()">
+              <div class="text-muted fs-sm" style="margin-top:4px">Aluguel + salários + energia + outros fixos</div>
+            </div>
+          </div>
+          <div id="metasResultado"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL SCANNER BOLETO -->
+  <div class="modal-overlay" id="modalBoleto" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">📷 Escanear / Digitar Boleto</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalBoleto')">✕</button>
+      </div>
+      <div style="padding:0 0 8px">
+        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;font-size:13px;color:var(--text-muted)">
+          📌 <strong>Com scanner:</strong> clique no campo abaixo e bipe o código de barras.<br>
+          📌 <strong>Manual:</strong> digite a linha digitável (47 dígitos) ou o código de barras (44 dígitos).
+        </div>
+        <div class="form-group">
+          <label class="form-label">Código do Boleto</label>
+          <input type="text" id="inputCodigoBoleto" class="form-control"
+            placeholder="Bipe ou cole o código aqui..."
+            oninput="Fin.lerBoleto(this.value)"
+            style="font-size:13px;letter-spacing:.03em">
+        </div>
+        <div id="boletoParsed" style="display:none;margin-top:12px">
+          <div style="background:rgba(34,197,94,.08);border:1px solid var(--success);border-radius:var(--radius-sm);padding:14px">
+            <div style="font-weight:700;color:var(--success);margin-bottom:10px">✅ Boleto reconhecido!</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px">
+              <div><span class="text-muted">Banco:</span><br><strong id="boletoNomeBanco">—</strong></div>
+              <div><span class="text-muted">Vencimento:</span><br><strong id="boletoVencimento">—</strong></div>
+              <div><span class="text-muted">Valor:</span><br><strong id="boletoValor" style="color:var(--primary);font-size:18px">—</strong></div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-full" style="margin-top:12px" onclick="Fin.usarDadosBoleto()">
+            Usar esses dados para cadastrar a despesa →
+          </button>
+        </div>
+        <div id="boletoErro" style="display:none;color:var(--danger);font-size:13px;margin-top:8px;padding:10px;background:rgba(239,68,68,.08);border-radius:var(--radius-sm)">
+          ⚠️ Código não reconhecido. Verifique se digitou todos os dígitos corretamente (44 ou 47 dígitos para boleto bancário, 48 para conta de luz/água/telefone).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DESPESA -->
+  <div class="modal-overlay" id="modalDespesa" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modalDespesaTitulo">Nova Despesa</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalDespesa')">✕</button>
+      </div>
+      <form id="formDespesa" onsubmit="Fin.salvarDespesa(event)">
+        <div class="form-group">
+          <label class="form-label">Descrição *</label>
+          <input type="text" name="descricao" class="form-control" required placeholder="Ex: Aluguel, Energia, Fornecedor...">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Valor (R$) *</label>
+            <input type="number" name="valor" class="form-control" step="0.01" min="0" required placeholder="0,00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Vencimento</label>
+            <input type="date" name="vencimento" class="form-control">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select name="categoria" class="form-control">
+              <option value="fixo">Fixo (aluguel, salário...)</option>
+              <option value="variavel">Variável (fornecedor, frete...)</option>
+              <option value="imposto">Imposto / Taxa</option>
+              <option value="outros">Outros</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+              <input type="checkbox" name="recorrente" style="width:16px;height:16px">
+              Repete todo mês
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalDespesa')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">💾 Salvar</button>
+        </div>
+      </form>
     </div>
   </div>
 

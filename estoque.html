@@ -118,6 +118,25 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Descrição do Produto <span style="color:var(--text-muted);font-weight:400">(o Weto usa isso para apresentar ao cliente)</span></label>
+          <textarea name="descricao" class="form-control" rows="2" placeholder="Ex: Tênis casual com solado confortável, ideal para o dia a dia. Disponível em várias cores." style="resize:vertical"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">📷 Foto do Produto <span style="color:var(--text-muted);font-weight:400">(o Weto envia essa foto no WhatsApp)</span></label>
+          <input type="file" id="inputFotoProduto" accept="image/*" style="display:none" onchange="Estoque.selecionarFoto(this)">
+          <div id="fotoUploadZone" onclick="document.getElementById('inputFotoProduto').click()" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;color:var(--text-muted);font-size:13px;transition:all .18s;background:var(--bg)" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-size:28px;margin-bottom:6px">📷</div>
+            <div style="font-weight:600">Clique para adicionar foto</div>
+            <div style="font-size:11px;margin-top:4px">JPG, PNG — a foto será comprimida automaticamente</div>
+          </div>
+          <div id="fotoPreviewBox" style="display:none;margin-top:10px;position:relative;display:none">
+            <img id="fotoPreviewImg" style="width:100%;max-height:200px;object-fit:contain;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg)">
+            <button type="button" onclick="Estoque.removerFoto()" style="position:absolute;top:6px;right:6px;background:var(--danger);border:none;color:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center">✕</button>
+          </div>
+        </div>
+
         <hr class="divider">
 
         <div class="section-header">
