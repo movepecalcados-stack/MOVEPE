@@ -164,10 +164,33 @@ const Utils = {
       ['importar.html', '📥', 'Importar'],
       ['configuracoes.html', '⚙️', 'Configurações'],
     ];
+    // Overlay para fechar sidebar no mobile
+    if (!document.getElementById('sidebarOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'sidebarOverlay';
+      overlay.className = 'sidebar-overlay';
+      overlay.onclick = () => Utils.fecharMenu();
+      document.body.appendChild(overlay);
+    }
+
+    // Botão hamburguer no topbar
+    const topbar = document.querySelector('.topbar');
+    if (topbar && !topbar.querySelector('.menu-toggle')) {
+      const btn = document.createElement('button');
+      btn.className = 'menu-toggle';
+      btn.innerHTML = '☰';
+      btn.title = 'Menu';
+      btn.onclick = () => Utils.toggleMenu();
+      topbar.insertBefore(btn, topbar.firstChild);
+    }
+
     sidebar.innerHTML = `
-      <div class="sidebar-logo">
-        <div class="logo-nome">MOVE PÉ</div>
-        <span class="logo-sub">Gestão de Loja</span>
+      <div class="sidebar-logo" style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="logo-nome">MOVE PÉ</div>
+          <span class="logo-sub">Gestão de Loja</span>
+        </div>
+        <button onclick="Utils.fecharMenu()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:4px;display:none" id="btnFecharSidebar">✕</button>
       </div>
       <ul class="nav-lista">
         ${links.map(([href, icon, label]) => `
@@ -372,6 +395,25 @@ const Utils = {
     const nomes = aniv.slice(0, 2).map(c => c.nome.split(' ')[0]).join(', ');
     const extra = aniv.length > 2 ? ` e mais ${aniv.length - 2}` : '';
     Utils.toast(`🎂 Aniversário hoje: ${nomes}${extra}!`, 'success');
+  },
+
+  toggleMenu: () => {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const btnFechar = document.getElementById('btnFecharSidebar');
+    if (!sidebar) return;
+    const aberta = sidebar.classList.toggle('aberta');
+    if (overlay) overlay.classList.toggle('ativo', aberta);
+    if (btnFechar) btnFechar.style.display = aberta ? '' : 'none';
+  },
+
+  fecharMenu: () => {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const btnFechar = document.getElementById('btnFecharSidebar');
+    if (sidebar) sidebar.classList.remove('aberta');
+    if (overlay) overlay.classList.remove('ativo');
+    if (btnFechar) btnFechar.style.display = 'none';
   },
 
   sair: () => {

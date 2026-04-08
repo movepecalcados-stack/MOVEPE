@@ -1218,11 +1218,84 @@ tbody td { padding: 12px 14px; color: var(--text); font-size: 14px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* =====================================================
+   BOTÃO HAMBURGUER
+   ===================================================== */
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  margin-right: 8px;
+}
+.menu-toggle:hover { background: var(--bg); }
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 99;
+}
+.sidebar-overlay.ativo { display: block; }
+.sidebar.aberta { transform: translateX(0) !important; }
+
+/* =====================================================
+   RESPONSIVO MOBILE
+   ===================================================== */
 @media (max-width: 900px) {
-  .sidebar      { transform: translateX(-100%); }
-  .main         { margin-left: 0; }
-  .pdv-layout   { grid-template-columns: 1fr; }
-  .dashboard-grid { grid-template-columns: 1fr; }
+  /* Sidebar */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 100;
+  }
+  .main { margin-left: 0; }
+
+  /* Hamburguer visível */
+  .menu-toggle { display: flex; align-items: center; }
+
+  /* Topbar ajustada */
+  .topbar { padding: 0 14px; }
+  .topbar-title { font-size: 15px; }
+
+  /* Conteúdo */
+  .content { padding: 12px; }
+
+  /* Stats: 2 colunas no mobile */
+  .stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+  .stat-card  { padding: 12px; }
+  .stat-value { font-size: 18px; }
+
+  /* Grids de layout */
+  .pdv-layout, .dashboard-grid, #precLayout, #metasLayout,
+  .wa-layout { grid-template-columns: 1fr !important; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
-  #precLayout, #metasLayout { grid-template-columns: 1fr !important; }
+
+  /* Cards */
+  .card { padding: 14px; }
+  .card-title { font-size: 14px; }
+
+  /* Tabelas com scroll horizontal */
+  .table-wrap, .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 500px; }
+
+  /* Botões touch-friendly */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 34px; font-size: 12px; }
+
+  /* Tabs scroll horizontal */
+  .tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .tab-btn { white-space: nowrap; flex-shrink: 0; }
+
+  /* Modais full width */
+  .modal { width: 96vw; max-height: 90vh; overflow-y: auto; }
+
+  /* PDV busca */
+  .pdv-grid { grid-template-columns: repeat(2, 1fr) !important; }
 }
