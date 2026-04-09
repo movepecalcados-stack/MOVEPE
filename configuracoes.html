@@ -42,6 +42,36 @@
         <div id="listaVendedores" style="margin-top:12px"></div>
       </div>
 
+      <!-- DADOS DA LOJA -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">🏪 Dados da Loja</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Usados nos contratos de crediário, notas de envio e documentos impressos.
+        </p>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Nome da Loja</label>
+            <input type="text" id="inputNomeLoja" class="form-control" placeholder="Ex: MOVE PÉ CALÇADOS">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CNPJ</label>
+            <input type="text" id="inputCnpjLoja" class="form-control" placeholder="00.000.000/0000-00" maxlength="18">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Endereço completo</label>
+            <input type="text" id="inputEnderecoLojaCompleto" class="form-control" placeholder="Ex: Rua das Flores, 123 — Centro — Curitiba/PR">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cidade (para contratos)</label>
+            <input type="text" id="inputCidadeLoja" class="form-control" placeholder="Ex: Curitiba/PR">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="Config.salvarDadosLoja()">💾 Salvar Dados da Loja</button>
+        <div id="dadosLojaSalvoInfo" style="display:none;margin-top:8px;font-size:13px;color:var(--success);font-weight:600"></div>
+      </div>
+
       <!-- FRETE & ENVIO -->
       <div class="card" style="margin-top:20px">
         <div class="card-title">🚚 Frete & Envio</div>
@@ -261,6 +291,7 @@
         Config.atualizarStatusFirebase();
         Config.carregarTaxas();
         Config.carregarFrete();
+        Config.carregarDadosLoja();
       },
 
       renderStats: () => {
@@ -398,6 +429,34 @@
           document.getElementById('metaSalvaInfo').style.display = '';
           document.getElementById('metaSalvaInfo').textContent = `Meta atual: ${Utils.moeda(meta)} / mês`;
         }
+      },
+
+      carregarDadosLoja: () => {
+        const campos = {
+          inputNomeLoja: 'nomeLoja',
+          inputCnpjLoja: 'cnpj',
+          inputEnderecoLojaCompleto: 'enderecoLoja',
+          inputCidadeLoja: 'cidadeLoja',
+        };
+        Object.entries(campos).forEach(([elId, key]) => {
+          const val = DB.Config.get(key, '');
+          if (val) document.getElementById(elId).value = val;
+        });
+      },
+
+      salvarDadosLoja: () => {
+        const nome = document.getElementById('inputNomeLoja').value.trim();
+        const cnpj = document.getElementById('inputCnpjLoja').value.trim();
+        const end  = document.getElementById('inputEnderecoLojaCompleto').value.trim();
+        const cid  = document.getElementById('inputCidadeLoja').value.trim();
+        if (nome) DB.Config.set('nomeLoja', nome);
+        if (cnpj) DB.Config.set('cnpj', cnpj);
+        if (end)  DB.Config.set('enderecoLoja', end);
+        if (cid)  DB.Config.set('cidadeLoja', cid);
+        const info = document.getElementById('dadosLojaSalvoInfo');
+        info.style.display = '';
+        info.textContent = '✅ Dados da loja salvos!';
+        Utils.toast('Dados da loja salvos!', 'success');
       },
 
       carregarFrete: () => {

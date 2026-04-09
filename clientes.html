@@ -140,6 +140,87 @@
     </div>
   </div>
 
+  <!-- MODAL AUTORIZAÇÃO -->
+  <div class="modal-overlay" id="modalAutorizacao" style="display:none">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <span class="modal-title">📋 Termo de Autorização de Compra</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalAutorizacao')">✕</button>
+      </div>
+      <div class="modal-body" style="padding:20px">
+
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Permite que outra pessoa faça compras no crediário em nome do titular. Preencha os dados e imprima para assinar.
+        </p>
+
+        <div class="section-label">Titular da Conta</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Nome do titular</label>
+            <input type="text" id="autTitularNome" class="form-control" readonly style="background:var(--input-bg)">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">CPF</label>
+            <input type="text" id="autTitularCpf" class="form-control" readonly style="background:var(--input-bg)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">RG</label>
+            <input type="text" id="autTitularRg" class="form-control" readonly style="background:var(--input-bg)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefone</label>
+            <input type="text" id="autTitularTel" class="form-control" readonly style="background:var(--input-bg)">
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:14px">Pessoa Autorizada</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Nome completo *</label>
+            <input type="text" id="autAutorizadoNome" class="form-control" placeholder="Nome da pessoa autorizada">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Parentesco / Relação</label>
+            <input type="text" id="autAutorizadoParentesco" class="form-control" placeholder="Ex: Esposa, Filho">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">CPF *</label>
+            <input type="text" id="autAutorizadoCpf" class="form-control" placeholder="000.000.000-00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">RG</label>
+            <input type="text" id="autAutorizadoRg" class="form-control" placeholder="0000000-0">
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:14px">Condições</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Validade (deixe em branco = indeterminado)</label>
+            <input type="date" id="autValidade" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Limite por compra (R$) — opcional</label>
+            <input type="number" id="autLimiteValor" class="form-control" placeholder="Ex: 300.00" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observações / Restrições — opcional</label>
+          <input type="text" id="autObs" class="form-control" placeholder="Ex: Somente para retirada de produtos já pagos">
+        </div>
+
+        <div style="margin-top:20px;display:flex;gap:10px">
+          <button class="btn btn-primary" onclick="ClientesModule.imprimirAutorizacao()">🖨️ Gerar e Imprimir Termo</button>
+          <button class="btn btn-outline" onclick="Utils.fecharModal('modalAutorizacao')">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="js/db.js"></script>

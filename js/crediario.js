@@ -243,6 +243,7 @@ const CrediarioModule = {
                   ${quitado ? 'Quitado' : temAtrasado ? 'Com atraso' : pendentes.length + ' pendente(s)'}
                 </span>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.verDetalhes('${cred.id}')">🧾 Detalhes</button>
+                <button class="btn btn-outline btn-sm" onclick="CrediarioModule.imprimirContrato('${cred.id}')" title="Imprimir contrato de crediário">📄 Contrato</button>
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.renegociar('${cred.id}')" title="Renegociar dívida">🔄 Reneg.</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.enviarWhatsApp('${cred.id}')" title="Enviar cobrança por WhatsApp" style="color:#25D366;border-color:#25D366">📱 WhatsApp</button>` : ''}
               </div>
@@ -528,6 +529,162 @@ const CrediarioModule = {
       credId: cred.id
     });
     Utils.imprimirComprovante(comp);
+  },
+
+  imprimirContrato: (credId) => {
+    const cred = DB.Crediario.buscar(credId);
+    if (!cred) return;
+
+    const cli = DB.Clientes.buscar(cred.clienteId) || {};
+    const nomeLoja  = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS');
+    const cnpjLoja  = DB.Config.get('cnpj', '45.967.476/0001-34');
+    const endLoja   = DB.Config.get('enderecoLoja', '');
+    const telLoja   = DB.Config.get('whatsapp', '') || DB.Config.get('telefone', '');
+    const cidade    = DB.Config.get('cidadeLoja', '');
+    const dataContrato = Utils.data(cred.criadoEm || Utils.hoje());
+    const numContrato  = cred.id.substring(0, 8).toUpperCase();
+
+    const end = cli.endereco || {};
+    const endCliente = [
+      end.rua ? `${end.rua}${end.numero ? ', ' + end.numero : ''}` : '',
+      end.bairro || '',
+      end.cidade && end.estado ? `${end.cidade}/${end.estado}` : '',
+      end.cep ? `CEP ${end.cep}` : '',
+    ].filter(Boolean).join(' — ');
+
+    const parcelasHtml = cred.parcelas.map(p => `
+      <tr>
+        <td style="padding:6px 8px;text-align:center;border:1px solid #ddd">${p.numero}ª</td>
+        <td style="padding:6px 8px;text-align:center;border:1px solid #ddd">${Utils.data(p.vencimento)}</td>
+        <td style="padding:6px 8px;text-align:right;border:1px solid #ddd;font-weight:600">${Utils.moeda(p.valor)}</td>
+        <td style="padding:6px 8px;border:1px solid #ddd"></td>
+      </tr>`).join('');
+
+    const html = `
+      <html><head><meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 13px; color: #000; margin: 0; padding: 24px; }
+        h1 { font-size: 16px; text-align: center; text-transform: uppercase; margin-bottom: 4px; }
+        h2 { font-size: 13px; text-align: center; font-weight: normal; margin-bottom: 20px; color: #444; }
+        .cabecalho { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+        .loja-nome { font-size: 18px; font-weight: 900; }
+        .loja-info { font-size: 11px; color: #555; line-height: 1.6; }
+        .numero-contrato { font-size: 11px; text-align: right; }
+        .secao { margin-bottom: 16px; }
+        .secao-titulo { font-weight: 700; font-size: 12px; text-transform: uppercase; background: #f0f0f0; padding: 4px 8px; border-left: 3px solid #000; margin-bottom: 8px; }
+        .campo-linha { display: flex; gap: 24px; margin-bottom: 6px; }
+        .campo { flex: 1; }
+        .campo label { font-size: 10px; color: #666; display: block; text-transform: uppercase; }
+        .campo span { font-weight: 600; border-bottom: 1px solid #aaa; display: block; padding-bottom: 2px; min-height: 18px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { background: #f0f0f0; padding: 6px 8px; border: 1px solid #ddd; text-align: center; font-size: 11px; }
+        .clausulas { font-size: 11px; line-height: 1.7; color: #333; }
+        .clausulas p { margin: 6px 0; }
+        .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+        .assinatura-linha { border-top: 1px solid #000; padding-top: 6px; text-align: center; font-size: 11px; }
+        .destaque { background: #fffbea; border: 1px solid #e5a000; border-radius: 4px; padding: 8px 12px; font-size: 12px; margin: 12px 0; }
+        @media print { body { padding: 16px; } }
+      </style></head><body>
+
+      <div class="cabecalho">
+        <div>
+          <div class="loja-nome">${nomeLoja}</div>
+          <div class="loja-info">
+            CNPJ: ${cnpjLoja}${endLoja ? '<br>' + endLoja : ''}${telLoja ? '<br>Tel: ' + Utils.telefone(telLoja) : ''}
+          </div>
+        </div>
+        <div class="numero-contrato">
+          <strong>CONTRATO DE CREDIÁRIO</strong><br>
+          Nº ${numContrato}<br>
+          Data: ${dataContrato}
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-titulo">Dados do Contratante (Comprador)</div>
+        <div class="campo-linha">
+          <div class="campo"><label>Nome completo</label><span>${cli.nome || cred.clienteNome || ''}</span></div>
+          <div class="campo" style="max-width:160px"><label>CPF</label><span>${cli.cpf || ''}</span></div>
+          <div class="campo" style="max-width:140px"><label>RG</label><span>${cli.rg || ''}</span></div>
+        </div>
+        <div class="campo-linha">
+          <div class="campo"><label>Endereço completo</label><span>${endCliente}</span></div>
+          <div class="campo" style="max-width:180px"><label>Telefone</label><span>${cli.telefone ? Utils.telefone(cli.telefone) : ''}</span></div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-titulo">Condições de Pagamento</div>
+        <div class="campo-linha">
+          <div class="campo"><label>Valor total da compra</label><span style="font-size:15px;font-weight:900">${Utils.moeda(cred.total)}</span></div>
+          <div class="campo"><label>Quantidade de parcelas</label><span>${cred.parcelas.length}x de ${Utils.moeda(cred.total / cred.parcelas.length)}</span></div>
+          <div class="campo"><label>1ª parcela em</label><span>${Utils.data(cred.parcelas[0]?.vencimento)}</span></div>
+        </div>
+
+        <table style="margin-top:10px">
+          <thead>
+            <tr>
+              <th>Parcela</th>
+              <th>Vencimento</th>
+              <th>Valor</th>
+              <th>Assinatura / Rubrica do Cliente</th>
+            </tr>
+          </thead>
+          <tbody>${parcelasHtml}</tbody>
+        </table>
+      </div>
+
+      <div class="secao">
+        <div class="secao-titulo">Cláusulas e Condições</div>
+        <div class="clausulas">
+          <p><strong>1. JUROS E ENCARGOS:</strong> Sobre os valores em atraso incidirão juros moratórios de <strong>0,4% (zero vírgula quatro por cento) ao dia</strong>, após carência de <strong>5 (cinco) dias</strong> a contar da data de vencimento de cada parcela.</p>
+          <p><strong>2. MULTA:</strong> Em caso de atraso, fica estabelecida multa contratual de <strong>2% (dois por cento)</strong> sobre o valor da parcela em atraso, acrescida dos juros previstos na cláusula anterior.</p>
+          <p><strong>3. RESPONSABILIDADE:</strong> O comprador declara que os produtos foram recebidos em perfeito estado e que está ciente das condições de pagamento estabelecidas neste contrato.</p>
+          <p><strong>4. ANTECIPAÇÃO:</strong> O comprador poderá antecipar o pagamento de qualquer parcela sem incidência de juros sobre o valor antecipado.</p>
+          <p><strong>5. INADIMPLÊNCIA:</strong> O não pagamento de qualquer parcela no prazo estipulado implicará no vencimento antecipado das demais parcelas, tornando exigível a totalidade da dívida.</p>
+          <p><strong>6. FORO:</strong> Fica eleito o foro da comarca de ${cidade || 'domicílio do contratante'} para dirimir quaisquer dúvidas decorrentes deste contrato.</p>
+        </div>
+        <div class="destaque">
+          ⚠️ <strong>ATENÇÃO:</strong> Ao assinar este contrato, o comprador declara estar ciente de todas as cláusulas acima, em especial sobre juros de <strong>0,4% ao dia</strong> após 5 dias de carência.
+        </div>
+      </div>
+
+      <p style="font-size:12px;text-align:center;margin-top:8px">
+        ${cidade ? cidade + ', ' : ''}${dataContrato}
+      </p>
+
+      <div class="assinaturas">
+        <div>
+          <div class="assinatura-linha">
+            ${nomeLoja}<br>
+            <span style="font-size:10px;color:#555">CNPJ: ${cnpjLoja} — Contratada</span>
+          </div>
+        </div>
+        <div>
+          <div class="assinatura-linha">
+            ${cli.nome || cred.clienteNome || 'Cliente'}<br>
+            <span style="font-size:10px;color:#555">CPF: ${cli.cpf || '___.___.___-__'} — Contratante</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <div class="assinatura-linha" style="max-width:300px">
+          Testemunha: ____________________________<br>
+          <span style="font-size:10px;color:#555">CPF: ___.___.___-__</span>
+        </div>
+      </div>
+
+      <p style="font-size:10px;color:#888;text-align:center;margin-top:20px;border-top:1px solid #eee;padding-top:8px">
+        Documento gerado pelo sistema ${nomeLoja} em ${new Date().toLocaleString('pt-BR')} — Contrato Nº ${numContrato}
+      </p>
+
+      <script>window.onload = () => { window.print(); }<\/script>
+      </body></html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
   },
 
   _buildInadimplenciaData: () => {

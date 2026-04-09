@@ -107,7 +107,8 @@ const ClientesModule = {
           <div class="cliente-stats">
             <div class="cliente-total">${Utils.moeda(totalGasto)}</div>
             <div class="cliente-compras">${numCompras} compra${numCompras !== 1 ? 's' : ''}</div>
-            <div style="margin-top:6px">
+            <div style="margin-top:6px;display:flex;gap:4px">
+              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();ClientesModule.abrirAutorizacao('${c.id}')" title="Termo de autorização de compra">📋</button>
               <button class="btn btn-danger btn-sm" onclick="ClientesModule.excluir('${c.id}',event)">🗑</button>
             </div>
           </div>
@@ -451,6 +452,158 @@ const ClientesModule = {
     Utils.fecharModal('modalCliente');
     ClientesModule.renderLista();
     Utils.toast(_clienteEditando ? 'Cliente atualizado!' : 'Cliente cadastrado!');
+  },
+
+  abrirAutorizacao: (clienteId) => {
+    const cli = DB.Clientes.buscar(clienteId);
+    if (!cli) return;
+    // Preenche titular
+    document.getElementById('autTitularNome').value = cli.nome || '';
+    document.getElementById('autTitularCpf').value = cli.cpf || '';
+    document.getElementById('autTitularRg').value = cli.rg || '';
+    document.getElementById('autTitularTel').value = cli.telefone ? Utils.telefone(cli.telefone) : '';
+    // Limpa autorizado
+    ['autAutorizadoNome','autAutorizadoCpf','autAutorizadoRg','autAutorizadoParentesco'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('autValidade').value = '';
+    Utils.abrirModal('modalAutorizacao');
+  },
+
+  imprimirAutorizacao: () => {
+    const get = id => document.getElementById(id).value.trim();
+    const titularNome   = get('autTitularNome');
+    const titularCpf    = get('autTitularCpf');
+    const titularRg     = get('autTitularRg');
+    const titularTel    = get('autTitularTel');
+    const autNome       = get('autAutorizadoNome');
+    const autCpf        = get('autAutorizadoCpf');
+    const autRg         = get('autAutorizadoRg');
+    const parentesco    = get('autAutorizadoParentesco');
+    const validade      = get('autValidade');
+    const limiteValor   = get('autLimiteValor');
+    const obs           = get('autObs');
+
+    if (!titularNome || !autNome || !autCpf) {
+      Utils.toast('Preencha titular e os dados do autorizado', 'error');
+      return;
+    }
+
+    const nomeLoja   = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS');
+    const cnpjLoja   = DB.Config.get('cnpj', '45.967.476/0001-34');
+    const endLoja    = DB.Config.get('enderecoLoja', '');
+    const cidade     = DB.Config.get('cidadeLoja', '');
+    const dataHoje   = new Date().toLocaleDateString('pt-BR');
+    const validadeStr = validade ? new Date(validade + 'T12:00:00').toLocaleDateString('pt-BR') : 'indeterminado';
+
+    const html = `
+      <html><head><meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 13px; color: #000; margin: 0; padding: 24px; max-width: 700px; }
+        h1 { font-size: 15px; text-align: center; text-transform: uppercase; margin-bottom: 4px; }
+        h2 { font-size: 12px; text-align: center; color: #555; margin-bottom: 20px; font-weight: normal; }
+        .cabecalho { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+        .loja-nome { font-size: 18px; font-weight: 900; }
+        .loja-info { font-size: 11px; color: #555; line-height: 1.6; }
+        .secao-titulo { font-weight: 700; font-size: 12px; text-transform: uppercase; background: #f0f0f0; padding: 4px 8px; border-left: 3px solid #000; margin: 14px 0 8px; }
+        .campo-linha { display: flex; gap: 20px; margin-bottom: 8px; }
+        .campo { flex: 1; }
+        .campo label { font-size: 10px; color: #666; display: block; text-transform: uppercase; }
+        .campo span { font-weight: 600; border-bottom: 1px solid #aaa; display: block; padding-bottom: 2px; min-height: 18px; }
+        .clausulas { font-size: 12px; line-height: 1.8; color: #333; }
+        .clausulas p { margin: 6px 0; }
+        .destaque { background: #fffbea; border: 1px solid #e5a000; border-radius: 4px; padding: 8px 12px; font-size: 12px; margin: 14px 0; }
+        .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+        .assinatura-linha { border-top: 1px solid #000; padding-top: 6px; text-align: center; font-size: 11px; }
+        @media print { body { padding: 16px; } }
+      </style></head><body>
+
+      <div class="cabecalho">
+        <div>
+          <div class="loja-nome">${nomeLoja}</div>
+          <div class="loja-info">CNPJ: ${cnpjLoja}${endLoja ? '<br>' + endLoja : ''}</div>
+        </div>
+        <div style="text-align:right;font-size:11px">
+          <strong>TERMO DE AUTORIZAÇÃO DE COMPRA</strong><br>
+          Data: ${dataHoje}
+        </div>
+      </div>
+
+      <h1>Termo de Autorização para Realização de Compras</h1>
+
+      <div class="secao-titulo">Dados do Titular da Conta (Autorizante)</div>
+      <div class="campo-linha">
+        <div class="campo"><label>Nome completo</label><span>${titularNome}</span></div>
+      </div>
+      <div class="campo-linha">
+        <div class="campo"><label>CPF</label><span>${titularCpf}</span></div>
+        <div class="campo"><label>RG</label><span>${titularRg}</span></div>
+        <div class="campo"><label>Telefone</label><span>${titularTel}</span></div>
+      </div>
+
+      <div class="secao-titulo">Dados do Autorizado</div>
+      <div class="campo-linha">
+        <div class="campo"><label>Nome completo</label><span>${autNome}</span></div>
+        <div class="campo" style="max-width:180px"><label>Parentesco / Relação</label><span>${parentesco}</span></div>
+      </div>
+      <div class="campo-linha">
+        <div class="campo"><label>CPF</label><span>${autCpf}</span></div>
+        <div class="campo"><label>RG</label><span>${autRg}</span></div>
+      </div>
+
+      <div class="secao-titulo">Condições da Autorização</div>
+      <div class="campo-linha">
+        <div class="campo"><label>Validade desta autorização</label><span>${validadeStr}</span></div>
+        ${limiteValor ? `<div class="campo"><label>Limite de valor por compra (R$)</label><span>${parseFloat(limiteValor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>` : ''}
+      </div>
+      ${obs ? `<div class="campo"><label>Observações / Restrições</label><span>${obs}</span></div>` : ''}
+
+      <div class="secao-titulo">Declaração</div>
+      <div class="clausulas">
+        <p>Eu, <strong>${titularNome}</strong>, portador(a) do CPF nº <strong>${titularCpf}</strong> e RG nº <strong>${titularRg}</strong>, declaro para os devidos fins que autorizo o(a) Sr(a). <strong>${autNome}</strong>, portador(a) do CPF nº <strong>${autCpf}</strong>${parentesco ? `, ${parentesco}` : ''}, a realizar compras no crediário em meu nome junto à loja <strong>${nomeLoja}</strong> (CNPJ: ${cnpjLoja}).</p>
+        <p>Declaro estar ciente de que serei integralmente responsável por todas as compras realizadas pelo(a) autorizado(a) durante o período de validade desta autorização, incluindo o pagamento das parcelas do crediário nas datas pactuadas, bem como eventuais juros e encargos decorrentes do atraso.</p>
+        <p>Esta autorização é válida ${validade ? `até ${validadeStr}` : 'por prazo indeterminado'} e pode ser revogada a qualquer momento mediante comunicação por escrito à loja.</p>
+        ${limiteValor ? `<p><strong>Restrição de valor:</strong> O(a) autorizado(a) poderá realizar compras de até R$ ${parseFloat(limiteValor).toLocaleString('pt-BR',{minimumFractionDigits:2})} por operação.</p>` : ''}
+      </div>
+
+      <div class="destaque">
+        ⚠️ <strong>ATENÇÃO LOJA:</strong> Verifique o documento de identidade do(a) autorizado(a) antes de liberar compras nesta conta. Guarde este documento junto ao cadastro do cliente titular.
+      </div>
+
+      <p style="text-align:center;font-size:12px">${cidade ? cidade + ', ' : ''}${dataHoje}</p>
+
+      <div class="assinaturas">
+        <div>
+          <div class="assinatura-linha">
+            ${titularNome}<br>
+            <span style="font-size:10px;color:#555">Titular — CPF: ${titularCpf}</span>
+          </div>
+        </div>
+        <div>
+          <div class="assinatura-linha">
+            ${autNome}<br>
+            <span style="font-size:10px;color:#555">Autorizado(a) — CPF: ${autCpf}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <div class="assinatura-linha" style="max-width:300px">
+          Testemunha: ____________________________<br>
+          <span style="font-size:10px;color:#555">CPF: ___.___.___-__</span>
+        </div>
+      </div>
+
+      <p style="font-size:10px;color:#888;text-align:center;margin-top:20px;border-top:1px solid #eee;padding-top:8px">
+        Documento gerado pelo sistema ${nomeLoja} em ${new Date().toLocaleString('pt-BR')}
+      </p>
+
+      <script>window.onload = () => { window.print(); }<\/script>
+      </body></html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
   },
 
   _validarCpf: (cpf) => {
