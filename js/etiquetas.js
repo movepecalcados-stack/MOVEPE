@@ -234,8 +234,8 @@ const Etiquetas = {
       '60x40': { w: 60, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
       '80x40': { w: 80, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
     };
+    const d = dims[tamanho] || dims['50x25'];
     const pageW = d.cols * d.w + (d.cols - 1) * d.gap; // 50*2 + 1*2 = 102mm
-    const d = dims[tamanho] || dims['40x25'];
 
     // Re-gera etiquetas com IDs únicos para a janela de impressão
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
