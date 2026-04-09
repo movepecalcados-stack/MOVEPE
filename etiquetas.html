@@ -37,20 +37,20 @@
       padding: 2px 4px; font-size: 12px; text-align: center; background: var(--bg);
     }
 
-    /* ---- PREVIEW NA TELA (escala visual ~2x para facilitar visualização) ---- */
+    /* ---- PREVIEW NA TELA ---- */
     .preview-screen {
       display: grid;
-      grid-template-columns: repeat(2, 11cm);
-      padding: 4px 0 4px 4mm;
-      gap: 0;
+      grid-template-columns: repeat(2, 10cm);
+      padding: 8px;
+      gap: 0.2cm;
       background: #e8e8e8;
       border-radius: 8px;
       overflow: auto;
     }
 
-    /* ETIQUETA — dimensões exatas Argox: 5,5cm x 2,5cm */
+    /* ETIQUETA — dimensões Argox: 5cm x 2,5cm */
     .etiq {
-      width: 5.5cm;
+      width: 5cm;
       height: 2.5cm;
       box-sizing: border-box;
       display: flex;
@@ -78,7 +78,8 @@
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
       @page {
-        size: auto;
+        /* Rolo Argox: 2 colunas × 5cm + gap 0,2cm = 10,2cm largura; altura contínua */
+        size: 10.2cm 2.5cm;
         margin: 0;
       }
 
@@ -95,22 +96,24 @@
         padding: 0 !important;
       }
 
-      /* Grid de impressão com medidas exatas do Tiny */
+      /* Grid de impressão — 5cm x 2,5cm, gap 0,2cm, 2 colunas */
       .preview-screen {
         display: grid !important;
-        grid-template-columns: 5.5cm 5.5cm !important;
-        column-gap: 0.5cm !important;
-        row-gap: 0 !important;
-        padding: 0 0 0 0.2cm !important;
+        grid-template-columns: 5cm 5cm !important;
+        column-gap: 0.2cm !important;
+        row-gap: 0.2cm !important;
+        padding: 0 !important;
+        margin: 0 !important;
         background: transparent !important;
         border-radius: 0 !important;
         overflow: visible !important;
       }
 
       .etiq {
-        width: 5.5cm !important;
+        width: 5cm !important;
         height: 2.5cm !important;
         border: none !important;
+        padding: 0.5mm 1.5mm !important;
         page-break-inside: avoid !important;
       }
     }
