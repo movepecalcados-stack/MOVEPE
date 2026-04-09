@@ -893,15 +893,15 @@ const PDV = {
       })(),
     };
 
-    // Atualizar estoque
+    // Salvar venda PRIMEIRO (se der erro, estoque não é alterado)
+    const vendaSalva = DB.Vendas.salvar(venda);
+
+    // Atualizar estoque após salvar
     _carrinho.forEach(item => {
       if (item.tamanho) {
         DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
       }
     });
-
-    // Salvar venda
-    const vendaSalva = DB.Vendas.salvar(venda);
 
     // Crediário
     if (_formaPagamento === 'crediario') {
@@ -909,14 +909,22 @@ const PDV = {
       const venc1 = document.getElementById('inputVencimento1').value || Utils.adicionarMeses(Utils.hoje(), 1);
       const valorParcela = parseFloat((total / numParcelas).toFixed(2));
       const parcelas = [];
+      let somaParcelas = 0;
       for (let i = 0; i < numParcelas; i++) {
+        // Última parcela absorve diferença de arredondamento
+        const isUltima = i === numParcelas - 1;
+        const valor = isUltima
+          ? parseFloat((total - somaParcelas).toFixed(2))
+          : valorParcela;
+        somaParcelas += valor;
         parcelas.push({
           numero: i + 1,
           vencimento: Utils.adicionarMeses(venc1, i),
-          valor: valorParcela,
+          valor,
           status: 'pendente'
         });
       }
+      if (!_clienteSelecionado) { Utils.toast('Cliente não selecionado', 'error'); return; }
       DB.Crediario.salvar({
         clienteId: _clienteSelecionado.id,
         clienteNome: _clienteSelecionado.nome,
@@ -995,11 +1003,13 @@ const PDV = {
       vendedorComissao,
     };
 
+    // Salvar venda PRIMEIRO
+    const vendaSalva = DB.Vendas.salvar(venda);
+
+    // Atualizar estoque após salvar
     _carrinho.forEach(item => {
       if (item.tamanho) DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
     });
-
-    const vendaSalva = DB.Vendas.salvar(venda);
 
     // Gerar crediário para a parte parcelada (se houver)
     const parteCrediario = _formasSplit.filter(f => f.forma === 'crediario');
@@ -1009,8 +1019,12 @@ const PDV = {
       const valorParcela = parseFloat((pc.valor / numParcelas).toFixed(2));
       const venc1 = pc.vencimento || Utils.adicionarMeses(Utils.hoje(), 1);
       const parcelas = [];
+      let somaSplit = 0;
       for (let i = 0; i < numParcelas; i++) {
-        parcelas.push({ numero: i + 1, vencimento: Utils.adicionarMeses(venc1, i), valor: valorParcela, status: 'pendente' });
+        const isUltima = i === numParcelas - 1;
+        const valor = isUltima ? parseFloat((pc.valor - somaSplit).toFixed(2)) : valorParcela;
+        somaSplit += valor;
+        parcelas.push({ numero: i + 1, vencimento: Utils.adicionarMeses(venc1, i), valor, status: 'pendente' });
       }
       DB.Crediario.salvar({
         clienteId: _clienteSelecionado.id,

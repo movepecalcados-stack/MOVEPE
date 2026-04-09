@@ -441,10 +441,31 @@ const ClientesModule = {
 
     if (!cli.nome) { Utils.toast('Nome é obrigatório', 'error'); return; }
 
+    // Validar CPF se preenchido
+    if (cli.cpf && !ClientesModule._validarCpf(cli.cpf)) {
+      Utils.toast('CPF inválido — verifique os números', 'error');
+      return;
+    }
+
     DB.Clientes.salvar(cli);
     Utils.fecharModal('modalCliente');
     ClientesModule.renderLista();
     Utils.toast(_clienteEditando ? 'Cliente atualizado!' : 'Cliente cadastrado!');
+  },
+
+  _validarCpf: (cpf) => {
+    const c = cpf.replace(/\D/g, '');
+    if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(c[i]) * (10 - i);
+    let r = (soma * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    if (r !== parseInt(c[9])) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(c[i]) * (11 - i);
+    r = (soma * 10) % 11;
+    if (r === 10 || r === 11) r = 0;
+    return r === parseInt(c[10]);
   },
 
   excluir: (id, e) => {
