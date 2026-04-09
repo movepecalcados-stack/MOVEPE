@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frete & Envio — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .frete-layout {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) { .frete-layout { grid-template-columns: 1fr; } }
+
+    .servico-card {
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .servico-card:hover { border-color: var(--primary); }
+    .servico-card.selecionado { border-color: var(--primary); background: rgba(99,102,241,.07); }
+    .servico-logo { width: 52px; height: 32px; object-fit: contain; flex-shrink: 0; }
+    .servico-info { flex: 1; }
+    .servico-nome { font-weight: 700; font-size: 14px; }
+    .servico-prazo { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .servico-preco { font-size: 18px; font-weight: 800; color: var(--primary); white-space: nowrap; }
+
+    .tag-gratis { background: #d1fae5; color: #065f46; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 2px 6px; margin-left: 6px; }
+    .tag-rapido { background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 2px 6px; margin-left: 6px; }
+
+    .destino-box {
+      background: var(--input-bg);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .destino-nome { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+
+    /* ---- NOTA DE ENVIO (impressão) ---- */
+    @media print {
+      body * { visibility: hidden; }
+      #notaImpressao, #notaImpressao * { visibility: visible; }
+      #notaImpressao {
+        position: fixed; left: 0; top: 0; width: 100%;
+        background: #fff; padding: 24px;
+      }
+    }
+    .nota-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+    .nota-loja { font-size: 20px; font-weight: 800; }
+    .nota-subtitulo { font-size: 12px; color: #555; margin-top: 2px; }
+    .nota-secao { margin-bottom: 16px; }
+    .nota-secao-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-bottom: 8px; }
+    .nota-linha { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+    .nota-total { font-size: 16px; font-weight: 800; border-top: 2px solid #000; padding-top: 10px; margin-top: 10px; }
+    .nota-rodape { text-align: center; font-size: 11px; color: #555; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 16px; }
+    .nota-etiqueta { border: 2px dashed #000; border-radius: 8px; padding: 16px; margin-top: 20px; }
+    .nota-etiqueta-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+    .nota-etiqueta-dest { font-size: 15px; font-weight: 700; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">🚚 Frete & Envio</div>
+      <div class="topbar-info">
+        <span class="text-muted fs-sm">Simule o frete pelo Melhor Envio e imprima a nota</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="frete-layout">
+
+        <!-- ===== ESQUERDO — FORMULÁRIO ===== -->
+        <div>
+
+          <!-- DESTINO -->
+          <div class="card">
+            <div class="card-title">📍 Destinatário</div>
+
+            <div class="form-group">
+              <label class="form-label">Buscar cliente cadastrado</label>
+              <input type="text" id="inputBuscarCliente" class="form-control"
+                placeholder="Nome ou telefone..." oninput="Frete.buscarCliente(this.value)">
+              <div id="listaClientes" style="display:none;border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:200px;overflow-y:auto;background:var(--card-bg)"></div>
+            </div>
+
+            <div id="clienteSelecionado" style="display:none">
+              <div class="destino-box" id="destinoBox"></div>
+            </div>
+
+            <div id="formManual">
+              <div class="section-label" style="margin-top:8px">Ou preencha manualmente</div>
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">Nome do destinatário</label>
+                  <input type="text" id="inputDestNome" class="form-control" placeholder="Nome completo">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">CEP destino</label>
+                  <input type="text" id="inputDestCep" class="form-control" placeholder="00000-000"
+                    maxlength="9" oninput="Frete.mascaraCep(this)" onblur="Frete.buscarCepDest()">
+                </div>
+                <div class="form-group" style="flex:2">
+                  <label class="form-label">Rua</label>
+                  <input type="text" id="inputDestRua" class="form-control" placeholder="Rua, Av...">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Número</label>
+                  <input type="text" id="inputDestNumero" class="form-control" placeholder="123">
+                </div>
+                <div class="form-group" style="flex:2">
+                  <label class="form-label">Bairro</label>
+                  <input type="text" id="inputDestBairro" class="form-control">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex:2">
+                  <label class="form-label">Cidade</label>
+                  <input type="text" id="inputDestCidade" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Estado</label>
+                  <input type="text" id="inputDestEstado" class="form-control" maxlength="2" placeholder="PR">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PACOTE -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title">📦 Dimensões do Pacote</div>
+            <p class="text-muted fs-sm" style="margin-bottom:14px">Padrão calçados já preenchido. Ajuste se necessário.</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Peso (kg)</label>
+                <input type="number" id="inputPeso" class="form-control" value="1.0" step="0.1" min="0.1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Altura (cm)</label>
+                <input type="number" id="inputAltura" class="form-control" value="14" min="1">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Largura (cm)</label>
+                <input type="number" id="inputLargura" class="form-control" value="22" min="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Comprimento (cm)</label>
+                <input type="number" id="inputComprimento" class="form-control" value="32" min="1">
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:8px">
+              <label class="form-label">Valor declarado (R$) <span class="text-muted">(para seguro)</span></label>
+              <input type="number" id="inputValorDeclarado" class="form-control" placeholder="Ex: 150.00" step="0.01" min="0">
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="Frete.calcular()">
+              🔍 Calcular Frete
+            </button>
+          </div>
+
+          <!-- PRODUTOS DO PEDIDO -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title">👟 Produtos do Pedido <span class="text-muted fs-sm">(para nota)</span></div>
+            <div id="listaProdutosPedido"></div>
+            <div class="form-row" style="margin-top:10px;align-items:flex-end">
+              <div class="form-group" style="flex:3">
+                <label class="form-label">Produto</label>
+                <input type="text" id="inputProdNome" class="form-control" placeholder="Nome do produto">
+              </div>
+              <div class="form-group" style="flex:1">
+                <label class="form-label">Qtd</label>
+                <input type="number" id="inputProdQtd" class="form-control" value="1" min="1">
+              </div>
+              <div class="form-group" style="flex:1">
+                <label class="form-label">Valor (R$)</label>
+                <input type="number" id="inputProdValor" class="form-control" placeholder="0.00" step="0.01">
+              </div>
+              <div class="form-group" style="display:flex;align-items:flex-end">
+                <button class="btn btn-outline" onclick="Frete.adicionarProduto()">+</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ===== DIREITO — RESULTADO ===== -->
+        <div>
+          <div class="card" id="cardResultado" style="display:none">
+            <div class="card-title">🚚 Opções de Envio</div>
+            <div id="listaServicos"></div>
+
+            <div id="acoesFrete" style="display:none;margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="Frete.imprimirNota()">🖨️ Imprimir Nota de Envio</button>
+              <button class="btn btn-outline" onclick="Frete.abrirMelhorEnvio()">🔗 Abrir Melhor Envio</button>
+            </div>
+          </div>
+
+          <div class="card" id="cardVazio" style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+            <div style="font-size:48px;margin-bottom:12px">🚚</div>
+            <div style="font-weight:600;font-size:15px;margin-bottom:6px">Preencha o destino e calcule</div>
+            <div class="fs-sm">As opções de frete aparecem aqui</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== NOTA DE ENVIO (oculta, só para impressão) ===== -->
+  <div id="notaImpressao" style="display:none"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/frete.js"></script>
+</body>
+</html>

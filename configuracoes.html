@@ -42,6 +42,36 @@
         <div id="listaVendedores" style="margin-top:12px"></div>
       </div>
 
+      <!-- FRETE & ENVIO -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">🚚 Frete & Envio</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Configure o endereço de origem (sua loja) e o token do Melhor Envio para simular fretes.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">CEP da Loja</label>
+            <input type="text" id="inputCepLoja" class="form-control" placeholder="00000-000" maxlength="9"
+              oninput="let v=this.value.replace(/\D/g,'');if(v.length>5)v=v.substring(0,5)+'-'+v.substring(5,8);this.value=v">
+          </div>
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Endereço da Loja (para nota de envio)</label>
+            <input type="text" id="inputEnderecoLoja" class="form-control" placeholder="Ex: Rua das Flores, 123 — Centro — Curitiba/PR">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Token Melhor Envio</label>
+          <input type="text" id="inputMelhorEnvioToken" class="form-control" placeholder="Cole aqui o token gerado no Melhor Envio">
+          <span class="text-muted fs-sm">Gere em: melhorenvio.com.br → Meu Perfil → Tokens</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL do Servidor Weto</label>
+          <input type="text" id="inputWetoServerUrl" class="form-control" placeholder="https://weto-movepe-production.up.railway.app">
+        </div>
+        <button class="btn btn-primary" onclick="Config.salvarFrete()">💾 Salvar Configurações de Frete</button>
+        <div id="freteSalvoInfo" style="display:none;margin-top:8px;font-size:13px;color:var(--success);font-weight:600"></div>
+      </div>
+
       <!-- META DE VENDAS -->
       <div class="card" style="margin-top:20px">
         <div class="card-title">🎯 Meta de Vendas</div>
@@ -230,6 +260,7 @@
         Config.renderSenhaStatus();
         Config.atualizarStatusFirebase();
         Config.carregarTaxas();
+        Config.carregarFrete();
       },
 
       renderStats: () => {
@@ -367,6 +398,35 @@
           document.getElementById('metaSalvaInfo').style.display = '';
           document.getElementById('metaSalvaInfo').textContent = `Meta atual: ${Utils.moeda(meta)} / mês`;
         }
+      },
+
+      carregarFrete: () => {
+        const cep    = DB.Config.get('cepLoja', '');
+        const end    = DB.Config.get('enderecoLoja', '');
+        const token  = DB.Config.get('melhorEnvioToken', '');
+        const server = DB.Config.get('wetoServerUrl', '');
+        if (cep) {
+          const c = cep.replace(/\D/g, '');
+          document.getElementById('inputCepLoja').value = c.length === 8 ? c.substring(0,5)+'-'+c.substring(5) : c;
+        }
+        if (end) document.getElementById('inputEnderecoLoja').value = end;
+        if (token) document.getElementById('inputMelhorEnvioToken').value = token;
+        if (server) document.getElementById('inputWetoServerUrl').value = server;
+      },
+
+      salvarFrete: () => {
+        const cep     = document.getElementById('inputCepLoja').value.trim();
+        const end     = document.getElementById('inputEnderecoLoja').value.trim();
+        const token   = document.getElementById('inputMelhorEnvioToken').value.trim();
+        const server  = document.getElementById('inputWetoServerUrl').value.trim().replace(/\/$/, '');
+        if (cep) DB.Config.set('cepLoja', cep.replace(/\D/g, ''));
+        if (end) DB.Config.set('enderecoLoja', end);
+        if (token) DB.Config.set('melhorEnvioToken', token);
+        if (server) DB.Config.set('wetoServerUrl', server);
+        const info = document.getElementById('freteSalvoInfo');
+        info.style.display = '';
+        info.textContent = '✅ Configurações de frete salvas!';
+        Utils.toast('Configurações de frete salvas!', 'success');
       },
 
       salvarMeta: () => {
