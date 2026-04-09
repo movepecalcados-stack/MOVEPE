@@ -161,11 +161,11 @@ const Etiquetas = {
   // ---- RENDER PREVIEW ----
   renderPreview: () => {
     const wrap = document.getElementById('previewWrap');
+    const tamanho = document.getElementById('selTamanho').value;
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
 
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
-      wrap.innerHTML = `<div style="grid-column:span 2;color:var(--text-muted);text-align:center;padding:40px;background:#fff;border-radius:6px">
-        Selecione as variações para ver o preview</div>`;
+      wrap.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;width:100%">Selecione as variações para ver o preview</div>';
       document.getElementById('totalEtiquetas').textContent = '';
       return;
     }
@@ -173,57 +173,47 @@ const Etiquetas = {
     let totalEtiq = 0;
     const etiquetas = [];
 
-    const entradasOrdenadas = Object.entries(_varSelecionadas).sort(([a], [b]) => {
-      const [ta] = a.split('||'); const [tb] = b.split('||');
-      return (parseFloat(ta) || 0) - (parseFloat(tb) || 0);
-    });
-
-    entradasOrdenadas.forEach(([chave, qtd]) => {
+    Object.entries(_varSelecionadas).forEach(([chave, qtd]) => {
       const [tam, cor] = chave.split('||');
-      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam} - ${cor}` : `Tam ${tam}`;
+      const varLabel = cor && cor !== 'undefined' ? `Tam ${tam} · ${cor}` : `Tam ${tam}`;
       const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
+
       for (let i = 0; i < qtd; i++) {
         totalEtiq++;
-        const uid = `bc_${totalEtiq}_${Math.random().toString(36).substr(2,5)}`;
-        etiquetas.push({ uid, varLabel, codigo });
+        const uid = `bc_${totalEtiq}_${Date.now()}`;
+        etiquetas.push({ uid, tam, cor, varLabel, codigo, qtd });
       }
     });
 
     document.getElementById('totalEtiquetas').textContent = `${totalEtiq} etiqueta(s)`;
 
-    const nomeExibicao = _produtoAtivo.nome.length > 26
-      ? _produtoAtivo.nome.substring(0, 24) + '…'
-      : _produtoAtivo.nome;
-
     wrap.innerHTML = etiquetas.map(e => `
-      <div class="etiq">
-        <div class="etiq-topo">
-          <span class="etiq-loja">${nomeLoja}</span>
-          <span class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</span>
+      <div class="etiq sz-${tamanho}">
+        <div class="etiq-loja">${nomeLoja}</div>
+        <div class="etiq-nome">${_produtoAtivo.nome}</div>
+        <div class="etiq-var">${e.varLabel}</div>
+        <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
+        <div class="etiq-bc">
+          <svg id="${e.uid}"></svg>
         </div>
-        <div class="etiq-nome">${nomeExibicao}</div>
-        <div class="etiq-bc"><svg id="${e.uid}"></svg></div>
-        <div class="etiq-rodape">
-          <span class="etiq-var">${e.varLabel}</span>
-          <span class="etiq-bc-num">${e.codigo}</span>
-        </div>
+        <div class="etiq-bc-num">${e.codigo}</div>
       </div>`).join('');
+
+    // Gera os barcodes
+    const sz = { '40x25': 35, '50x30': 42, '60x40': 55, '80x40': 70 };
+    const w = sz[tamanho] || 55;
 
     etiquetas.forEach(e => {
       try {
         JsBarcode(`#${e.uid}`, e.codigo, {
           format: 'CODE128',
           width: 1.2,
-          height: 20,
+          height: w,
           displayValue: false,
           margin: 0,
         });
-        // Força o SVG a preencher a largura da etiqueta
-        const svg = document.getElementById(e.uid);
-        if (svg) { svg.removeAttribute('width'); svg.style.width = '100%'; svg.style.height = '20px'; }
       } catch(err) {
-        const el = document.getElementById(e.uid);
-        if (el) el.outerHTML = `<span style="font-size:7px;color:red">Código inválido</span>`;
+        document.getElementById(e.uid).outerHTML = `<span style="font-size:9px;color:red">Código inválido</span>`;
       }
     });
   },
@@ -234,82 +224,7 @@ const Etiquetas = {
       Utils.toast('Selecione um produto e as variações', 'error');
       return;
     }
-
-    // Serializa o SVG do barcode como string antes de passar para nova janela
-    const wrap = document.getElementById('previewWrap');
-    const etiquetas = wrap.querySelectorAll('.etiq');
-    let labelsHtml = '';
-    etiquetas.forEach(etiq => {
-      // Clona e força SVG a ter largura 100%
-      const clone = etiq.cloneNode(true);
-      const svg = clone.querySelector('svg');
-      if (svg) { svg.removeAttribute('width'); svg.setAttribute('width', '100%'); }
-      labelsHtml += clone.outerHTML;
-    });
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box;
-      -webkit-print-color-adjust:exact !important;
-      print-color-adjust:exact !important; }
-  @page {
-    size: 10.2cm 2.5cm;
-    margin: 0;
-  }
-  html, body { margin:0; padding:0; background:#fff; width:10.2cm; }
-  .preview-screen {
-    display: grid;
-    grid-template-columns: 5cm 5cm;
-    column-gap: 0.2cm;
-    row-gap: 0;
-    padding: 0;
-    margin: 0;
-    width: 10.2cm;
-  }
-  .etiq {
-    width: 5cm;
-    height: 2.5cm;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: space-between;
-    padding: 1mm 1.5mm;
-    background: #fff;
-    color: #000;
-    font-family: Arial, sans-serif;
-    overflow: hidden;
-    page-break-inside: avoid;
-  }
-  .etiq-topo  { display:flex; justify-content:space-between; align-items:center; }
-  .etiq-loja  { font-size:5.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:#444; }
-  .etiq-preco { font-size:9pt; font-weight:900; color:#000; }
-  .etiq-nome  { font-size:6.5pt; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .etiq-bc    { text-align:center; line-height:0; flex:1; display:flex; align-items:center; justify-content:center; }
-  .etiq-bc svg { display:block; width:100% !important; height:20px !important; }
-  .etiq-rodape { display:flex; justify-content:space-between; align-items:center; }
-  .etiq-var   { font-size:6pt; color:#333; }
-  .etiq-bc-num { font-size:5pt; color:#555; font-family:monospace; }
-</style>
-</head>
-<body>
-<div class="preview-screen">${labelsHtml}</div>
-<script>
-  window.onload = function() {
-    setTimeout(function() { window.print(); window.close(); }, 500);
-  };
-<\/script>
-</body>
-</html>`;
-
-    const win = window.open('', '_blank', 'width=500,height=300');
-    if (!win) { Utils.toast('Permita popups para este site', 'error'); return; }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    window.print();
   },
 
 };
