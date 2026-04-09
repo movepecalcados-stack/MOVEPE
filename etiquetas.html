@@ -7,7 +7,7 @@
   <title>Etiquetas — MOVE PÉ</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* ---- LAYOUT ---- */
+    /* ---- LAYOUT TELA ---- */
     .etiq-layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
     @media (max-width: 900px) { .etiq-layout { grid-template-columns: 1fr; } }
 
@@ -37,41 +37,81 @@
       padding: 2px 4px; font-size: 12px; text-align: center; background: var(--bg);
     }
 
-    /* ---- PREVIEW ETIQUETA ---- */
-    .preview-wrap { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; }
+    /* ---- PREVIEW NA TELA (escala visual ~2x para facilitar visualização) ---- */
+    .preview-screen {
+      display: grid;
+      grid-template-columns: repeat(2, 11cm);
+      padding: 4px 0 4px 4mm;
+      gap: 0;
+      background: #e8e8e8;
+      border-radius: 8px;
+      overflow: auto;
+    }
 
-    /* TAMANHOS DE ETIQUETA */
-    .etiq { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 6px; box-sizing: border-box; background: #fff; color: #000; font-family: Arial, sans-serif; page-break-inside: avoid; }
-    .etiq.sz-40x25 { width: 151px; height: 94px; }   /* 40mm x 25mm @96dpi */
-    .etiq.sz-50x30 { width: 189px; height: 113px; }  /* 50mm x 30mm */
-    .etiq.sz-60x40 { width: 227px; height: 151px; }  /* 60mm x 40mm */
-    .etiq.sz-80x40 { width: 302px; height: 151px; }  /* 80mm x 40mm */
-
-    .etiq-loja  { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; }
-    .etiq-nome  { font-size: 9px; font-weight: 700; text-align: center; line-height: 1.2; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .etiq-var   { font-size: 9px; color: #333; }
-    .etiq-preco { font-size: 14px; font-weight: 900; line-height: 1; }
-    .etiq-bc    { margin-top: 2px; }
-    .etiq-bc-num { font-size: 7px; color: #555; margin-top: 1px; font-family: monospace; }
-
-    /* Para etiqueta maior */
-    .etiq.sz-60x40 .etiq-loja  { font-size: 9px; }
-    .etiq.sz-60x40 .etiq-nome  { font-size: 11px; }
-    .etiq.sz-60x40 .etiq-var   { font-size: 10px; }
-    .etiq.sz-60x40 .etiq-preco { font-size: 18px; }
-    .etiq.sz-80x40 .etiq-loja  { font-size: 9px; }
-    .etiq.sz-80x40 .etiq-nome  { font-size: 11px; }
-    .etiq.sz-80x40 .etiq-var   { font-size: 10px; }
-    .etiq.sz-80x40 .etiq-preco { font-size: 18px; }
+    /* ETIQUETA — dimensões exatas Argox: 5,5cm x 2,5cm */
+    .etiq {
+      width: 5.5cm;
+      height: 2.5cm;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1mm 2mm;
+      background: #fff;
+      color: #000;
+      font-family: Arial, sans-serif;
+      border: 1px dashed #ccc; /* só na tela, removido na impressão */
+      page-break-inside: avoid;
+      overflow: hidden;
+    }
+    .etiq-loja  { font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #444; line-height: 1.1; }
+    .etiq-nome  { font-size: 7pt; font-weight: 700; text-align: center; line-height: 1.2; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .etiq-row   { display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
+    .etiq-var   { font-size: 6.5pt; color: #333; }
+    .etiq-preco { font-size: 10pt; font-weight: 900; }
+    .etiq-bc    { line-height: 0; margin: 0; }
+    .etiq-bc-num { font-size: 5.5pt; color: #555; font-family: monospace; margin-top: 0; letter-spacing: .03em; }
 
     /* ---- IMPRESSÃO ---- */
     @media print {
-      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body * { visibility: hidden; }
-      #areaImpressao, #areaImpressao * { visibility: visible; }
-      #areaImpressao { position: fixed; top: 0; left: 0; width: 100%; background: #fff; padding: 0; margin: 0; }
-      .etiq { border: none !important; }
-      .preview-wrap { gap: 0 !important; padding: 0 !important; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+      /* Esconde tudo exceto a área de impressão */
+      body > * { display: none !important; }
+      #areaImpressao { display: block !important; }
+
+      @page {
+        /* Papel contínuo da Argox — ajuste conforme o rolo */
+        size: auto;
+        margin: 0;
+      }
+
+      #areaImpressao {
+        position: absolute;
+        top: 0; left: 0;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Grid de impressão com medidas exatas do Tiny */
+      .preview-screen {
+        display: grid !important;
+        grid-template-columns: 5.5cm 5.5cm !important;
+        column-gap: 0.5cm !important; /* espaçamento 6cm - 5.5cm = 0.5cm */
+        row-gap: 0 !important;
+        padding: 0 0 0 0.2cm !important; /* margem esquerda 0.2cm */
+        background: transparent !important;
+        border-radius: 0 !important;
+        overflow: visible !important;
+      }
+
+      .etiq {
+        width: 5.5cm !important;
+        height: 2.5cm !important;
+        border: none !important;
+        page-break-inside: avoid !important;
+      }
     }
   </style>
 </head>
@@ -81,6 +121,7 @@
     <div class="topbar">
       <div class="topbar-title">🏷️ Etiquetas com Código de Barras</div>
       <div class="topbar-info">
+        <span class="text-muted fs-sm" style="margin-right:8px">Argox · 5,5×2,5cm · 2 colunas</span>
         <button class="btn btn-primary" onclick="Etiquetas.imprimir()">🖨️ Imprimir Etiquetas</button>
       </div>
     </div>
@@ -88,29 +129,17 @@
     <div class="content">
       <div class="etiq-layout">
 
-        <!-- ESQUERDO: configuração -->
+        <!-- ESQUERDO: seleção -->
         <div>
-          <!-- Tamanho e opções -->
           <div class="card">
-            <div class="card-title">⚙️ Configurações</div>
+            <div class="card-title">🔍 Buscar Produto</div>
             <div class="form-group">
-              <label class="form-label">Tamanho da etiqueta (Argox)</label>
-              <select class="form-control" id="selTamanho" onchange="Etiquetas.renderPreview()">
-                <option value="40x25">40 × 25 mm — pequena</option>
-                <option value="50x30">50 × 30 mm</option>
-                <option value="60x40" selected>60 × 40 mm — recomendada</option>
-                <option value="80x40">80 × 40 mm — grande</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Buscar produto</label>
-              <input type="text" id="inputBuscaProd" class="form-control" placeholder="Nome, SKU ou código..."
+              <input type="text" id="inputBuscaProd" class="form-control" placeholder="Nome, marca, SKU ou código..."
                 oninput="Etiquetas.filtrar(this.value)">
             </div>
           </div>
 
-          <!-- Lista de produtos -->
-          <div class="card" style="padding:0;overflow:hidden;margin-top:16px;max-height:460px;overflow-y:auto">
+          <div class="card" style="padding:0;overflow:hidden;margin-top:16px;max-height:500px;overflow-y:auto">
             <div id="listaProdutos"></div>
           </div>
         </div>
@@ -118,8 +147,8 @@
         <!-- DIREITO: variações + preview -->
         <div>
           <div class="card" id="cardVariacoes" style="display:none">
-            <div class="card-title" id="varTitulo">Selecione as variações</div>
-            <p class="text-muted fs-sm">Marque os tamanhos/cores e defina a quantidade de etiquetas.</p>
+            <div class="card-title" id="varTitulo">Variações</div>
+            <p class="text-muted fs-sm">Marque os tamanhos/cores que quer imprimir e a quantidade de cada.</p>
 
             <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
               <button class="btn btn-outline btn-sm" onclick="Etiquetas.selecionarTodos()">✅ Todos</button>
@@ -130,28 +159,33 @@
             <div class="var-grid" id="varGrid"></div>
 
             <div class="form-group" style="margin-top:8px">
-              <label class="form-label">Qtd padrão por etiqueta</label>
+              <label class="form-label">Qtd padrão por variação</label>
               <div style="display:flex;gap:8px;align-items:center">
-                <input type="number" id="inputQtdPadrao" class="form-control" value="1" min="1" max="100"
+                <input type="number" id="inputQtdPadrao" class="form-control" value="1" min="1" max="999"
                   style="max-width:80px" onchange="Etiquetas.aplicarQtdPadrao()">
                 <button class="btn btn-outline btn-sm" onclick="Etiquetas.aplicarQtdPadrao()">Aplicar a todos</button>
               </div>
             </div>
           </div>
 
-          <!-- Preview -->
-          <div class="card" style="margin-top:16px;padding:12px">
+          <!-- Preview + área de impressão -->
+          <div class="card" style="margin-top:16px;padding:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
               <div class="card-title" style="margin:0">👁️ Preview</div>
               <span id="totalEtiquetas" class="text-muted fs-sm"></span>
             </div>
+
             <div id="areaImpressao">
-              <div class="preview-wrap" id="previewWrap">
-                <div style="color:var(--text-muted);text-align:center;padding:40px;width:100%">
+              <div class="preview-screen" id="previewWrap">
+                <div style="grid-column:span 2;color:var(--text-muted);text-align:center;padding:40px;background:#fff;border-radius:6px">
                   Selecione um produto e as variações para ver o preview
                 </div>
               </div>
             </div>
+
+            <p class="text-muted fs-sm" style="margin-top:10px">
+              💡 Na janela de impressão: selecione a <strong>Argox</strong>, desative "Cabeçalhos e rodapés" e defina escala <strong>100%</strong>.
+            </p>
           </div>
         </div>
 

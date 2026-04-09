@@ -159,13 +159,14 @@ const Etiquetas = {
   },
 
   // ---- RENDER PREVIEW ----
+  // Etiqueta fixa: 5,5cm x 2,5cm | 2 colunas | gap 0,5cm | margem esq 0,2cm (igual Tiny/Argox)
   renderPreview: () => {
     const wrap = document.getElementById('previewWrap');
-    const tamanho = document.getElementById('selTamanho').value;
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
 
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
-      wrap.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:40px;width:100%">Selecione as variações para ver o preview</div>';
+      wrap.innerHTML = `<div style="grid-column:span 2;color:var(--text-muted);text-align:center;padding:40px;background:#fff;border-radius:6px">
+        Selecione as variações para ver o preview</div>`;
       document.getElementById('totalEtiquetas').textContent = '';
       return;
     }
@@ -173,47 +174,56 @@ const Etiquetas = {
     let totalEtiq = 0;
     const etiquetas = [];
 
-    Object.entries(_varSelecionadas).forEach(([chave, qtd]) => {
+    // Ordena por tamanho numérico
+    const entradasOrdenadas = Object.entries(_varSelecionadas).sort(([a], [b]) => {
+      const [ta] = a.split('||'); const [tb] = b.split('||');
+      return (parseFloat(ta) || 0) - (parseFloat(tb) || 0);
+    });
+
+    entradasOrdenadas.forEach(([chave, qtd]) => {
       const [tam, cor] = chave.split('||');
-      const varLabel = cor && cor !== 'undefined' ? `Tam ${tam} · ${cor}` : `Tam ${tam}`;
+      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam}  ${cor}` : `Tam ${tam}`;
       const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
 
       for (let i = 0; i < qtd; i++) {
         totalEtiq++;
-        const uid = `bc_${totalEtiq}_${Date.now()}`;
-        etiquetas.push({ uid, tam, cor, varLabel, codigo, qtd });
+        const uid = `bc_${totalEtiq}_${Math.random().toString(36).substr(2,5)}`;
+        etiquetas.push({ uid, tam, cor, varLabel, codigo });
       }
     });
 
     document.getElementById('totalEtiquetas').textContent = `${totalEtiq} etiqueta(s)`;
 
+    // Trunca nome do produto para caber na etiqueta (5,5cm)
+    const nomeExibicao = _produtoAtivo.nome.length > 28
+      ? _produtoAtivo.nome.substring(0, 26) + '…'
+      : _produtoAtivo.nome;
+
     wrap.innerHTML = etiquetas.map(e => `
-      <div class="etiq sz-${tamanho}">
+      <div class="etiq">
         <div class="etiq-loja">${nomeLoja}</div>
-        <div class="etiq-nome">${_produtoAtivo.nome}</div>
-        <div class="etiq-var">${e.varLabel}</div>
-        <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
-        <div class="etiq-bc">
-          <svg id="${e.uid}"></svg>
+        <div class="etiq-nome">${nomeExibicao}</div>
+        <div class="etiq-row">
+          <div class="etiq-var">${e.varLabel}</div>
+          <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
         </div>
+        <div class="etiq-bc"><svg id="${e.uid}"></svg></div>
         <div class="etiq-bc-num">${e.codigo}</div>
       </div>`).join('');
 
-    // Gera os barcodes
-    const sz = { '40x25': 35, '50x30': 42, '60x40': 55, '80x40': 70 };
-    const w = sz[tamanho] || 55;
-
+    // Barcode: altura 22px cabe bem em 2,5cm com todo o conteúdo
     etiquetas.forEach(e => {
       try {
         JsBarcode(`#${e.uid}`, e.codigo, {
           format: 'CODE128',
-          width: 1.2,
-          height: w,
+          width: 1,
+          height: 22,
           displayValue: false,
           margin: 0,
         });
       } catch(err) {
-        document.getElementById(e.uid).outerHTML = `<span style="font-size:9px;color:red">Código inválido</span>`;
+        const el = document.getElementById(e.uid);
+        if (el) el.outerHTML = `<span style="font-size:7px;color:red">Código inválido</span>`;
       }
     });
   },
