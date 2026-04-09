@@ -273,25 +273,45 @@ const Etiquetas = {
 <html><head><meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box;
-      -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-  @page { size: ${d.w}mm ${d.h}mm; margin: 0; }
-  html, body { width:${d.w}mm; margin:0; padding:0; background:#fff; }
-  .etiq {
-    width: ${d.w}mm;
-    height: ${d.h}mm;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-evenly;
-    padding: 1mm 1.5mm;
-    font-family: Arial, sans-serif;
-    color: #000;
-    background: #fff;
-    overflow: hidden;
-    page-break-after: always;
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, sans-serif; background: #f0f0f0; }
+
+  /* Barra do topo — só na tela, some na impressão */
+  #barra {
+    background: #4f46e5; color: #fff;
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
   }
-  .etiq:last-child { page-break-after: auto; }
+  #barra span { font-size: 14px; }
+  #btnImprimir {
+    background: #fff; color: #4f46e5;
+    border: none; border-radius: 6px;
+    padding: 8px 20px; font-size: 14px; font-weight: 700;
+    cursor: pointer;
+  }
+  #btnImprimir:hover { background: #e0e0ff; }
+  #btnFechar {
+    background: transparent; color: #fff;
+    border: 1px solid rgba(255,255,255,.5); border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+  }
+
+  /* Área de preview na tela */
+  #preview {
+    padding: 20px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+
+  /* Etiqueta — visual na tela */
+  .etiq {
+    width: ${d.w}mm; height: ${d.h}mm;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-evenly;
+    padding: 1mm 1.5mm;
+    font-family: Arial, sans-serif; color: #000; background: #fff;
+    border: 1px dashed #999; overflow: hidden; box-sizing: border-box;
+  }
   .etiq-loja  { font-size:${d.fs.loja}pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#555; }
   .etiq-nome  { font-size:${d.fs.nome}pt; font-weight:700; text-align:center; width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .etiq-var   { font-size:${d.fs.var}pt; color:#333; }
@@ -299,9 +319,30 @@ const Etiquetas = {
   .etiq-bc    { width:100%; text-align:center; line-height:0; }
   .etiq-bc svg { display:block; margin:0 auto; max-width:100%; }
   .etiq-bc-num { font-size:5pt; color:#555; font-family:monospace; }
+
+  /* Na impressão: esconde barra, remove fundo e borda */
+  @media print {
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    @page { size: ${d.w}mm ${d.h}mm; margin: 0; }
+    #barra { display: none !important; }
+    body { background: #fff; }
+    #preview { padding: 0; gap: 0; }
+    .etiq { border: none !important; page-break-after: always; }
+    .etiq:last-child { page-break-after: auto; }
+  }
 </style>
-</head><body>
+</head>
+<body>
+<div id="barra">
+  <span>🏷️ Preview — ${etiquetas.length} etiqueta(s) · ${d.w}×${d.h}mm</span>
+  <div style="display:flex;gap:8px">
+    <button id="btnFechar" onclick="window.close()">✕ Fechar</button>
+    <button id="btnImprimir" onclick="window.print()">🖨️ Imprimir</button>
+  </div>
+</div>
+<div id="preview">
 ${labelsHtml}
+</div>
 <script>
   window.onload = function() {
     var uids = ${JSON.stringify(etiquetas.map(e => e.uid))};
@@ -314,7 +355,6 @@ ${labelsHtml}
         });
       } catch(e) {}
     });
-    setTimeout(function() { window.print(); window.close(); }, 600);
   };
 <\/script>
 </body></html>`;
