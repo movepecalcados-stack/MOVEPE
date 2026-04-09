@@ -183,6 +183,21 @@ const CrediarioModule = {
       const quitado = pendentes.length === 0;
       const temAtrasado = cred.parcelas.some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
 
+      // Total em aberto (com juros nas atrasadas)
+      let totalEmAberto = 0;
+      let totalJuros = 0;
+      pendentes.forEach(p => {
+        const valor = parseFloat(p.valor) || 0;
+        const st = Utils.statusParcela(p.vencimento, p.status);
+        if (st === 'atrasado') {
+          const { juros } = calcularJuros(p.vencimento, valor);
+          totalEmAberto += valor + juros;
+          totalJuros += juros;
+        } else {
+          totalEmAberto += valor;
+        }
+      });
+
       const parcelasHtml = cred.parcelas.map((p, idx) => {
         const st = Utils.statusParcela(p.vencimento, p.status);
         const stLabel = { pago: '✅ Pago', atrasado: '🔴 Atrasado', pendente: '⏳ Pendente' }[st] || st;
@@ -215,8 +230,14 @@ const CrediarioModule = {
                 ${Utils.data(cred.criadoEm)} · ${cred.parcelas.length} parcela(s)
               </div>
             </div>
-            <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-              <div class="crediario-total">${Utils.moeda(cred.total)}</div>
+            <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+              <div style="font-size:11px;color:var(--text-muted)">Total da compra: ${Utils.moeda(cred.total)}</div>
+              ${!quitado ? `
+                <div style="font-size:16px;font-weight:800;color:${temAtrasado ? 'var(--danger)' : 'var(--text)'}">
+                  Em aberto: ${Utils.moeda(totalEmAberto)}
+                </div>
+                ${totalJuros > 0 ? `<div style="font-size:11px;color:var(--danger)">⚠️ inclui ${Utils.moeda(totalJuros)} de juros</div>` : ''}
+              ` : `<div style="font-size:15px;font-weight:700;color:var(--success)">✅ Quitado</div>`}
               <div style="display:flex;gap:6px;align-items:center">
                 <span class="badge ${quitado ? 'badge-success' : temAtrasado ? 'badge-danger' : 'badge-warning'}">
                   ${quitado ? 'Quitado' : temAtrasado ? 'Com atraso' : pendentes.length + ' pendente(s)'}
