@@ -77,30 +77,31 @@
     @media print {
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-      /* Esconde tudo exceto a área de impressão */
-      body > * { display: none !important; }
-      #areaImpressao { display: block !important; }
-
       @page {
-        /* Papel contínuo da Argox — ajuste conforme o rolo */
         size: auto;
         margin: 0;
       }
 
+      /* Técnica visibility: esconde tudo, mostra só a área de impressão */
+      body * { visibility: hidden !important; }
+      #areaImpressao,
+      #areaImpressao * { visibility: visible !important; }
+
       #areaImpressao {
-        position: absolute;
-        top: 0; left: 0;
-        margin: 0;
-        padding: 0;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
 
       /* Grid de impressão com medidas exatas do Tiny */
       .preview-screen {
         display: grid !important;
         grid-template-columns: 5.5cm 5.5cm !important;
-        column-gap: 0.5cm !important; /* espaçamento 6cm - 5.5cm = 0.5cm */
+        column-gap: 0.5cm !important;
         row-gap: 0 !important;
-        padding: 0 0 0 0.2cm !important; /* margem esquerda 0.2cm */
+        padding: 0 0 0 0.2cm !important;
         background: transparent !important;
         border-radius: 0 !important;
         overflow: visible !important;
