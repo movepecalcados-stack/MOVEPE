@@ -72,8 +72,124 @@ const PDV = {
     // Atalhos de teclado
     document.addEventListener('keydown', PDV.atalhos);
 
+    // ---- SCANNER DE CÓDIGO DE BARRAS ----
+    PDV.initScanner();
+
     // Aviso de estoque crítico ao abrir o PDV (após o toast de aniversário sumir)
     setTimeout(PDV.verificarEstoqueCritico, 4000);
+  },
+
+  // ---- SCANNER DE CÓDIGO DE BARRAS ----
+  // Scanners digitam muito rápido (<50ms entre teclas) e terminam com Enter
+  initScanner: () => {
+    let buffer = '';
+    let ultimaTecla = 0;
+
+    document.addEventListener('keydown', (e) => {
+      // Ignora se estiver digitando em modal aberto ou campo de texto (exceto buscaInput)
+      const tag = e.target.tagName;
+      const emModal = document.querySelector('.modal-overlay[style*="flex"]');
+      if (emModal) return;
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (tag === 'INPUT' && e.target.id !== 'buscaInput') return;
+
+      const agora = Date.now();
+      const intervalo = agora - ultimaTecla;
+      ultimaTecla = agora;
+
+      if (e.key === 'Enter' && buffer.length >= 4) {
+        // Possível leitura de scanner — tenta encontrar produto
+        const codigo = buffer.trim();
+        buffer = '';
+        document.getElementById('scannerIndicator').style.display = 'none';
+        PDV.processarCodigoBarras(codigo);
+        e.preventDefault();
+        return;
+      }
+
+      // Tecla normal — acumula se vier rápido (< 80ms) = scanner
+      if (e.key.length === 1) {
+        if (intervalo < 80 || buffer.length > 0) {
+          buffer += e.key;
+          document.getElementById('scannerIndicator').style.display = 'inline';
+          // Limpa buffer se parar de digitar por 300ms
+          clearTimeout(PDV._scannerTimeout);
+          PDV._scannerTimeout = setTimeout(() => {
+            // Se parou e não veio Enter, era digitação manual
+            if (buffer.length < 8) buffer = '';
+            document.getElementById('scannerIndicator').style.display = 'none';
+          }, 300);
+        }
+      }
+    });
+  },
+
+  _scannerTimeout: null,
+
+  processarCodigoBarras: (codigo) => {
+    if (!codigo) return;
+
+    // Busca produto pelo codigoBarras ou pelo código gerado de variação
+    const produtos = DB.Produtos.listarAtivos();
+    let produtoEncontrado = null;
+    let variacaoEncontrada = null;
+
+    // 1. Tenta match exato no campo codigoBarras do produto
+    produtoEncontrado = produtos.find(p => p.codigoBarras === codigo);
+
+    // 2. Se não achou, busca pelo código gerado (idCurto + tamanho)
+    if (!produtoEncontrado) {
+      for (const p of produtos) {
+        for (const chave of Object.keys(p.variacoes || {})) {
+          const codGerado = (() => {
+            const [tam] = chave.split('||');
+            if (p.codigoBarras) return (p.codigoBarras + tam).replace(/[^A-Za-z0-9]/g, '').substring(0, 20);
+            const idCurto = p.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 8);
+            return (idCurto + tam.replace(/\D/g, '')).substring(0, 20);
+          })();
+          if (codGerado === codigo) {
+            produtoEncontrado = p;
+            variacaoEncontrada = chave;
+            break;
+          }
+        }
+        if (produtoEncontrado) break;
+      }
+    }
+
+    if (!produtoEncontrado) {
+      Utils.toast(`Código "${codigo}" não encontrado`, 'error');
+      return;
+    }
+
+    // Se encontrou variação específica, adiciona direto
+    if (variacaoEncontrada) {
+      const [tam, cor] = variacaoEncontrada.split('||');
+      const chave = variacaoEncontrada;
+      const estoque = (produtoEncontrado.variacoes || {})[chave] || 0;
+      if (estoque <= 0) {
+        Utils.toast(`${produtoEncontrado.nome} Tam.${tam} — sem estoque!`, 'error');
+        return;
+      }
+      // Adiciona ao carrinho
+      _tamSelecionado[produtoEncontrado.id] = chave;
+      PDV.adicionarAoCarrinho(produtoEncontrado.id);
+      Utils.toast(`✅ ${produtoEncontrado.nome} Tam.${tam}${cor && cor !== 'undefined' ? ' ' + cor : ''} adicionado`, 'success');
+      return;
+    }
+
+    // Achou produto mas não variação — seleciona na grade
+    const vars = Object.keys(produtoEncontrado.variacoes || {});
+    if (vars.length === 1) {
+      _tamSelecionado[produtoEncontrado.id] = vars[0];
+      PDV.adicionarAoCarrinho(produtoEncontrado.id);
+      Utils.toast(`✅ ${produtoEncontrado.nome} adicionado`, 'success');
+    } else {
+      // Mostra o produto em destaque para selecionar tamanho
+      document.getElementById('buscaInput').value = produtoEncontrado.nome;
+      PDV.renderProdutos(produtoEncontrado.nome);
+      Utils.toast(`📦 ${produtoEncontrado.nome} — selecione o tamanho`, 'warning');
+    }
   },
 
   verificarEstoqueCritico: () => {

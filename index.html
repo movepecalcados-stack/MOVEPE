@@ -30,7 +30,10 @@
         <!-- PRODUTOS -->
         <div class="pdv-produtos">
           <div class="pdv-busca">
-            <input type="text" id="buscaInput" class="form-control" placeholder="🔍 Buscar produto por nome, marca, SKU... (F2)">
+            <div style="position:relative">
+              <input type="text" id="buscaInput" class="form-control" placeholder="🔍 Buscar produto por nome, marca, SKU... (F2)">
+              <span id="scannerIndicator" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--success);font-weight:600">📡 Scanner</span>
+            </div>
           </div>
           <div class="pdv-grid" id="produtosGrid">
             <div class="loading"><div class="spinner"></div> Carregando...</div>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Etiquetas — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* ---- LAYOUT ---- */
+    .etiq-layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .etiq-layout { grid-template-columns: 1fr; } }
+
+    /* ---- LISTA DE PRODUTOS ---- */
+    .prod-etiq-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background .1s;
+    }
+    .prod-etiq-item:hover { background: var(--input-bg); }
+    .prod-etiq-item.ativo { background: rgba(99,102,241,.08); border-left: 3px solid var(--primary); }
+    .prod-etiq-foto { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; background: var(--input-bg); }
+    .prod-etiq-nome { font-weight: 600; font-size: 14px; }
+    .prod-etiq-sub  { font-size: 12px; color: var(--text-muted); }
+
+    /* ---- VARIAÇÕES ---- */
+    .var-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .var-chip-etiq {
+      display: flex; align-items: center; gap: 6px;
+      border: 2px solid var(--border); border-radius: 8px;
+      padding: 6px 12px; cursor: pointer; font-size: 13px;
+      transition: all .15s; background: var(--card-bg);
+    }
+    .var-chip-etiq.sel { border-color: var(--primary); background: rgba(99,102,241,.1); }
+    .var-chip-etiq input[type=number] {
+      width: 44px; border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 4px; font-size: 12px; text-align: center; background: var(--bg);
+    }
+
+    /* ---- PREVIEW ETIQUETA ---- */
+    .preview-wrap { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; }
+
+    /* TAMANHOS DE ETIQUETA */
+    .etiq { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 6px; box-sizing: border-box; background: #fff; color: #000; font-family: Arial, sans-serif; page-break-inside: avoid; }
+    .etiq.sz-40x25 { width: 151px; height: 94px; }   /* 40mm x 25mm @96dpi */
+    .etiq.sz-50x30 { width: 189px; height: 113px; }  /* 50mm x 30mm */
+    .etiq.sz-60x40 { width: 227px; height: 151px; }  /* 60mm x 40mm */
+    .etiq.sz-80x40 { width: 302px; height: 151px; }  /* 80mm x 40mm */
+
+    .etiq-loja  { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #555; }
+    .etiq-nome  { font-size: 9px; font-weight: 700; text-align: center; line-height: 1.2; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .etiq-var   { font-size: 9px; color: #333; }
+    .etiq-preco { font-size: 14px; font-weight: 900; line-height: 1; }
+    .etiq-bc    { margin-top: 2px; }
+    .etiq-bc-num { font-size: 7px; color: #555; margin-top: 1px; font-family: monospace; }
+
+    /* Para etiqueta maior */
+    .etiq.sz-60x40 .etiq-loja  { font-size: 9px; }
+    .etiq.sz-60x40 .etiq-nome  { font-size: 11px; }
+    .etiq.sz-60x40 .etiq-var   { font-size: 10px; }
+    .etiq.sz-60x40 .etiq-preco { font-size: 18px; }
+    .etiq.sz-80x40 .etiq-loja  { font-size: 9px; }
+    .etiq.sz-80x40 .etiq-nome  { font-size: 11px; }
+    .etiq.sz-80x40 .etiq-var   { font-size: 10px; }
+    .etiq.sz-80x40 .etiq-preco { font-size: 18px; }
+
+    /* ---- IMPRESSÃO ---- */
+    @media print {
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden; }
+      #areaImpressao, #areaImpressao * { visibility: visible; }
+      #areaImpressao { position: fixed; top: 0; left: 0; width: 100%; background: #fff; padding: 0; margin: 0; }
+      .etiq { border: none !important; }
+      .preview-wrap { gap: 0 !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">🏷️ Etiquetas com Código de Barras</div>
+      <div class="topbar-info">
+        <button class="btn btn-primary" onclick="Etiquetas.imprimir()">🖨️ Imprimir Etiquetas</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="etiq-layout">
+
+        <!-- ESQUERDO: configuração -->
+        <div>
+          <!-- Tamanho e opções -->
+          <div class="card">
+            <div class="card-title">⚙️ Configurações</div>
+            <div class="form-group">
+              <label class="form-label">Tamanho da etiqueta (Argox)</label>
+              <select class="form-control" id="selTamanho" onchange="Etiquetas.renderPreview()">
+                <option value="40x25">40 × 25 mm — pequena</option>
+                <option value="50x30">50 × 30 mm</option>
+                <option value="60x40" selected>60 × 40 mm — recomendada</option>
+                <option value="80x40">80 × 40 mm — grande</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Buscar produto</label>
+              <input type="text" id="inputBuscaProd" class="form-control" placeholder="Nome, SKU ou código..."
+                oninput="Etiquetas.filtrar(this.value)">
+            </div>
+          </div>
+
+          <!-- Lista de produtos -->
+          <div class="card" style="padding:0;overflow:hidden;margin-top:16px;max-height:460px;overflow-y:auto">
+            <div id="listaProdutos"></div>
+          </div>
+        </div>
+
+        <!-- DIREITO: variações + preview -->
+        <div>
+          <div class="card" id="cardVariacoes" style="display:none">
+            <div class="card-title" id="varTitulo">Selecione as variações</div>
+            <p class="text-muted fs-sm">Marque os tamanhos/cores e defina a quantidade de etiquetas.</p>
+
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="Etiquetas.selecionarTodos()">✅ Todos</button>
+              <button class="btn btn-outline btn-sm" onclick="Etiquetas.limparTodos()">☐ Nenhum</button>
+              <button class="btn btn-outline btn-sm" onclick="Etiquetas.selecionarComEstoque()">📦 Com estoque</button>
+            </div>
+
+            <div class="var-grid" id="varGrid"></div>
+
+            <div class="form-group" style="margin-top:8px">
+              <label class="form-label">Qtd padrão por etiqueta</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" id="inputQtdPadrao" class="form-control" value="1" min="1" max="100"
+                  style="max-width:80px" onchange="Etiquetas.aplicarQtdPadrao()">
+                <button class="btn btn-outline btn-sm" onclick="Etiquetas.aplicarQtdPadrao()">Aplicar a todos</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="card" style="margin-top:16px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div class="card-title" style="margin:0">👁️ Preview</div>
+              <span id="totalEtiquetas" class="text-muted fs-sm"></span>
+            </div>
+            <div id="areaImpressao">
+              <div class="preview-wrap" id="previewWrap">
+                <div style="color:var(--text-muted);text-align:center;padding:40px;width:100%">
+                  Selecione um produto e as variações para ver o preview
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/etiquetas.js"></script>
+</body>
+</html>

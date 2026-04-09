@@ -161,6 +161,7 @@ const Utils = {
       ['financeiro.html', '💵', 'Financeiro'],
       ['relatorios.html', '📊', 'Relatórios'],
       ['whatsapp.html', '💬', 'WhatsApp Auto'],
+      ['etiquetas.html', '🏷️', 'Etiquetas'],
       ['frete.html', '🚚', 'Frete & Envio'],
       ['importar.html', '📥', 'Importar'],
       ['configuracoes.html', '⚙️', 'Configurações'],
