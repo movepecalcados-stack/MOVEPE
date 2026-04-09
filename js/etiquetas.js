@@ -280,9 +280,9 @@ const Etiquetas = {
 
       // Barcode (imagem do canvas)
       if (canvas.width > 0) {
-        const bcW = d.w - 4;
+        const bcW = d.w - 2;
         const bcH = 9;
-        const bcX = x + (d.w - bcW) / 2;
+        const bcX = x + 1;
         const bcY = y + 10;
         doc.addImage(canvas.toDataURL('image/png'), 'PNG', bcX, bcY, bcW, bcH);
       }
