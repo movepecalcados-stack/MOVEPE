@@ -42,7 +42,8 @@
 
     /* TAMANHOS DE ETIQUETA */
     .etiq { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 6px; box-sizing: border-box; background: #fff; color: #000; font-family: Arial, sans-serif; page-break-inside: avoid; }
-    .etiq.sz-40x25 { width: 151px; height: 94px; }   /* 40mm x 25mm @96dpi */
+    .etiq.sz-50x25 { width: 189px; height: 94px; }   /* 50mm x 25mm — Argox OS-214 */
+    .etiq.sz-40x25 { width: 151px; height: 94px; }   /* 40mm x 25mm */
     .etiq.sz-50x30 { width: 189px; height: 113px; }  /* 50mm x 30mm */
     .etiq.sz-60x40 { width: 227px; height: 151px; }  /* 60mm x 40mm */
     .etiq.sz-80x40 { width: 302px; height: 151px; }  /* 80mm x 40mm */
@@ -96,10 +97,11 @@
             <div class="form-group">
               <label class="form-label">Tamanho da etiqueta (Argox)</label>
               <select class="form-control" id="selTamanho" onchange="Etiquetas.renderPreview()">
-                <option value="40x25">40 × 25 mm — pequena</option>
+                <option value="50x25" selected>50 × 25 mm — Argox OS-214 (sua impressora)</option>
+                <option value="40x25">40 × 25 mm</option>
                 <option value="50x30">50 × 30 mm</option>
-                <option value="60x40" selected>60 × 40 mm — recomendada</option>
-                <option value="80x40">80 × 40 mm — grande</option>
+                <option value="60x40">60 × 40 mm</option>
+                <option value="80x40">80 × 40 mm</option>
               </select>
             </div>
             <div class="form-group">

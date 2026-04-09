@@ -228,7 +228,8 @@ const Etiquetas = {
 
     const tamanho = document.getElementById('selTamanho').value;
     const dims = {
-      '40x25': { w: 40, h: 25, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '50x25': { w: 50, h: 25, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '40x25': { w: 40, h: 25, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
       '50x30': { w: 50, h: 30, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
       '60x40': { w: 60, h: 40, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
       '80x40': { w: 80, h: 40, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
