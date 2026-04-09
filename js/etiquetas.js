@@ -159,7 +159,6 @@ const Etiquetas = {
   },
 
   // ---- RENDER PREVIEW ----
-  // Etiqueta fixa: 5,5cm x 2,5cm | 2 colunas | gap 0,5cm | margem esq 0,2cm (igual Tiny/Argox)
   renderPreview: () => {
     const wrap = document.getElementById('previewWrap');
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
@@ -174,7 +173,6 @@ const Etiquetas = {
     let totalEtiq = 0;
     const etiquetas = [];
 
-    // Ordena por tamanho numérico
     const entradasOrdenadas = Object.entries(_varSelecionadas).sort(([a], [b]) => {
       const [ta] = a.split('||'); const [tb] = b.split('||');
       return (parseFloat(ta) || 0) - (parseFloat(tb) || 0);
@@ -182,45 +180,47 @@ const Etiquetas = {
 
     entradasOrdenadas.forEach(([chave, qtd]) => {
       const [tam, cor] = chave.split('||');
-      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam}  ${cor}` : `Tam ${tam}`;
+      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam} - ${cor}` : `Tam ${tam}`;
       const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
-
       for (let i = 0; i < qtd; i++) {
         totalEtiq++;
         const uid = `bc_${totalEtiq}_${Math.random().toString(36).substr(2,5)}`;
-        etiquetas.push({ uid, tam, cor, varLabel, codigo });
+        etiquetas.push({ uid, varLabel, codigo });
       }
     });
 
     document.getElementById('totalEtiquetas').textContent = `${totalEtiq} etiqueta(s)`;
 
-    // Trunca nome do produto para caber na etiqueta (5,5cm)
-    const nomeExibicao = _produtoAtivo.nome.length > 28
-      ? _produtoAtivo.nome.substring(0, 26) + '…'
+    const nomeExibicao = _produtoAtivo.nome.length > 26
+      ? _produtoAtivo.nome.substring(0, 24) + '…'
       : _produtoAtivo.nome;
 
     wrap.innerHTML = etiquetas.map(e => `
       <div class="etiq">
-        <div class="etiq-loja">${nomeLoja}</div>
-        <div class="etiq-nome">${nomeExibicao}</div>
-        <div class="etiq-row">
-          <div class="etiq-var">${e.varLabel}</div>
-          <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
+        <div class="etiq-topo">
+          <span class="etiq-loja">${nomeLoja}</span>
+          <span class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</span>
         </div>
+        <div class="etiq-nome">${nomeExibicao}</div>
         <div class="etiq-bc"><svg id="${e.uid}"></svg></div>
-        <div class="etiq-bc-num">${e.codigo}</div>
+        <div class="etiq-rodape">
+          <span class="etiq-var">${e.varLabel}</span>
+          <span class="etiq-bc-num">${e.codigo}</span>
+        </div>
       </div>`).join('');
 
-    // Barcode: altura 22px cabe bem em 2,5cm com todo o conteúdo
     etiquetas.forEach(e => {
       try {
         JsBarcode(`#${e.uid}`, e.codigo, {
           format: 'CODE128',
-          width: 1,
-          height: 22,
+          width: 1.2,
+          height: 20,
           displayValue: false,
           margin: 0,
         });
+        // Força o SVG a preencher a largura da etiqueta
+        const svg = document.getElementById(e.uid);
+        if (svg) { svg.removeAttribute('width'); svg.style.width = '100%'; svg.style.height = '20px'; }
       } catch(err) {
         const el = document.getElementById(e.uid);
         if (el) el.outerHTML = `<span style="font-size:7px;color:red">Código inválido</span>`;
@@ -229,14 +229,23 @@ const Etiquetas = {
   },
 
   // ---- IMPRIMIR ----
-  // Abre janela limpa só com as etiquetas para evitar desalinhamento
   imprimir: () => {
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
       Utils.toast('Selecione um produto e as variações', 'error');
       return;
     }
 
-    const labelsHtml = document.getElementById('previewWrap').innerHTML;
+    // Serializa o SVG do barcode como string antes de passar para nova janela
+    const wrap = document.getElementById('previewWrap');
+    const etiquetas = wrap.querySelectorAll('.etiq');
+    let labelsHtml = '';
+    etiquetas.forEach(etiq => {
+      // Clona e força SVG a ter largura 100%
+      const clone = etiq.cloneNode(true);
+      const svg = clone.querySelector('svg');
+      if (svg) { svg.removeAttribute('width'); svg.setAttribute('width', '100%'); }
+      labelsHtml += clone.outerHTML;
+    });
 
     const html = `<!DOCTYPE html>
 <html>
@@ -247,17 +256,18 @@ const Etiquetas = {
       -webkit-print-color-adjust:exact !important;
       print-color-adjust:exact !important; }
   @page {
-    size: 10.2cm auto;
+    size: 10.2cm 2.5cm;
     margin: 0;
   }
-  body { margin:0; padding:0; background:#fff; }
+  html, body { margin:0; padding:0; background:#fff; width:10.2cm; }
   .preview-screen {
     display: grid;
     grid-template-columns: 5cm 5cm;
     column-gap: 0.2cm;
-    row-gap: 0.2cm;
+    row-gap: 0;
     padding: 0;
     margin: 0;
+    width: 10.2cm;
   }
   .etiq {
     width: 5cm;
@@ -265,35 +275,38 @@ const Etiquetas = {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0.5mm 1.5mm;
+    align-items: stretch;
+    justify-content: space-between;
+    padding: 1mm 1.5mm;
     background: #fff;
     color: #000;
     font-family: Arial, sans-serif;
     overflow: hidden;
     page-break-inside: avoid;
   }
-  .etiq-loja  { font-size:6pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#444; line-height:1.1; }
-  .etiq-nome  { font-size:7pt; font-weight:700; text-align:center; line-height:1.2; width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-  .etiq-row   { display:flex; justify-content:space-between; align-items:baseline; width:100%; }
-  .etiq-var   { font-size:6.5pt; color:#333; }
-  .etiq-preco { font-size:10pt; font-weight:900; }
-  .etiq-bc    { line-height:0; margin:0; }
-  .etiq-bc-num { font-size:5.5pt; color:#555; font-family:monospace; letter-spacing:.03em; }
+  .etiq-topo  { display:flex; justify-content:space-between; align-items:center; }
+  .etiq-loja  { font-size:5.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:#444; }
+  .etiq-preco { font-size:9pt; font-weight:900; color:#000; }
+  .etiq-nome  { font-size:6.5pt; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .etiq-bc    { text-align:center; line-height:0; flex:1; display:flex; align-items:center; justify-content:center; }
+  .etiq-bc svg { display:block; width:100% !important; height:20px !important; }
+  .etiq-rodape { display:flex; justify-content:space-between; align-items:center; }
+  .etiq-var   { font-size:6pt; color:#333; }
+  .etiq-bc-num { font-size:5pt; color:#555; font-family:monospace; }
 </style>
 </head>
 <body>
 <div class="preview-screen">${labelsHtml}</div>
 <script>
   window.onload = function() {
-    setTimeout(function() { window.print(); window.close(); }, 400);
+    setTimeout(function() { window.print(); window.close(); }, 500);
   };
 <\/script>
 </body>
 </html>`;
 
-    const win = window.open('', '_blank', 'width=600,height=400');
+    const win = window.open('', '_blank', 'width=500,height=300');
+    if (!win) { Utils.toast('Permita popups para este site', 'error'); return; }
     win.document.open();
     win.document.write(html);
     win.document.close();

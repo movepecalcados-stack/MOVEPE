@@ -55,23 +55,25 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 1mm 2mm;
+      align-items: stretch;
+      justify-content: space-between;
+      padding: 1mm 1.5mm;
       background: #fff;
       color: #000;
       font-family: Arial, sans-serif;
-      border: 1px dashed #ccc; /* só na tela, removido na impressão */
+      border: 1px dashed #ccc;
       page-break-inside: avoid;
       overflow: hidden;
     }
-    .etiq-loja  { font-size: 6pt; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #444; line-height: 1.1; }
-    .etiq-nome  { font-size: 7pt; font-weight: 700; text-align: center; line-height: 1.2; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .etiq-row   { display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
-    .etiq-var   { font-size: 6.5pt; color: #333; }
-    .etiq-preco { font-size: 10pt; font-weight: 900; }
-    .etiq-bc    { line-height: 0; margin: 0; }
-    .etiq-bc-num { font-size: 5.5pt; color: #555; font-family: monospace; margin-top: 0; letter-spacing: .03em; }
+    .etiq-topo  { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+    .etiq-loja  { font-size: 5.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #444; }
+    .etiq-preco { font-size: 9pt; font-weight: 900; color: #000; }
+    .etiq-nome  { font-size: 6.5pt; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+    .etiq-bc    { text-align: center; line-height: 0; flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+    .etiq-bc svg { display: block; width: 100% !important; height: 20px !important; }
+    .etiq-rodape { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+    .etiq-var   { font-size: 6pt; color: #333; }
+    .etiq-bc-num { font-size: 5pt; color: #555; font-family: monospace; }
 
     /* Impressão feita via janela dedicada em etiquetas.js — sem @media print aqui */
   </style>
