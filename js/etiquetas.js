@@ -225,9 +225,9 @@ const Etiquetas = {
       return;
     }
 
-    // Dimensões Tiny ERP: etiqueta 55x25mm, pitch 60mm → gap 5mm, margem esq 2mm
-    const d = { w: 55, h: 25, gap: 5, marginL: 2, cols: 2 };
-    const pageW = d.marginL + d.cols * d.w + (d.cols - 1) * d.gap; // 117mm
+    // Argox OS-214: papel 100x25mm, 2 colunas de 49mm + gap 2mm = 100mm
+    const d = { w: 49, h: 25, gap: 2, marginL: 0, cols: 2 };
+    const pageW = d.marginL + d.cols * d.w + (d.cols - 1) * d.gap; // 100mm
 
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
     const nomeProd = _produtoAtivo.nome.length > 28
