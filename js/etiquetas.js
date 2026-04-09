@@ -218,166 +218,98 @@ const Etiquetas = {
     });
   },
 
-  // ---- IMPRIMIR ----
-  // Abre janela limpa com dimensões físicas em mm — evita desalinhamento por DPI
+  // ---- IMPRIMIR — gera PDF com jsPDF (dimensões exatas em mm) ----
   imprimir: () => {
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
       Utils.toast('Selecione um produto e as variações', 'error');
       return;
     }
 
-    const tamanho = document.getElementById('selTamanho').value;
-    const dims = {
-      '55x25': { w: 55, h: 25, gap: 5, marginL: 2, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
-      '50x25': { w: 50, h: 25, gap: 2, marginL: 0, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
-      '40x25': { w: 40, h: 25, gap: 2, marginL: 0, cols: 2, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
-      '50x30': { w: 50, h: 30, gap: 2, marginL: 0, cols: 2, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
-      '60x40': { w: 60, h: 40, gap: 2, marginL: 0, cols: 2, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
-      '80x40': { w: 80, h: 40, gap: 2, marginL: 0, cols: 2, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
-    };
-    const d = dims[tamanho] || dims['55x25'];
-    // pageW = margem + col1 + gap + col2 = 2 + 55 + 5 + 55 = 117mm
-    const pageW = d.marginL + d.cols * d.w + (d.cols - 1) * d.gap;
+    // Dimensões Tiny ERP: etiqueta 55x25mm, pitch 60mm → gap 5mm, margem esq 2mm
+    const d = { w: 55, h: 25, gap: 5, marginL: 2, cols: 2 };
+    const pageW = d.marginL + d.cols * d.w + (d.cols - 1) * d.gap; // 117mm
 
-    // Re-gera etiquetas com IDs únicos para a janela de impressão
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
-    const nomeExibicao = _produtoAtivo.nome.length > 30
-      ? _produtoAtivo.nome.substring(0, 28) + '…'
+    const nomeProd = _produtoAtivo.nome.length > 28
+      ? _produtoAtivo.nome.substring(0, 26) + '…'
       : _produtoAtivo.nome;
+    const preco = Utils.moeda(_produtoAtivo.precoVenda);
 
-    const entradasOrdenadas = Object.entries(_varSelecionadas).sort(([a], [b]) => {
-      const [ta] = a.split('||'); const [tb] = b.split('||');
-      return (parseFloat(ta) || 0) - (parseFloat(tb) || 0);
-    });
+    // Monta lista de etiquetas ordenada
+    const lista = [];
+    Object.entries(_varSelecionadas)
+      .sort(([a], [b]) => (parseFloat(a) || 0) - (parseFloat(b) || 0))
+      .forEach(([chave, qtd]) => {
+        const [tam, cor] = chave.split('||');
+        const varLabel = cor && cor !== 'undefined' && cor !== 'null'
+          ? `Tam ${tam} - ${cor}` : `Tam ${tam}`;
+        const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
+        for (let i = 0; i < qtd; i++) lista.push({ varLabel, codigo });
+      });
 
-    let etiquetas = [];
-    let idx = 0;
-    entradasOrdenadas.forEach(([chave, qtd]) => {
-      const [tam, cor] = chave.split('||');
-      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam} · ${cor}` : `Tam ${tam}`;
-      const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
-      for (let i = 0; i < qtd; i++) {
-        idx++;
-        etiquetas.push({ uid: `p${idx}`, varLabel, codigo });
-      }
-    });
+    // Cria PDF com página de tamanho exato (117 x 25mm)
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: [d.h, pageW] });
 
-    const labelsHtml = etiquetas.map(e => `
-      <div class="etiq">
-        <div class="etiq-loja">${nomeLoja}</div>
-        <div class="etiq-nome">${nomeExibicao}</div>
-        <div class="etiq-var">${e.varLabel}</div>
-        <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
-        <div class="etiq-bc"><svg id="${e.uid}"></svg></div>
-        <div class="etiq-bc-num">${e.codigo}</div>
-      </div>`).join('');
-
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: Arial, sans-serif; background: #f0f0f0; }
-
-  /* Barra do topo — só na tela, some na impressão */
-  #barra {
-    background: #4f46e5; color: #fff;
-    padding: 12px 20px;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px;
-  }
-  #barra span { font-size: 14px; }
-  #btnImprimir {
-    background: #fff; color: #4f46e5;
-    border: none; border-radius: 6px;
-    padding: 8px 20px; font-size: 14px; font-weight: 700;
-    cursor: pointer;
-  }
-  #btnImprimir:hover { background: #e0e0ff; }
-  #btnFechar {
-    background: transparent; color: #fff;
-    border: 1px solid rgba(255,255,255,.5); border-radius: 6px;
-    padding: 8px 14px; font-size: 13px; cursor: pointer;
-  }
-
-  /* Área de preview na tela */
-  #preview {
-    padding: 20px;
-    display: grid;
-    grid-template-columns: repeat(${d.cols}, ${d.w}mm);
-    column-gap: ${d.gap}mm;
-    row-gap: 0;
-    padding-left: calc(20px + ${d.marginL}mm);
-    width: fit-content;
-  }
-
-  /* Etiqueta — visual na tela */
-  .etiq {
-    width: ${d.w}mm; height: ${d.h}mm;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: space-evenly;
-    padding: 1mm 1.5mm;
-    font-family: Arial, sans-serif; color: #000; background: #fff;
-    border: 1px dashed #999; overflow: hidden; box-sizing: border-box;
-  }
-  .etiq-loja  { font-size:${d.fs.loja}pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#555; }
-  .etiq-nome  { font-size:${d.fs.nome}pt; font-weight:700; text-align:center; width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-  .etiq-var   { font-size:${d.fs.var}pt; color:#333; }
-  .etiq-preco { font-size:${d.fs.preco}pt; font-weight:900; }
-  .etiq-bc    { width:100%; text-align:center; line-height:0; }
-  .etiq-bc svg { display:block; margin:0 auto; max-width:100%; }
-  .etiq-bc-num { font-size:5pt; color:#555; font-family:monospace; }
-
-  /* Na impressão: esconde barra, remove fundo e borda */
-  @media print {
-    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    @page { size: ${pageW}mm ${d.h}mm; margin: 0; }
-    #barra { display: none !important; }
-    body { background: #fff; margin: 0; padding: 0; }
-    #preview {
-      padding: 0;
-      padding-left: ${d.marginL}mm;
-      margin: 0;
-      column-gap: ${d.gap}mm;
-      row-gap: 0;
-      width: ${pageW}mm;
-    }
-    .etiq { border: none !important; }
-  }
-</style>
-</head>
-<body>
-<div id="barra">
-  <span>🏷️ Preview — ${etiquetas.length} etiqueta(s) · ${d.w}×${d.h}mm</span>
-  <div style="display:flex;gap:8px">
-    <button id="btnFechar" onclick="window.close()">✕ Fechar</button>
-    <button id="btnImprimir" onclick="window.print()">🖨️ Imprimir</button>
-  </div>
-</div>
-<div id="preview">
-${labelsHtml}
-</div>
-<script>
-  window.onload = function() {
-    var uids = ${JSON.stringify(etiquetas.map(e => e.uid))};
-    var codigos = ${JSON.stringify(etiquetas.map(e => e.codigo))};
-    uids.forEach(function(uid, i) {
+    // Função que desenha uma etiqueta no PDF a partir de (x, y)
+    const desenharEtiqueta = (x, y, etiq) => {
+      // Gera barcode em canvas
+      const canvas = document.createElement('canvas');
       try {
-        JsBarcode('#' + uid, codigos[i], {
-          format: 'CODE128', width: 1.2, height: ${d.bcH},
-          displayValue: false, margin: 0
+        JsBarcode(canvas, etiq.codigo, {
+          format: 'CODE128', width: 2, height: 40,
+          displayValue: false, margin: 0,
         });
-      } catch(e) {}
-    });
-  };
-<\/script>
-</body></html>`;
+      } catch(e) { /* código inválido */ }
 
-    const win = window.open('', '_blank', 'width=400,height=300');
-    if (!win) { Utils.toast('Permita popups para este site', 'error'); return; }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+      // --- Conteúdo ---
+      // Nome da loja (esq) + preço (dir)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(5);
+      doc.setTextColor(80, 80, 80);
+      doc.text(nomeLoja, x + 1, y + 3.5);
+      doc.setFontSize(9);
+      doc.setTextColor(0, 0, 0);
+      doc.text(preco, x + d.w - 1, y + 4, { align: 'right' });
+
+      // Nome do produto
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(nomeProd, x + d.w / 2, y + 8, { align: 'center', maxWidth: d.w - 2 });
+
+      // Barcode (imagem do canvas)
+      if (canvas.width > 0) {
+        const bcW = d.w - 4;
+        const bcH = 9;
+        const bcX = x + (d.w - bcW) / 2;
+        const bcY = y + 10;
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', bcX, bcY, bcW, bcH);
+      }
+
+      // Variação (esq) + código (dir)
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5);
+      doc.setTextColor(60, 60, 60);
+      doc.text(etiq.varLabel, x + 1, y + d.h - 1.5);
+      doc.text(etiq.codigo,   x + d.w - 1, y + d.h - 1.5, { align: 'right' });
+    };
+
+    // Preenche páginas com 2 etiquetas por linha
+    for (let i = 0; i < lista.length; i += d.cols) {
+      if (i > 0) doc.addPage([d.h, pageW], 'l');
+      for (let col = 0; col < d.cols; col++) {
+        if (i + col < lista.length) {
+          const x = d.marginL + col * (d.w + d.gap);
+          desenharEtiqueta(x, 0, lista[i + col]);
+        }
+      }
+    }
+
+    // Abre PDF em nova aba para o usuário revisar e imprimir
+    const blob = doc.output('blob');
+    const url  = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   },
 
 };
