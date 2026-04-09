@@ -229,12 +229,74 @@ const Etiquetas = {
   },
 
   // ---- IMPRIMIR ----
+  // Abre janela limpa só com as etiquetas para evitar desalinhamento
   imprimir: () => {
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
       Utils.toast('Selecione um produto e as variações', 'error');
       return;
     }
-    window.print();
+
+    const labelsHtml = document.getElementById('previewWrap').innerHTML;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box;
+      -webkit-print-color-adjust:exact !important;
+      print-color-adjust:exact !important; }
+  @page {
+    size: 10.2cm 2.5cm;
+    margin: 0;
+  }
+  body { margin:0; padding:0; background:#fff; }
+  .preview-screen {
+    display: grid;
+    grid-template-columns: 5cm 5cm;
+    column-gap: 0.2cm;
+    row-gap: 0.2cm;
+    padding: 0;
+    margin: 0;
+  }
+  .etiq {
+    width: 5cm;
+    height: 2.5cm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5mm 1.5mm;
+    background: #fff;
+    color: #000;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  .etiq-loja  { font-size:6pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#444; line-height:1.1; }
+  .etiq-nome  { font-size:7pt; font-weight:700; text-align:center; line-height:1.2; width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .etiq-row   { display:flex; justify-content:space-between; align-items:baseline; width:100%; }
+  .etiq-var   { font-size:6.5pt; color:#333; }
+  .etiq-preco { font-size:10pt; font-weight:900; }
+  .etiq-bc    { line-height:0; margin:0; }
+  .etiq-bc-num { font-size:5.5pt; color:#555; font-family:monospace; letter-spacing:.03em; }
+</style>
+</head>
+<body>
+<div class="preview-screen">${labelsHtml}</div>
+<script>
+  window.onload = function() {
+    setTimeout(function() { window.print(); window.close(); }, 400);
+  };
+<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=600,height=400');
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   },
 
 };

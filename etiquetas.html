@@ -73,50 +73,7 @@
     .etiq-bc    { line-height: 0; margin: 0; }
     .etiq-bc-num { font-size: 5.5pt; color: #555; font-family: monospace; margin-top: 0; letter-spacing: .03em; }
 
-    /* ---- IMPRESSÃO ---- */
-    @media print {
-      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-
-      @page {
-        /* Rolo Argox: 2 colunas × 5cm + gap 0,2cm = 10,2cm largura; altura contínua */
-        size: 10.2cm 2.5cm;
-        margin: 0;
-      }
-
-      /* Técnica visibility: esconde tudo, mostra só a área de impressão */
-      body * { visibility: hidden !important; }
-      #areaImpressao,
-      #areaImpressao * { visibility: visible !important; }
-
-      #areaImpressao {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-
-      /* Grid de impressão — 5cm x 2,5cm, gap 0,2cm, 2 colunas */
-      .preview-screen {
-        display: grid !important;
-        grid-template-columns: 5cm 5cm !important;
-        column-gap: 0.2cm !important;
-        row-gap: 0.2cm !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        background: transparent !important;
-        border-radius: 0 !important;
-        overflow: visible !important;
-      }
-
-      .etiq {
-        width: 5cm !important;
-        height: 2.5cm !important;
-        border: none !important;
-        padding: 0.5mm 1.5mm !important;
-        page-break-inside: avoid !important;
-      }
-    }
+    /* Impressão feita via janela dedicada em etiquetas.js — sem @media print aqui */
   </style>
 </head>
 <body>
