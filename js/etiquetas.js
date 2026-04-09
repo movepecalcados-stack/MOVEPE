@@ -247,7 +247,7 @@ const Etiquetas = {
       -webkit-print-color-adjust:exact !important;
       print-color-adjust:exact !important; }
   @page {
-    size: 10.2cm 2.5cm;
+    size: 10.2cm auto;
     margin: 0;
   }
   body { margin:0; padding:0; background:#fff; }
