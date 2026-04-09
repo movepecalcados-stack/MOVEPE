@@ -219,12 +219,110 @@ const Etiquetas = {
   },
 
   // ---- IMPRIMIR ----
+  // Abre janela limpa com dimensões físicas em mm — evita desalinhamento por DPI
   imprimir: () => {
     if (!_produtoAtivo || !Object.keys(_varSelecionadas).length) {
       Utils.toast('Selecione um produto e as variações', 'error');
       return;
     }
-    window.print();
+
+    const tamanho = document.getElementById('selTamanho').value;
+    const dims = {
+      '40x25': { w: 40, h: 25, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '50x30': { w: 50, h: 30, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
+      '60x40': { w: 60, h: 40, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
+      '80x40': { w: 80, h: 40, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
+    };
+    const d = dims[tamanho] || dims['40x25'];
+
+    // Re-gera etiquetas com IDs únicos para a janela de impressão
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
+    const nomeExibicao = _produtoAtivo.nome.length > 30
+      ? _produtoAtivo.nome.substring(0, 28) + '…'
+      : _produtoAtivo.nome;
+
+    const entradasOrdenadas = Object.entries(_varSelecionadas).sort(([a], [b]) => {
+      const [ta] = a.split('||'); const [tb] = b.split('||');
+      return (parseFloat(ta) || 0) - (parseFloat(tb) || 0);
+    });
+
+    let etiquetas = [];
+    let idx = 0;
+    entradasOrdenadas.forEach(([chave, qtd]) => {
+      const [tam, cor] = chave.split('||');
+      const varLabel = cor && cor !== 'undefined' && cor !== 'null' ? `Tam ${tam} · ${cor}` : `Tam ${tam}`;
+      const codigo = Etiquetas.gerarCodigo(_produtoAtivo, chave);
+      for (let i = 0; i < qtd; i++) {
+        idx++;
+        etiquetas.push({ uid: `p${idx}`, varLabel, codigo });
+      }
+    });
+
+    const labelsHtml = etiquetas.map(e => `
+      <div class="etiq">
+        <div class="etiq-loja">${nomeLoja}</div>
+        <div class="etiq-nome">${nomeExibicao}</div>
+        <div class="etiq-var">${e.varLabel}</div>
+        <div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
+        <div class="etiq-bc"><svg id="${e.uid}"></svg></div>
+        <div class="etiq-bc-num">${e.codigo}</div>
+      </div>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box;
+      -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  @page { size: ${d.w}mm ${d.h}mm; margin: 0; }
+  html, body { width:${d.w}mm; margin:0; padding:0; background:#fff; }
+  .etiq {
+    width: ${d.w}mm;
+    height: ${d.h}mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    padding: 1mm 1.5mm;
+    font-family: Arial, sans-serif;
+    color: #000;
+    background: #fff;
+    overflow: hidden;
+    page-break-after: always;
+  }
+  .etiq:last-child { page-break-after: auto; }
+  .etiq-loja  { font-size:${d.fs.loja}pt; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#555; }
+  .etiq-nome  { font-size:${d.fs.nome}pt; font-weight:700; text-align:center; width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .etiq-var   { font-size:${d.fs.var}pt; color:#333; }
+  .etiq-preco { font-size:${d.fs.preco}pt; font-weight:900; }
+  .etiq-bc    { width:100%; text-align:center; line-height:0; }
+  .etiq-bc svg { display:block; margin:0 auto; max-width:100%; }
+  .etiq-bc-num { font-size:5pt; color:#555; font-family:monospace; }
+</style>
+</head><body>
+${labelsHtml}
+<script>
+  window.onload = function() {
+    var uids = ${JSON.stringify(etiquetas.map(e => e.uid))};
+    var codigos = ${JSON.stringify(etiquetas.map(e => e.codigo))};
+    uids.forEach(function(uid, i) {
+      try {
+        JsBarcode('#' + uid, codigos[i], {
+          format: 'CODE128', width: 1.2, height: ${d.bcH},
+          displayValue: false, margin: 0
+        });
+      } catch(e) {}
+    });
+    setTimeout(function() { window.print(); window.close(); }, 600);
+  };
+<\/script>
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=400,height=300');
+    if (!win) { Utils.toast('Permita popups para este site', 'error'); return; }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   },
 
 };
