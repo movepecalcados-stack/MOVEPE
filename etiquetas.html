@@ -42,7 +42,8 @@
 
     /* TAMANHOS DE ETIQUETA */
     .etiq { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 6px; box-sizing: border-box; background: #fff; color: #000; font-family: Arial, sans-serif; page-break-inside: avoid; }
-    .etiq.sz-50x25 { width: 189px; height: 94px; }   /* 50mm x 25mm — Argox OS-214 */
+    .etiq.sz-55x25 { width: 208px; height: 94px; }   /* 55mm x 25mm — Argox OS-214 Tiny ERP */
+    .etiq.sz-50x25 { width: 189px; height: 94px; }   /* 50mm x 25mm */
     .etiq.sz-40x25 { width: 151px; height: 94px; }   /* 40mm x 25mm */
     .etiq.sz-50x30 { width: 189px; height: 113px; }  /* 50mm x 30mm */
     .etiq.sz-60x40 { width: 227px; height: 151px; }  /* 60mm x 40mm */
@@ -97,7 +98,8 @@
             <div class="form-group">
               <label class="form-label">Tamanho da etiqueta (Argox)</label>
               <select class="form-control" id="selTamanho" onchange="Etiquetas.renderPreview()">
-                <option value="50x25" selected>50 × 25 mm — Argox OS-214 (sua impressora)</option>
+                <option value="55x25" selected>55 × 25 mm — Argox OS-214 (Tiny ERP)</option>
+                <option value="50x25">50 × 25 mm</option>
                 <option value="40x25">40 × 25 mm</option>
                 <option value="50x30">50 × 30 mm</option>
                 <option value="60x40">60 × 40 mm</option>
@@ -156,7 +158,7 @@
             </div>
             <p class="text-muted fs-sm" style="margin-top:10px">
               💡 Na janela de impressão: selecione <strong>Argox OS-214 plus series PPLA</strong>,
-              tamanho <strong>Etiq 2col 102x25</strong>, margens <strong>nenhuma</strong>, escala <strong>100%</strong>, sem cabeçalhos/rodapés.
+              tamanho <strong>Medida</strong> (automático), margens <strong>nenhuma</strong>, escala <strong>100%</strong>, sem cabeçalhos/rodapés.
             </p>
           </div>
         </div>

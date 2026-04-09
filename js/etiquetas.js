@@ -228,14 +228,16 @@ const Etiquetas = {
 
     const tamanho = document.getElementById('selTamanho').value;
     const dims = {
-      '50x25': { w: 50, h: 25, gap: 2, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
-      '40x25': { w: 40, h: 25, gap: 2, cols: 2, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
-      '50x30': { w: 50, h: 30, gap: 2, cols: 2, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
-      '60x40': { w: 60, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
-      '80x40': { w: 80, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
+      '55x25': { w: 55, h: 25, gap: 5, marginL: 2, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '50x25': { w: 50, h: 25, gap: 2, marginL: 0, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '40x25': { w: 40, h: 25, gap: 2, marginL: 0, cols: 2, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
+      '50x30': { w: 50, h: 30, gap: 2, marginL: 0, cols: 2, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
+      '60x40': { w: 60, h: 40, gap: 2, marginL: 0, cols: 2, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
+      '80x40': { w: 80, h: 40, gap: 2, marginL: 0, cols: 2, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
     };
-    const d = dims[tamanho] || dims['50x25'];
-    const pageW = d.cols * d.w + (d.cols - 1) * d.gap; // 50*2 + 1*2 = 102mm
+    const d = dims[tamanho] || dims['55x25'];
+    // pageW = margem + col1 + gap + col2 = 2 + 55 + 5 + 55 = 117mm
+    const pageW = d.marginL + d.cols * d.w + (d.cols - 1) * d.gap;
 
     // Re-gera etiquetas com IDs únicos para a janela de impressão
     const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ').toUpperCase();
@@ -303,7 +305,9 @@ const Etiquetas = {
     padding: 20px;
     display: grid;
     grid-template-columns: repeat(${d.cols}, ${d.w}mm);
-    gap: ${d.gap}mm;
+    column-gap: ${d.gap}mm;
+    row-gap: 0;
+    padding-left: calc(20px + ${d.marginL}mm);
     width: fit-content;
   }
 
@@ -329,8 +333,15 @@ const Etiquetas = {
     * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     @page { size: ${pageW}mm ${d.h}mm; margin: 0; }
     #barra { display: none !important; }
-    body { background: #fff; }
-    #preview { padding: 0; gap: ${d.gap}mm; width: ${pageW}mm; }
+    body { background: #fff; margin: 0; padding: 0; }
+    #preview {
+      padding: 0;
+      padding-left: ${d.marginL}mm;
+      margin: 0;
+      column-gap: ${d.gap}mm;
+      row-gap: 0;
+      width: ${pageW}mm;
+    }
     .etiq { border: none !important; }
   }
 </style>
