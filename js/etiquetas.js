@@ -228,12 +228,13 @@ const Etiquetas = {
 
     const tamanho = document.getElementById('selTamanho').value;
     const dims = {
-      '50x25': { w: 50, h: 25, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
-      '40x25': { w: 40, h: 25, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
-      '50x30': { w: 50, h: 30, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
-      '60x40': { w: 60, h: 40, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
-      '80x40': { w: 80, h: 40, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
+      '50x25': { w: 50, h: 25, gap: 2, cols: 2, bcH: 12, fs: { loja:5, nome:6.5, var:5.5, preco:9 } },
+      '40x25': { w: 40, h: 25, gap: 2, cols: 2, bcH: 11, fs: { loja:5, nome:6,   var:5,   preco:8.5 } },
+      '50x30': { w: 50, h: 30, gap: 2, cols: 2, bcH: 14, fs: { loja:6, nome:7,   var:6,   preco:11 } },
+      '60x40': { w: 60, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:8,   var:7,   preco:13 } },
+      '80x40': { w: 80, h: 40, gap: 2, cols: 2, bcH: 18, fs: { loja:7, nome:9,   var:7,   preco:14 } },
     };
+    const pageW = d.cols * d.w + (d.cols - 1) * d.gap; // 50*2 + 1*2 = 102mm
     const d = dims[tamanho] || dims['40x25'];
 
     // Re-gera etiquetas com IDs únicos para a janela de impressão
@@ -300,7 +301,10 @@ const Etiquetas = {
   /* Área de preview na tela */
   #preview {
     padding: 20px;
-    display: flex; flex-wrap: wrap; gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(${d.cols}, ${d.w}mm);
+    gap: ${d.gap}mm;
+    width: fit-content;
   }
 
   /* Etiqueta — visual na tela */
@@ -323,12 +327,11 @@ const Etiquetas = {
   /* Na impressão: esconde barra, remove fundo e borda */
   @media print {
     * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    @page { size: ${d.w}mm ${d.h}mm; margin: 0; }
+    @page { size: ${pageW}mm ${d.h}mm; margin: 0; }
     #barra { display: none !important; }
     body { background: #fff; }
-    #preview { padding: 0; gap: 0; }
-    .etiq { border: none !important; page-break-after: always; }
-    .etiq:last-child { page-break-after: auto; }
+    #preview { padding: 0; gap: ${d.gap}mm; width: ${pageW}mm; }
+    .etiq { border: none !important; }
   }
 </style>
 </head>
