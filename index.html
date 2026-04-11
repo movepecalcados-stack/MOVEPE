@@ -30,9 +30,12 @@
         <!-- PRODUTOS -->
         <div class="pdv-produtos">
           <div class="pdv-busca">
-            <div style="position:relative">
-              <input type="text" id="buscaInput" class="form-control" placeholder="🔍 Buscar produto por nome, marca, SKU... (F2)">
-              <span id="scannerIndicator" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--success);font-weight:600">📡 Scanner</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="position:relative;flex:1">
+                <input type="text" id="buscaInput" class="form-control" placeholder="🔍 Buscar produto por nome, marca, SKU... (F2)">
+                <span id="scannerIndicator" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--success);font-weight:600">📡 Scanner</span>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="PDV.abrirCadastroRapido()" title="Cadastrar produto novo direto no PDV" style="white-space:nowrap;flex-shrink:0">➕ Produto Rápido</button>
             </div>
           </div>
           <div class="pdv-grid" id="produtosGrid">
@@ -426,6 +429,67 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ===== MODAL CADASTRO RÁPIDO DE PRODUTO ===== -->
+  <div class="modal-overlay" id="modalProdutoRapido" style="display:none">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span class="modal-title">➕ Cadastro Rápido de Produto</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalProdutoRapido')">✕</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px">Preencha os dados básicos. O produto será cadastrado no estoque e adicionado ao carrinho.</p>
+
+      <div class="form-group">
+        <label class="form-label">Nome do Produto *</label>
+        <input type="text" id="rpNome" class="form-control" placeholder="Ex: Tênis Nike Air Max">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <select id="rpTipo" class="form-control">
+            <option value="calcado_adulto">Calçado Adulto</option>
+            <option value="calcado_infantil">Calçado Infantil</option>
+            <option value="roupa">Roupa</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Marca</label>
+          <input type="text" id="rpMarca" class="form-control" placeholder="Ex: Nike">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Preço de Venda (R$) *</label>
+          <input type="number" id="rpPrecoVenda" class="form-control" step="0.01" min="0" placeholder="0,00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Preço de Custo (R$)</label>
+          <input type="number" id="rpPrecoCusto" class="form-control" step="0.01" min="0" placeholder="0,00">
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;border-top:1px solid var(--border);padding-top:12px">Variação que vai entrar no carrinho</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tamanho</label>
+          <input type="text" id="rpTamanho" class="form-control" placeholder="Ex: 38">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor</label>
+          <input type="text" id="rpCor" class="form-control" placeholder="Ex: Preto">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Qtd estoque</label>
+          <input type="number" id="rpEstoque" class="form-control" min="1" value="1">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalProdutoRapido')">Cancelar</button>
+        <button class="btn btn-primary" onclick="PDV.salvarProdutoRapido()">💾 Salvar e Adicionar ao Carrinho</button>
+      </div>
     </div>
   </div>
 

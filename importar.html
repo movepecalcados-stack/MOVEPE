@@ -50,6 +50,16 @@
         </div>
       </div>
 
+      <!-- LIMPAR PRODUTOS -->
+      <div class="card" style="margin-top:16px;border-color:var(--danger)">
+        <div class="card-title" style="color:var(--danger)">🗑️ Limpar Estoque</div>
+        <p class="text-muted fs-sm" style="margin:8px 0 12px">
+          Apaga <strong>todos os produtos</strong> do sistema (localStorage + Firebase). Use antes de reimportar do Tiny para começar do zero.
+        </p>
+        <button class="btn btn-danger" onclick="Imp.limparTodosProdutos()">🗑️ Apagar todos os produtos</button>
+        <div id="logLimpar" style="margin-top:10px"></div>
+      </div>
+
       <!-- IMPORTAR PRODUTOS -->
       <div class="card" style="margin-top:16px">
         <div class="card-title">👟 Produtos (produtos_XXXX.csv)</div>
@@ -66,7 +76,7 @@
             👟 Importar Produtos
           </button>
           <button class="btn btn-outline" id="btnAtualizarEstoque" onclick="Imp.atualizarEstoque()" disabled>
-            🔄 Só atualizar estoque
+            🔄 Atualizar estoque + variações
           </button>
         </div>
         <div id="logProdutos" style="margin-top:12px"></div>
@@ -115,26 +125,34 @@
       let _pedidos = [];
       let _produtos = [];
 
+      // Detecta separador do CSV (Tiny usa ponto e vírgula, outros usam vírgula)
+      const detectarSep = (linha) => {
+        const semis = (linha.match(/;/g) || []).length;
+        const commas = (linha.match(/,/g) || []).length;
+        return semis >= commas ? ';' : ',';
+      };
+
       // Parse CSV respeitando campos entre aspas
       const parseCSV = (text) => {
         const lines = text.split('\n').filter(l => l.trim());
-        const headers = parseLine(lines[0]);
+        const sep = detectarSep(lines[0]);
+        const headers = parseLine(lines[0], sep);
         return lines.slice(1).map(line => {
-          const vals = parseLine(line);
+          const vals = parseLine(line, sep);
           const obj = {};
           headers.forEach((h, i) => { obj[h.trim()] = (vals[i] || '').trim(); });
           return obj;
         }).filter(r => Object.values(r).some(v => v));
       };
 
-      const parseLine = (line) => {
+      const parseLine = (line, sep = ',') => {
         const result = [];
         let cur = '';
         let inQuote = false;
         for (let i = 0; i < line.length; i++) {
           const c = line[i];
           if (c === '"') { inQuote = !inQuote; continue; }
-          if (c === ',' && !inQuote) { result.push(cur); cur = ''; continue; }
+          if (c === sep && !inQuote) { result.push(cur); cur = ''; continue; }
           cur += c;
         }
         result.push(cur);
@@ -345,6 +363,31 @@
           }, 4000);
         },
 
+        limparTodosProdutos: async () => {
+          const total = DB.Produtos.listar().length;
+          if (total === 0) {
+            document.getElementById('logLimpar').innerHTML =
+              '<span style="color:var(--text-muted)">Nenhum produto cadastrado.</span>';
+            return;
+          }
+          if (!confirm(`⚠️ Isso vai apagar TODOS os ${total} produtos do sistema.\n\nEssa ação não pode ser desfeita!\n\nTem certeza?`)) return;
+          if (!confirm(`Confirmação final: apagar ${total} produtos?\n\nClique OK para confirmar.`)) return;
+
+          const log = document.getElementById('logLimpar');
+          log.innerHTML = '<span style="color:var(--text-muted)">⏳ Apagando...</span>';
+
+          const lista = DB.Produtos.listar();
+          // Apaga do Firebase
+          lista.forEach(p => { if (p && p.id) DB.Sync.delete('produtos', p.id); });
+          // Limpa localStorage
+          localStorage.setItem('movePe_produtos', '[]');
+
+          log.innerHTML = `<div class="card" style="border-color:var(--success)">
+            <strong style="color:var(--success)">✅ ${lista.length} produtos apagados!</strong><br>
+            <span class="text-muted fs-sm">Agora selecione o CSV do Tiny e clique em "Importar Produtos".</span>
+          </div>`;
+        },
+
         previewProdutos: async (input) => {
           const file = input.files[0];
           if (!file) return;
@@ -367,10 +410,18 @@
 
           const fmtPreco = s => parseFloat((s||'0').replace(/\./g,'').replace(',','.')) || 0;
 
-          const extrairTamanho = (variacoes) => {
-            if (!variacoes) return null;
-            const m = variacoes.match(/Tamanho[:\s]+([^\|]+)/i);
-            return m ? m[1].trim() : null;
+          // Extrai chave de variação no formato "tamanho||cor" igual ao sistema
+          // Tiny exporta como "Tamanho: 38 | Cor: Preto" ou "Tamanho: 38" ou "Cor: Preto"
+          const extrairChaveVariacao = (varStr) => {
+            if (!varStr) return null;
+            const mTam = varStr.match(/Tamanho[:\s]+([^|;,]+)/i);
+            const mCor = varStr.match(/Cor[:\s]+([^|;,]+)/i);
+            const tam = mTam ? mTam[1].trim() : '';
+            const cor = mCor ? mCor[1].trim() : '';
+            if (tam && cor) return `${tam}||${cor}`;
+            if (tam) return tam;
+            if (cor) return cor;
+            return varStr.trim() || null;
           };
 
           const extrairCategoria = (cat) => {
@@ -383,7 +434,8 @@
           // Agrupa variações por produto pai (Código do pai)
           const varPorPai = {};
           _produtos.filter(r => r['Tipo do produto'] === 'S' && r['Código do pai']).forEach(r => {
-            const pai = r['Código do pai'].trim();
+            const pai = (r['Código do pai'] || '').trim();
+            if (!pai) return;
             if (!varPorPai[pai]) varPorPai[pai] = [];
             varPorPai[pai].push(r);
           });
@@ -392,6 +444,18 @@
           const pais = _produtos.filter(r => r['Tipo do produto'] === 'V');
           // Produtos simples sem variações (não V, não S com pai)
           const simples = _produtos.filter(r => r['Tipo do produto'] !== 'V' && r['Tipo do produto'] !== 'S');
+
+          // Log de diagnóstico — mostra amostra das variações lidas
+          const amostraVars = Object.entries(varPorPai).slice(0, 3);
+          if (amostraVars.length > 0) {
+            const amostrasHtml = amostraVars.map(([pai, filhos]) =>
+              `<div style="font-size:11px;color:var(--text-muted)">${pai}: ${filhos.map(f => extrairChaveVariacao(f['Variações'] || f['Variação'] || '') || '—').join(', ')}</div>`
+            ).join('');
+            log.innerHTML = `<div class="card" style="margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;margin-bottom:4px">🔍 Amostra de variações lidas:</div>
+              ${amostrasHtml}
+            </div>`;
+          }
 
           const existentes = DB.Produtos.listar();
           const skusExistentes = new Set(existentes.map(p => p.sku).filter(Boolean));
@@ -431,12 +495,12 @@
               return;
             }
 
-            // Monta variacoes { tamanho: estoque }
+            // Monta variacoes { "tamanho||cor": estoque }
             const varObj = {};
             filhos.forEach(f => {
-              const tam = extrairTamanho(f['Variações']);
+              const chave = extrairChaveVariacao(f['Variações'] || f['Variação'] || '');
               const est = parseFloat(f['Estoque']) || 0;
-              if (tam) varObj[tam] = est;
+              if (chave) varObj[chave] = est;
             });
 
             salvarProduto(nome, sku, preco, precoCusto, marca, categoria, varObj);
@@ -472,20 +536,24 @@
           btn.disabled = true;
           btn.textContent = '⏳ Atualizando...';
 
-          const extrairTamanho = (variacoes) => {
-            if (!variacoes) return null;
-            const m = variacoes.match(/Tamanho[:\s]+([^\|]+)/i);
-            return m ? m[1].trim() : null;
-          };
-
-          // Monta mapa: SKUpai → { tamanho: estoque }
+          // Monta mapa: SKUpai → { "tamanho||cor": estoque }
           const varPorPai = {};
           _produtos.filter(r => r['Tipo do produto'] === 'S' && r['Código do pai']).forEach(r => {
-            const pai = r['Código do pai'].trim();
-            const tam = extrairTamanho(r['Variações']);
+            const pai = (r['Código do pai'] || '').trim();
+            if (!pai) return;
+            const chave = (() => {
+              const varStr = r['Variações'] || r['Variação'] || '';
+              if (!varStr) return null;
+              const mTam = varStr.match(/Tamanho[:\s]+([^|;,]+)/i);
+              const mCor = varStr.match(/Cor[:\s]+([^|;,]+)/i);
+              const tam = mTam ? mTam[1].trim() : '';
+              const cor = mCor ? mCor[1].trim() : '';
+              if (tam && cor) return `${tam}||${cor}`;
+              return tam || cor || varStr.trim() || null;
+            })();
             const est = parseFloat(r['Estoque']) || 0;
             if (!varPorPai[pai]) varPorPai[pai] = {};
-            if (tam) varPorPai[pai][tam] = est;
+            if (chave) varPorPai[pai][chave] = est;
           });
 
           // Mapa SKU → estoque para simples

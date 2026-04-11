@@ -139,6 +139,17 @@
 
         <hr class="divider">
 
+        <style>
+          .var-foto-btn {
+            width:32px;height:32px;border:1px solid var(--border);border-radius:4px;
+            cursor:pointer;background:var(--bg);font-size:15px;display:flex;
+            align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;
+            padding:0;transition:border-color .15s;
+          }
+          .var-foto-btn:hover { border-color:var(--primary); }
+          .var-foto-btn img { width:100%;height:100%;object-fit:cover; }
+        </style>
+
         <div class="section-header">
           <span class="section-title">Tamanhos e Estoque</span>
           <button type="button" class="btn btn-outline btn-sm" id="btnAdicionarVariacao">+ Adicionar Tamanho</button>

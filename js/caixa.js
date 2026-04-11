@@ -48,8 +48,9 @@ const CaixaModule = {
     const historicoCont = document.getElementById('caixaHistorico');
 
     if (caixa) {
-      const hoje = Utils.hoje();
-      const vendas = DB.Vendas.listarHoje();
+      // Filtra desde a abertura do caixa (não só "hoje") para não perder lançamentos em viradas de dia UTC
+      const abrEm = caixa.aberturaEm || (Utils.hoje() + 'T00:00:00.000Z');
+      const vendas = DB.Vendas.listar().filter(v => v.criadoEm && v.criadoEm >= abrEm);
       const totalVendas = vendas.filter(v => v.formaPagamento !== 'crediario')
         .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
       const totalCrediario = vendas.filter(v => v.formaPagamento === 'crediario')
@@ -66,9 +67,9 @@ const CaixaModule = {
       const totalCartao = somarForma(['cartao_credito', 'cartao_debito']);
       const totalPix = somarForma(['pix']);
 
-      // Recebimentos de crediário hoje (pagamentos de parcelas)
+      // Recebimentos de crediário desde a abertura do caixa (pagamentos de parcelas)
       const totalRecebidoCrediario = DB.FluxoCaixa.listar()
-        .filter(f => f.categoria === 'crediario' && f.data && f.data.startsWith(hoje))
+        .filter(f => f.categoria === 'crediario' && f.data && f.data >= abrEm)
         .reduce((s, f) => s + (parseFloat(f.valor) || 0), 0);
 
       const saldoFinal = (parseFloat(caixa.saldoInicial) || 0) + totalDinheiro + totalRecebidoCrediario - (caixa.sangrias || 0) + (caixa.reforcos || 0);
@@ -147,9 +148,9 @@ const CaixaModule = {
         });
       });
 
-      // Recebimentos de crediário no FluxoCaixa
+      // Recebimentos de crediário no FluxoCaixa desde abertura do caixa
       DB.FluxoCaixa.listar()
-        .filter(f => f.categoria === 'crediario' && f.data && f.data.startsWith(hoje))
+        .filter(f => f.categoria === 'crediario' && f.data && f.data >= abrEm)
         .forEach(f => {
           movDia.push({
             hora: f.data,
@@ -254,6 +255,7 @@ const CaixaModule = {
               <th>Data</th>
               <th>Operador</th>
               <th>Vendas</th>
+              <th>Receb. Crediário</th>
               <th>Saldo Esperado</th>
               <th>Saldo Contado</th>
               <th>Diferença</th>
@@ -267,11 +269,13 @@ const CaixaModule = {
               const difHtml = dif !== null && dif !== undefined
                 ? `<span style="color:${difCor};font-weight:700">${dif >= 0 ? '+' : ''}${Utils.moeda(dif)}</span>`
                 : '<span class="text-muted">—</span>';
+              const recebCred = c.totalRecebCrediario || 0;
               return `
               <tr>
                 <td>${Utils.data(c.aberturaEm)}</td>
                 <td>${c.operador || '-'}</td>
                 <td class="text-primary fw-bold">${Utils.moeda(c.totalVendas || 0)}</td>
+                <td style="color:var(--success);font-weight:600">${recebCred > 0 ? Utils.moeda(recebCred) : '<span class="text-muted">—</span>'}</td>
                 <td>${c.saldoEsperado !== undefined ? Utils.moeda(c.saldoEsperado) : '<span class="text-muted">—</span>'}</td>
                 <td>${c.saldoContado !== null && c.saldoContado !== undefined ? Utils.moeda(c.saldoContado) : '<span class="text-muted">—</span>'}</td>
                 <td>${difHtml}</td>
@@ -341,7 +345,8 @@ const CaixaModule = {
     const caixa = DB.Caixa.buscarAtivo();
     if (!caixa) return;
     const hoje = Utils.hoje();
-    const vendas = DB.Vendas.listarHoje();
+    const abrEm = caixa.aberturaEm || (hoje + 'T00:00:00.000Z');
+    const vendas = DB.Vendas.listar().filter(v => v.criadoEm && v.criadoEm >= abrEm);
 
     const somarForma = (formas) => vendas.reduce((s, v) => {
       if (v.formasPagamento && v.formasPagamento.length > 0) {
@@ -355,7 +360,7 @@ const CaixaModule = {
     const totalCrediario = somarForma(['crediario']);
     const totalVendas = totalDinheiro + totalCartao + totalPix;
     const totalRecebCrediario = DB.FluxoCaixa.listar()
-      .filter(f => f.categoria === 'crediario' && f.data && f.data.startsWith(hoje))
+      .filter(f => f.categoria === 'crediario' && f.data && f.data >= abrEm)
       .reduce((s,f) => s+(parseFloat(f.valor)||0), 0);
     const saldoFinal = (parseFloat(caixa.saldoInicial)||0) + totalDinheiro + totalRecebCrediario - (caixa.sangrias||0) + (caixa.reforcos||0);
 
@@ -428,8 +433,9 @@ ${linhaH}
     const caixa = DB.Caixa.buscarAtivo();
     if (!caixa) { Utils.toast('Nenhum caixa aberto', 'warning'); return; }
 
-    const hoje = Utils.hoje();
-    const vendas = DB.Vendas.listarHoje();
+    // Filtra desde a abertura do caixa para capturar tudo, inclusive viradas de dia UTC
+    const abrEm = caixa.aberturaEm || (Utils.hoje() + 'T00:00:00.000Z');
+    const vendas = DB.Vendas.listar().filter(v => v.criadoEm && v.criadoEm >= abrEm);
 
     const somarForma = (formas) => vendas.reduce((s, v) => {
       if (v.formasPagamento && v.formasPagamento.length > 0) {
@@ -444,7 +450,7 @@ ${linhaH}
     const totalPix       = somarForma(['pix']);
     const totalCrediario = somarForma(['crediario']);
     const totalRecebCrediario = DB.FluxoCaixa.listar()
-      .filter(f => f.categoria === 'crediario' && f.data && f.data.startsWith(hoje))
+      .filter(f => f.categoria === 'crediario' && f.data && f.data >= abrEm)
       .reduce((s, f) => s + (parseFloat(f.valor) || 0), 0);
 
     const totalVendas   = totalDinheiro + totalDebito + totalCredito + totalPix;

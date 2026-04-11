@@ -7,6 +7,7 @@ let _filtroTipo = '';
 let _filtroTamanho = '';
 let _busca = '';
 let _fotoBase64 = null;
+let _fotosVariacoes = {}; // { "preto": "base64...", "rosa": "base64..." }
 
 const Estoque = {
 
@@ -101,8 +102,12 @@ const Estoque = {
         })
         .map(([key, qtd]) => {
           const [tam, cor] = key.split('||');
+          const fotoChip = cor && p.fotosVariacoes && p.fotosVariacoes[cor.toLowerCase()]
+            ? `<img src="${p.fotosVariacoes[cor.toLowerCase()]}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;flex-shrink:0;display:block">`
+            : '';
           return `
           <div class="tamanho-chip ${qtd == 0 ? 'zero' : ''}">
+            ${fotoChip}
             <span class="tc-size">${tam}</span>
             ${cor ? `<span style="font-size:9px;color:var(--text-muted);display:block;line-height:1.2;max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cor}</span>` : ''}
             <span class="tc-qty">${qtd}</span>
@@ -156,7 +161,10 @@ const Estoque = {
     f.estoqueMinimo.value = _produtoEditando ? (_produtoEditando.estoqueMinimo || 5) : 5;
     f.descricao.value = _produtoEditando ? (_produtoEditando.descricao || '') : '';
 
-    // Foto
+    // Fotos de variação por cor
+    _fotosVariacoes = _produtoEditando ? JSON.parse(JSON.stringify(_produtoEditando.fotosVariacoes || {})) : {};
+
+    // Foto principal
     _fotoBase64 = _produtoEditando ? (_produtoEditando.foto || null) : null;
     document.getElementById('inputFotoProduto').value = '';
     if (_fotoBase64) {
@@ -191,12 +199,18 @@ const Estoque = {
       })
       .map(([key, qtd]) => {
         const [tam, cor] = key.split('||');
+        const fotoExist = cor ? (_fotosVariacoes[cor.toLowerCase()] || '') : '';
+        const fotoBtnHtml = fotoExist
+          ? `<img src="${fotoExist}" style="width:100%;height:100%;object-fit:cover">`
+          : '📷';
         return `
-        <div class="form-row" style="margin-bottom:6px;align-items:center">
+        <div class="form-row var-row" style="margin-bottom:6px;align-items:center">
           <input class="form-control var-tam" value="${tam}" placeholder="Tamanho (ex: 38)" style="flex:1;min-width:70px">
-          <input class="form-control var-cor" value="${cor || ''}" placeholder="Cor (opcional)" style="flex:2">
+          <input class="form-control var-cor" value="${cor || ''}" placeholder="Cor (opcional)" style="flex:2" oninput="Estoque._atualizarFotoBtn(this)">
+          <button type="button" class="var-foto-btn" title="Foto desta cor" onclick="Estoque._clicarFotoVar(this)">${fotoBtnHtml}</button>
+          <input type="file" accept="image/*" style="display:none" onchange="Estoque._carregarFotoVar(this)">
           <input class="form-control var-qty" type="number" min="0" value="${qtd}" placeholder="Qtd" style="flex:1;min-width:60px">
-          <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.parentElement.remove()" title="Remover">✕</button>
+          <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.closest('.var-row').remove()" title="Remover">✕</button>
         </div>`;
       }).join('');
   },
@@ -208,21 +222,23 @@ const Estoque = {
     if (vazio) vazio.remove();
 
     const div = document.createElement('div');
-    div.className = 'form-row';
+    div.className = 'form-row var-row';
     div.style.marginBottom = '6px';
     div.style.alignItems = 'center';
     div.innerHTML = `
       <input class="form-control var-tam" placeholder="Tamanho (ex: 38)" style="flex:1;min-width:70px">
-      <input class="form-control var-cor" placeholder="Cor (opcional)" style="flex:2">
+      <input class="form-control var-cor" placeholder="Cor (opcional)" style="flex:2" oninput="Estoque._atualizarFotoBtn(this)">
+      <button type="button" class="var-foto-btn" title="Foto desta cor" onclick="Estoque._clicarFotoVar(this)">📷</button>
+      <input type="file" accept="image/*" style="display:none" onchange="Estoque._carregarFotoVar(this)">
       <input class="form-control var-qty" type="number" min="0" value="0" placeholder="Qtd" style="flex:1;min-width:60px">
-      <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.parentElement.remove()" title="Remover">✕</button>`;
+      <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.closest('.var-row').remove()" title="Remover">✕</button>`;
     cont.appendChild(div);
     div.querySelector('.var-tam').focus();
   },
 
   coletarVariacoes: () => {
     const variacoes = {};
-    document.querySelectorAll('#variacoesCont .form-row').forEach(row => {
+    document.querySelectorAll('#variacoesCont .var-row').forEach(row => {
       const tam = row.querySelector('.var-tam').value.trim();
       const cor = row.querySelector('.var-cor').value.trim();
       const qty = parseInt(row.querySelector('.var-qty').value) || 0;
@@ -232,6 +248,59 @@ const Estoque = {
       }
     });
     return variacoes;
+  },
+
+  coletarFotosVariacoes: () => {
+    const fotos = {};
+    document.querySelectorAll('#variacoesCont .var-row').forEach(row => {
+      const cor = row.querySelector('.var-cor').value.trim().toLowerCase();
+      const img = row.querySelector('.var-foto-btn img');
+      if (cor && img && img.src && img.src.startsWith('data:')) {
+        fotos[cor] = img.src;
+      }
+    });
+    return fotos;
+  },
+
+  _clicarFotoVar: (btn) => {
+    btn.nextElementSibling.click();
+  },
+
+  _carregarFotoVar: (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const row = input.closest('.var-row');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 600;
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const b64 = canvas.toDataURL('image/jpeg', 0.80);
+        const btn = row.querySelector('.var-foto-btn');
+        btn.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
+        input.value = '';
+        const cor = row.querySelector('.var-cor').value.trim().toLowerCase();
+        if (cor) _fotosVariacoes[cor] = b64;
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _atualizarFotoBtn: (corInput) => {
+    const row = corInput.closest('.var-row');
+    const cor = corInput.value.trim().toLowerCase();
+    const btn = row.querySelector('.var-foto-btn');
+    if (cor && _fotosVariacoes[cor]) {
+      btn.innerHTML = `<img src="${_fotosVariacoes[cor]}" style="width:100%;height:100%;object-fit:cover">`;
+    } else if (!btn.querySelector('img')) {
+      btn.innerHTML = '📷';
+    }
   },
 
   selecionarFoto: (input) => {
@@ -283,6 +352,7 @@ const Estoque = {
       estoqueMinimo: parseInt(f.estoqueMinimo.value) || 5,
       descricao: f.descricao.value.trim(),
       foto: _fotoBase64,
+      fotosVariacoes: Estoque.coletarFotosVariacoes(),
       variacoes,
       ativo: true
     };

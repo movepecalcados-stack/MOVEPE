@@ -96,8 +96,8 @@
           <div class="card">
             <div class="card-title">⚙️ Configurações</div>
             <div class="form-group">
-              <label class="form-label">Tamanho da etiqueta (Argox)</label>
-              <select class="form-control" id="selTamanho" onchange="Etiquetas.renderPreview()">
+              <label class="form-label">Preset de tamanho</label>
+              <select class="form-control" id="selTamanho" onchange="Etiquetas.aplicarPreset()">
                 <option value="55x25" selected>55 × 25 mm — Argox OS-214 (Tiny ERP)</option>
                 <option value="50x25">50 × 25 mm</option>
                 <option value="40x25">40 × 25 mm</option>
@@ -105,6 +105,70 @@
                 <option value="60x40">60 × 40 mm</option>
                 <option value="80x40">80 × 40 mm</option>
               </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="form-group">
+                <label class="form-label">Largura do papel (mm)</label>
+                <input type="number" id="cfgPageW" class="form-control" value="100" min="30" max="300" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Altura (mm)</label>
+                <input type="number" id="cfgH" class="form-control" value="25" min="10" max="100" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Largura coluna (mm)</label>
+                <input type="number" id="cfgW" class="form-control" value="44" min="10" max="120" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gap entre colunas (mm)</label>
+                <input type="number" id="cfgGap" class="form-control" value="0.3" min="0" max="20" step="0.1" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Margem esquerda (mm)</label>
+                <input type="number" id="cfgMarginL" class="form-control" value="0" min="0" max="30" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Margem direita (mm)</label>
+                <input type="number" id="cfgMarginR" class="form-control" value="0" min="0" max="30" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Altura cód. barras (mm)</label>
+                <input type="number" id="cfgBcH" class="form-control" value="9" min="3" max="30" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Largura cód. barras (mm)</label>
+                <input type="number" id="cfgBcW" class="form-control" value="40" min="5" max="120" step="0.5" oninput="Etiquetas.renderPreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Ajuste posição (0 = centro)</label>
+                <input type="number" id="cfgBcX" class="form-control" value="0" min="-20" max="20" step="0.5" oninput="Etiquetas.renderPreview()" title="Negativo = mais à esquerda, positivo = mais à direita">
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+              <button class="btn btn-primary btn-sm" onclick="Etiquetas.salvarConfig()">💾 Salvar configuração</button>
+              <button class="btn btn-outline btn-sm" onclick="Etiquetas.resetConfig()">↩️ Restaurar padrão</button>
+            </div>
+
+            <div class="form-group" style="margin-top:4px">
+              <label class="form-label">Exibir na etiqueta</label>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px">
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowLoja" checked onchange="Etiquetas.renderPreview()"> Nome da loja
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowNome" checked onchange="Etiquetas.renderPreview()"> Nome produto
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowPreco" checked onchange="Etiquetas.renderPreview()"> Preço
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowVar" checked onchange="Etiquetas.renderPreview()"> Variação/tam.
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowCodNum" checked onchange="Etiquetas.renderPreview()"> Número cód. barras
+                </label>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Buscar produto</label>
