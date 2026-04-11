@@ -6,6 +6,7 @@ let _filtroStatus = 'todos';
 let _buscaCred = '';
 let _mensalExpandido = false;
 let _pagamentoAtual = null; // { credId, parcelaIdx, valorOriginal, jurosCalc }
+let _pagarTudoAtual = null; // { credId, parcelas: [{idx, numero, vencimento, valor, juros, status}], totalSemJuros, totalJuros }
 let _renegociacaoAtual = null; // { credId }
 
 const CARENCIA_DIAS = 5;
@@ -244,6 +245,7 @@ const CrediarioModule = {
                 </span>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.verDetalhes('${cred.id}')">🧾 Detalhes</button>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.imprimirContrato('${cred.id}')" title="Imprimir contrato de crediário">📄 Contrato</button>
+                ${!quitado && pendentes.length > 1 ? `<button class="btn btn-success btn-sm" onclick="CrediarioModule.pagarTudo('${cred.id}')" title="Pagar toda a dívida de uma vez">💰 Pagar Tudo</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.renegociar('${cred.id}')" title="Renegociar dívida">🔄 Reneg.</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.enviarWhatsApp('${cred.id}')" title="Enviar cobrança por WhatsApp" style="color:#25D366;border-color:#25D366">📱 WhatsApp</button>` : ''}
               </div>
@@ -385,6 +387,144 @@ const CrediarioModule = {
       Utils.toast(`Abatimento de ${Utils.moeda(recebido)} registrado. Saldo restante: ${Utils.moeda(saldo)}`, 'success');
     }
     _pagamentoAtual = null;
+  },
+
+  pagarTudo: (credId) => {
+    const cred = DB.Crediario.buscar(credId);
+    if (!cred) return;
+
+    const pendentes = cred.parcelas
+      .map((p, idx) => ({ idx, parcela: p }))
+      .filter(({ parcela }) => parcela.status !== 'pago');
+
+    if (pendentes.length === 0) { Utils.toast('Nenhuma parcela pendente', 'warning'); return; }
+
+    let totalSemJuros = 0;
+    let totalJuros = 0;
+    const parcelas = pendentes.map(({ idx, parcela }) => {
+      const valor = parseFloat(parcela.valor) || 0;
+      const st = Utils.statusParcela(parcela.vencimento, parcela.status);
+      const { juros } = st === 'atrasado' ? calcularJuros(parcela.vencimento, valor) : { juros: 0 };
+      totalSemJuros += valor;
+      totalJuros += juros;
+      return { idx, numero: parcela.numero || (idx + 1), vencimento: parcela.vencimento, valor, juros, status: st };
+    });
+
+    _pagarTudoAtual = { credId, parcelas, totalSemJuros, totalJuros };
+
+    document.getElementById('ptdCliente').textContent = cred.clienteNome || 'Cliente';
+    document.getElementById('ptdQtdParcelas').textContent = `${parcelas.length} parcela(s) pendente(s)`;
+
+    document.getElementById('ptdParcelasList').innerHTML = parcelas.map(p => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--text-muted)">${p.numero}ª parcela · ${Utils.data(p.vencimento)}
+          <span class="badge ${p.status === 'atrasado' ? 'badge-danger' : 'badge-warning'}" style="font-size:10px;margin-left:4px">${p.status === 'atrasado' ? 'Atrasada' : 'Pendente'}</span>
+        </span>
+        <span style="font-weight:600">
+          ${Utils.moeda(p.valor)}${p.juros > 0 ? `<span style="color:var(--danger);font-size:11px;font-weight:400"> +${Utils.moeda(p.juros)} juros</span>` : ''}
+        </span>
+      </div>`).join('');
+
+    document.getElementById('ptdSemJuros').textContent = Utils.moeda(totalSemJuros);
+
+    const jurosBloco = document.getElementById('ptdJurosBloco');
+    if (totalJuros > 0) {
+      jurosBloco.style.display = '';
+      document.getElementById('ptdJurosCalc').textContent = Utils.moeda(totalJuros);
+      document.getElementById('ptdJurosInput').value = totalJuros.toFixed(2);
+      document.getElementById('ptdIncluirJuros').checked = true;
+    } else {
+      jurosBloco.style.display = 'none';
+    }
+
+    CrediarioModule.atualizarTotalTudo();
+    Utils.abrirModal('modalPagarTudo');
+    setTimeout(() => document.getElementById('ptdRecebido').select(), 150);
+  },
+
+  atualizarTotalTudo: () => {
+    if (!_pagarTudoAtual) return;
+    const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
+    const juros = incluirJuros ? (parseFloat(document.getElementById('ptdJurosInput').value) || 0) : 0;
+    const total = _pagarTudoAtual.totalSemJuros + juros;
+    document.getElementById('ptdTotal').textContent = Utils.moeda(total);
+    document.getElementById('ptdRecebido').value = total.toFixed(2);
+    document.getElementById('ptdJurosInputWrap').style.display = incluirJuros ? '' : 'none';
+    document.getElementById('ptdTrocoBloco').style.display = 'none';
+  },
+
+  atualizarTrocoTudo: () => {
+    if (!_pagarTudoAtual) return;
+    const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
+    const juros = incluirJuros ? (parseFloat(document.getElementById('ptdJurosInput').value) || 0) : 0;
+    const total = _pagarTudoAtual.totalSemJuros + juros;
+    const recebido = parseFloat(document.getElementById('ptdRecebido').value) || 0;
+    const bloco = document.getElementById('ptdTrocoBloco');
+    const label = document.getElementById('ptdTrocoLabel');
+    const diff = recebido - total;
+
+    if (recebido <= 0) { bloco.style.display = 'none'; return; }
+    bloco.style.display = '';
+
+    if (diff > 0.009) {
+      bloco.style.background = 'rgba(59,130,246,0.1)';
+      bloco.style.border = '1px solid var(--primary)';
+      label.style.color = 'var(--primary)';
+      label.textContent = `Troco: ${Utils.moeda(diff)}`;
+    } else if (diff < -0.009) {
+      bloco.style.background = 'rgba(239,68,68,0.08)';
+      bloco.style.border = '1px solid var(--danger)';
+      label.style.color = 'var(--danger)';
+      label.textContent = `Valor insuficiente — faltam ${Utils.moeda(Math.abs(diff))}`;
+    } else {
+      bloco.style.background = 'rgba(34,197,94,0.1)';
+      bloco.style.border = '1px solid var(--success)';
+      label.style.color = 'var(--success)';
+      label.textContent = 'Pagamento exato ✓';
+    }
+  },
+
+  confirmarPagarTudo: () => {
+    if (!_pagarTudoAtual) return;
+    const { credId, parcelas, totalSemJuros } = _pagarTudoAtual;
+
+    const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
+    const juros = incluirJuros ? (parseFloat(document.getElementById('ptdJurosInput').value) || 0) : 0;
+    const totalDevido = totalSemJuros + juros;
+    const recebido = parseFloat(document.getElementById('ptdRecebido').value) || 0;
+
+    if (recebido <= 0) { Utils.toast('Informe o valor recebido', 'error'); return; }
+    if (recebido < totalDevido - 0.009) {
+      Utils.toast('Valor insuficiente para quitar todas as parcelas', 'error'); return;
+    }
+
+    const cred = DB.Crediario.buscar(credId);
+    if (!cred) return;
+
+    const lista = DB.Crediario.listar();
+    const credObj = lista.find(c => c.id === credId);
+    const hoje = Utils.hoje();
+
+    parcelas.forEach(({ idx }) => {
+      credObj.parcelas[idx].status = 'pago';
+      credObj.parcelas[idx].dataPagamento = hoje;
+    });
+    DB.Crediario.salvar(credObj);
+
+    DB.FluxoCaixa.salvar({
+      tipo: 'entrada',
+      descricao: `Crediário - ${cred.clienteNome} - Quitação total (${parcelas.length} parcela(s))${juros > 0 ? ' + juros' : ''}`,
+      valor: totalDevido,
+      categoria: 'crediario'
+    });
+
+    const troco = recebido - totalDevido;
+    Utils.fecharModal('modalPagarTudo');
+    CrediarioModule.renderStats();
+    CrediarioModule.renderMensal();
+    CrediarioModule.renderLista();
+    Utils.toast(troco > 0.01 ? `Dívida quitada! Troco: ${Utils.moeda(troco)}` : 'Dívida quitada com sucesso!', 'success');
+    _pagarTudoAtual = null;
   },
 
   verDetalhes: (credId) => {
