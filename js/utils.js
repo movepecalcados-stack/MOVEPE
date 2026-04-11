@@ -526,6 +526,10 @@ ${linhaH}
     const now = new Date();
     const dataStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+    const formaLinha = installment.formaPagamento
+      ? `Pagamento: ${Utils.labelFormaPagamento(installment.formaPagamento)}\n`
+      : '';
+
     return `
 ${linhaH}
      COMPROVANTE DE PAGAMENTO
@@ -538,7 +542,7 @@ Parcela:  ${installment.numero || ''}
 Vencto:   ${Utils.data(installment.vencimento)}
 ${linhaL}
 VALOR PAGO:    ${Utils.moeda(installment.valor).padStart(18)}
-${linhaL}
+${formaLinha}${linhaL}
 Crediário ID: ${(installment.credId || '').substring(0, 8).toUpperCase()}
 ${linhaH}
     Obrigado pelo pagamento!

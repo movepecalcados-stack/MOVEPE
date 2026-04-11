@@ -124,12 +124,23 @@
             </div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--primary)">
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--primary);margin-bottom:14px">
           <span style="font-weight:600">Total a receber</span>
           <span id="pagTotal" style="font-weight:700;font-size:18px;color:var(--primary)"></span>
         </div>
 
-        <div style="margin-top:14px">
+        <!-- Forma de pagamento -->
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label" style="font-weight:600">Forma de Pagamento</label>
+          <div class="pagamento-formas" id="pagFormasBtns">
+            <button class="forma-btn" data-modal="pag" data-forma="dinheiro"      onclick="CrediarioModule.selecionarFormaModal('pag','dinheiro')">💵 Dinheiro</button>
+            <button class="forma-btn" data-modal="pag" data-forma="pix"           onclick="CrediarioModule.selecionarFormaModal('pag','pix')">📱 PIX</button>
+            <button class="forma-btn" data-modal="pag" data-forma="cartao_credito" onclick="CrediarioModule.selecionarFormaModal('pag','cartao_credito')">💳 Crédito</button>
+            <button class="forma-btn" data-modal="pag" data-forma="cartao_debito"  onclick="CrediarioModule.selecionarFormaModal('pag','cartao_debito')">💳 Débito</button>
+          </div>
+        </div>
+
+        <div>
           <label class="form-label" style="font-weight:600">Valor recebido (R$)</label>
           <input type="number" id="pagRecebido" class="form-control" min="0" step="0.01"
             oninput="CrediarioModule.atualizarRecebido()"
@@ -204,6 +215,17 @@
         <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--primary);margin-bottom:14px">
           <span style="font-weight:600">Total a receber</span>
           <span id="ptdTotal" style="font-weight:700;font-size:20px;color:var(--primary)"></span>
+        </div>
+
+        <!-- Forma de pagamento -->
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label" style="font-weight:600">Forma de Pagamento</label>
+          <div class="pagamento-formas" id="ptdFormasBtns">
+            <button class="forma-btn" data-modal="ptd" data-forma="dinheiro"       onclick="CrediarioModule.selecionarFormaModal('ptd','dinheiro')">💵 Dinheiro</button>
+            <button class="forma-btn" data-modal="ptd" data-forma="pix"            onclick="CrediarioModule.selecionarFormaModal('ptd','pix')">📱 PIX</button>
+            <button class="forma-btn" data-modal="ptd" data-forma="cartao_credito" onclick="CrediarioModule.selecionarFormaModal('ptd','cartao_credito')">💳 Crédito</button>
+            <button class="forma-btn" data-modal="ptd" data-forma="cartao_debito"  onclick="CrediarioModule.selecionarFormaModal('ptd','cartao_debito')">💳 Débito</button>
+          </div>
         </div>
 
         <!-- Valor recebido -->

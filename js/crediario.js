@@ -289,6 +289,9 @@ const CrediarioModule = {
     document.getElementById('pagTotal').textContent = Utils.moeda(totalModal);
     document.getElementById('pagRecebido').value = totalModal.toFixed(2);
     document.getElementById('pagTrocoBloco').style.display = 'none';
+    // Limpa forma de pagamento
+    document.querySelectorAll('#pagFormasBtns .forma-btn').forEach(b => b.classList.remove('ativo'));
+    _pagamentoAtual.formaPagamento = '';
     Utils.abrirModal('modalPagamento');
     setTimeout(() => document.getElementById('pagRecebido').select(), 100);
   },
@@ -332,15 +335,28 @@ const CrediarioModule = {
     }
   },
 
+  selecionarFormaModal: (prefixo, forma) => {
+    // Marca botão ativo
+    document.querySelectorAll(`#${prefixo}FormasBtns .forma-btn`).forEach(b => {
+      b.classList.toggle('ativo', b.dataset.forma === forma);
+    });
+    // Salva no estado correto
+    if (prefixo === 'pag' && _pagamentoAtual) _pagamentoAtual.formaPagamento = forma;
+    if (prefixo === 'ptd' && _pagarTudoAtual) _pagarTudoAtual.formaPagamento = forma;
+  },
+
   confirmarPagamento: () => {
     if (!_pagamentoAtual) return;
     const { credId, parcelaIdx, valorOriginal } = _pagamentoAtual;
+    const forma = _pagamentoAtual.formaPagamento || '';
     const juros = parseFloat(document.getElementById('pagJurosInput')?.value) || 0;
     const totalDevido = valorOriginal + juros;
     const recebido = parseFloat(document.getElementById('pagRecebido').value) || 0;
 
+    if (!forma) { Utils.toast('Selecione a forma de pagamento!', 'warning'); return; }
     if (recebido <= 0) { Utils.toast('Informe o valor recebido', 'error'); return; }
 
+    const formaLabel = Utils.labelFormaPagamento(forma);
     const cred = DB.Crediario.buscar(credId);
     if (!cred) return;
     const parcela = cred.parcelas[parcelaIdx];
@@ -352,13 +368,14 @@ const CrediarioModule = {
       DB.Crediario.pagarParcela(credId, parcelaIdx);
       DB.FluxoCaixa.salvar({
         tipo: 'entrada',
-        descricao: `Crediário - ${cred.clienteNome} - Parcela ${parcelaNum}/${totalParcelas}${juros > 0 ? ' + juros' : ''}`,
+        descricao: `Crediário - ${cred.clienteNome} - Parcela ${parcelaNum}/${totalParcelas}${juros > 0 ? ' + juros' : ''} (${formaLabel})`,
         valor: totalDevido,
-        categoria: 'crediario'
+        categoria: 'crediario',
+        formaPagamento: forma
       });
       const troco = recebido - totalDevido;
       Utils.fecharModal('modalPagamento');
-      CrediarioModule.imprimirParcela(credId, parcelaIdx);
+      CrediarioModule.imprimirParcela(credId, parcelaIdx, forma);
       CrediarioModule.renderStats();
       CrediarioModule.renderMensal();
       CrediarioModule.renderLista();
@@ -375,9 +392,10 @@ const CrediarioModule = {
 
       DB.FluxoCaixa.salvar({
         tipo: 'entrada',
-        descricao: `Crediário - ${cred.clienteNome} - Abatimento parcela ${parcelaNum}/${totalParcelas} (saldo: ${Utils.moeda(saldo)})`,
+        descricao: `Crediário - ${cred.clienteNome} - Abatimento parcela ${parcelaNum}/${totalParcelas} (saldo: ${Utils.moeda(saldo)}) (${formaLabel})`,
         valor: recebido,
-        categoria: 'crediario'
+        categoria: 'crediario',
+        formaPagamento: forma
       });
 
       Utils.fecharModal('modalPagamento');
@@ -459,6 +477,10 @@ const CrediarioModule = {
       jurosBloco.style.display = 'none';
     }
 
+    // Limpa forma de pagamento
+    document.querySelectorAll('#ptdFormasBtns .forma-btn').forEach(b => b.classList.remove('ativo'));
+    _pagarTudoAtual.formaPagamento = '';
+
     CrediarioModule.atualizarTotalTudo();
     Utils.abrirModal('modalPagarTudo');
     setTimeout(() => document.getElementById('ptdRecebido').select(), 150);
@@ -509,16 +531,20 @@ const CrediarioModule = {
   confirmarPagarTudo: () => {
     if (!_pagarTudoAtual) return;
     const { clienteNome, entries, totalSemJuros } = _pagarTudoAtual;
+    const forma = _pagarTudoAtual.formaPagamento || '';
 
     const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
     const juros = incluirJuros ? (parseFloat(document.getElementById('ptdJurosInput').value) || 0) : 0;
     const totalDevido = totalSemJuros + juros;
     const recebido = parseFloat(document.getElementById('ptdRecebido').value) || 0;
 
+    if (!forma) { Utils.toast('Selecione a forma de pagamento!', 'warning'); return; }
     if (recebido <= 0) { Utils.toast('Informe o valor recebido', 'error'); return; }
     if (recebido < totalDevido - 0.009) {
       Utils.toast('Valor insuficiente para quitar todas as parcelas', 'error'); return;
     }
+
+    const formaLabel = Utils.labelFormaPagamento(forma);
 
     // Agrupa as entradas por credId para salvar cada compra de uma vez
     const lista = DB.Crediario.listar();
@@ -541,9 +567,10 @@ const CrediarioModule = {
 
     DB.FluxoCaixa.salvar({
       tipo: 'entrada',
-      descricao: `Crediário - ${clienteNome} - Quitação de todas as dívidas (${entries.length} parcela(s))${juros > 0 ? ' + juros' : ''}`,
+      descricao: `Crediário - ${clienteNome} - Quitação de todas as dívidas (${entries.length} parcela(s))${juros > 0 ? ' + juros' : ''} (${formaLabel})`,
       valor: totalDevido,
-      categoria: 'crediario'
+      categoria: 'crediario',
+      formaPagamento: forma
     });
 
     const troco = recebido - totalDevido;
@@ -683,7 +710,7 @@ const CrediarioModule = {
     Utils.imprimirComprovante(linhas.join('\n'));
   },
 
-  imprimirParcela: (credId, parcelaIdx) => {
+  imprimirParcela: (credId, parcelaIdx, formaPagamento) => {
     const cred = DB.Crediario.buscar(credId);
     if (!cred) return;
     const parcela = cred.parcelas[parcelaIdx];
@@ -694,7 +721,8 @@ const CrediarioModule = {
       numero: `${parcela.numero}/${cred.parcelas.length}`,
       vencimento: parcela.vencimento,
       valor: parcela.valor,
-      credId: cred.id
+      credId: cred.id,
+      formaPagamento: formaPagamento || null
     });
     Utils.imprimirComprovante(comp);
   },
