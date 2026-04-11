@@ -20,7 +20,11 @@ const Utils = {
     return new Date(iso).toLocaleString('pt-BR');
   },
 
-  hoje: () => new Date().toISOString().substring(0, 10),
+  hoje: () => {
+    // Retorna data local (Brasil) no formato YYYY-MM-DD, não UTC
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  },
 
   hojeFormatado: () => {
     return new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });

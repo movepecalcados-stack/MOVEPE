@@ -345,8 +345,12 @@ const DB = (() => {
     },
 
     listarHoje: () => {
-      const hoje = new Date().toISOString().substring(0, 10);
-      return _get('vendas').filter(v => v.criadoEm && v.criadoEm.startsWith(hoje));
+      // Usa data local (Brasil) para não perder vendas feitas depois das 21h
+      const agora = new Date();
+      const hoje = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
+      const inicioHoje = new Date(hoje + 'T00:00:00').toISOString();
+      const fimHoje    = new Date(hoje + 'T23:59:59').toISOString();
+      return _get('vendas').filter(v => v.criadoEm && v.criadoEm >= inicioHoje && v.criadoEm <= fimHoje);
     },
 
     listarPorPeriodo: (inicio, fim) => {

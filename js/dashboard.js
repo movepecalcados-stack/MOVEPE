@@ -83,7 +83,8 @@ const Dashboard = {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().substring(0, 10);
+      // Usa data local para não deslocar o dia após 21h
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const label = d.toLocaleDateString('pt-BR', { weekday: 'short' });
       const vendas = DB.Vendas.listarPorPeriodo(dateStr, dateStr);
       const total = vendas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
@@ -291,9 +292,13 @@ const Dashboard = {
     document.getElementById('statTicketSub').textContent = vendasHoje.length > 0
       ? `média de ${vendasHoje.length} venda(s)` : 'sem vendas hoje';
 
-    // Crediário recebido hoje
+    // Crediário recebido hoje (usa horário local para não perder lançamentos noturnos)
+    const agora = new Date();
+    const hojeLocal = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
+    const inicioHojeLocal = new Date(hojeLocal + 'T00:00:00').toISOString();
+    const fimHojeLocal    = new Date(hojeLocal + 'T23:59:59').toISOString();
     const credHoje = DB.FluxoCaixa.listar()
-      .filter(f => f.categoria === 'crediario' && f.data && f.data.startsWith(hoje));
+      .filter(f => f.categoria === 'crediario' && f.data && f.data >= inicioHojeLocal && f.data <= fimHojeLocal);
     const totalCredHoje = credHoje.reduce((s, f) => s + (parseFloat(f.valor) || 0), 0);
     document.getElementById('statCredHoje').textContent = Utils.moeda(totalCredHoje);
     document.getElementById('statCredQtd').textContent = credHoje.length + ' recebimento(s)';

@@ -620,9 +620,18 @@ const PDV = {
       nome.style.color = 'var(--success)';
       const tel = _clienteSelecionado.telefone ? ' · ' + _clienteSelecionado.telefone : '';
       const cpf = _clienteSelecionado.cpf ? ' · CPF: ' + _clienteSelecionado.cpf : '';
-      detalhe.textContent = `Compra vinculada ao histórico ✓${tel}${cpf}`;
-      info.style.borderColor = 'var(--success)';
-      info.style.background = 'var(--success-dim)';
+      // Mostra saldo devedor do crediário se tiver
+      const credsPendentes = DB.Crediario.listar().filter(c =>
+        (c.clienteId === _clienteSelecionado.id || c.clienteNome === _clienteSelecionado.nome) &&
+        c.parcelas.some(p => p.status !== 'pago')
+      );
+      const saldoCred = credsPendentes.reduce((s, c) =>
+        s + c.parcelas.filter(p => p.status !== 'pago').reduce((ss, p) => ss + (parseFloat(p.valor) || 0), 0), 0
+      );
+      const credInfo = saldoCred > 0 ? ` · ⚠️ Crediário em aberto: ${Utils.moeda(saldoCred)}` : '';
+      detalhe.textContent = `Compra vinculada ao histórico ✓${tel}${cpf}${credInfo}`;
+      info.style.borderColor = saldoCred > 0 ? 'var(--warning)' : 'var(--success)';
+      info.style.background = saldoCred > 0 ? 'rgba(245,158,11,0.08)' : 'var(--success-dim)';
       if (btn) btn.textContent = 'Trocar';
     } else {
       nome.textContent = 'Venda sem identificação';
@@ -1136,7 +1145,7 @@ const PDV = {
 
     // Crediário
     if (_formaPagamento === 'crediario') {
-      const numParcelas = parseInt(document.getElementById('inputNumeroParcelas').value) || 1;
+      const numParcelas = Math.max(1, parseInt(document.getElementById('inputNumeroParcelas').value) || 1);
       const venc1 = document.getElementById('inputVencimento1').value || Utils.adicionarMeses(Utils.hoje(), 1);
       const valorParcela = parseFloat((total / numParcelas).toFixed(2));
       const parcelas = [];
