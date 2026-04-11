@@ -81,7 +81,7 @@ const Historico = {
         `${i.nome}${i.tamanho ? ' (Tam ' + i.tamanho.split('||').join(' ') + ')' : ''} x${i.quantidade || 1}`
       ).join(', ');
 
-      const formaLabel = Utils.labelFormaPagamento(v.formaPagamento);
+      const formaLabel = Utils.labelFormaPagamento(v.formaPagamento, v.parcelasCartao);
       const formaBadge = {
         dinheiro: 'badge-success',
         cartao_credito: 'badge-info',

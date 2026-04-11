@@ -82,7 +82,7 @@ const Utils = {
     return { taxaPct, valorTaxa, valorLiquido: valor - valorTaxa };
   },
 
-  labelFormaPagamento: (forma) => {
+  labelFormaPagamento: (forma, parcelas) => {
     const map = {
       dinheiro: 'Dinheiro',
       cartao_credito: 'Cartão Crédito',
@@ -90,7 +90,11 @@ const Utils = {
       pix: 'PIX',
       crediario: 'Crediário'
     };
-    return map[forma] || forma || '';
+    const base = map[forma] || forma || '';
+    if (forma === 'cartao_credito' && parcelas && parseInt(parcelas) > 1) {
+      return `${base} ${parseInt(parcelas)}x`;
+    }
+    return base;
   },
 
   // ---- CEP ----
@@ -469,10 +473,10 @@ ${itens}${linhaL}
 ${descontoLinha}                   TOTAL: ${Utils.moeda(venda.total).padStart(12)}
 ${linhaL}
 ${venda.formasPagamento && venda.formasPagamento.length > 0
-  ? venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma).padEnd(20)} ${Utils.moeda(f.valor).padStart(12)}`).join('\n')
-  : `Forma: ${Utils.labelFormaPagamento(venda.formaPagamento)}`}
-${venda.valorPago ? `Pago:  ${Utils.moeda(venda.valorPago).padStart(21)}` : ''}
-${venda.troco ? `Troco: ${Utils.moeda(venda.troco).padStart(21)}` : ''}
+  ? venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma, f.parcelas).padEnd(20)} ${Utils.moeda(f.valor).padStart(12)}`).join('\n')
+  : `Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento, venda.parcelasCartao)}`}
+${venda.valorPago && venda.formaPagamento === 'dinheiro' ? `Pago:  ${Utils.moeda(venda.valorPago).padStart(21)}` : ''}
+${venda.troco > 0 ? `Troco: ${Utils.moeda(venda.troco).padStart(21)}` : ''}
 ${linhaL}
 ${cliente ? `Cliente: ${cliente.nome}` : ''}
 ${linhaH}
@@ -507,9 +511,9 @@ ${linhaH}
     }
     msg += `\n💰 *Total: ${Utils.moeda(venda.total)}*\n`;
     if (venda.formasPagamento && venda.formasPagamento.length > 0) {
-      msg += venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma)}: ${Utils.moeda(f.valor)}`).join('\n') + '\n';
+      msg += venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma, f.parcelas)}: ${Utils.moeda(f.valor)}`).join('\n') + '\n';
     } else {
-      msg += `Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento)}\n`;
+      msg += `Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento, venda.parcelasCartao)}\n`;
     }
     if (venda.troco > 0) msg += `Troco: ${Utils.moeda(venda.troco)}\n`;
     msg += `\nDúvidas? Estamos à disposição!`;

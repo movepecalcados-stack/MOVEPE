@@ -107,19 +107,18 @@ const PDV = {
         return;
       }
 
-      // Tecla normal — acumula se vier rápido (< 80ms) = scanner
+      // Tecla normal — acumula; se parar por 400ms sem Enter, tenta processar como scanner
       if (e.key.length === 1) {
-        if (intervalo < 80 || buffer.length > 0) {
-          buffer += e.key;
-          document.getElementById('scannerIndicator').style.display = 'inline';
-          // Limpa buffer se parar de digitar por 300ms
-          clearTimeout(PDV._scannerTimeout);
-          PDV._scannerTimeout = setTimeout(() => {
-            // Se parou e não veio Enter, era digitação manual
-            if (buffer.length < 8) buffer = '';
-            document.getElementById('scannerIndicator').style.display = 'none';
-          }, 300);
-        }
+        buffer += e.key;
+        document.getElementById('scannerIndicator').style.display = 'inline';
+        clearTimeout(PDV._scannerTimeout);
+        PDV._scannerTimeout = setTimeout(() => {
+          const cod = buffer.trim();
+          buffer = '';
+          document.getElementById('scannerIndicator').style.display = 'none';
+          // Scanners sem sufixo Enter: processa se tiver >= 6 chars chegados rápido
+          if (cod.length >= 6) PDV.processarCodigoBarras(cod);
+        }, 400);
       }
     });
   },
@@ -137,21 +136,54 @@ const PDV = {
     // 1. Tenta match exato no campo codigoBarras do produto
     produtoEncontrado = produtos.find(p => p.codigoBarras === codigo);
 
-    // 2. Se não achou, busca pelo código gerado (idCurto + tamanho)
+    // 2. Busca pelo código gerado — tenta formato novo (hash 2 chars) depois formatos antigos
     if (!produtoEncontrado) {
-      for (const p of produtos) {
-        for (const chave of Object.keys(p.variacoes || {})) {
-          const codGerado = (() => {
-            const [tam] = chave.split('||');
-            if (p.codigoBarras) return (p.codigoBarras + tam).replace(/[^A-Za-z0-9]/g, '').substring(0, 20);
-            const idCurto = p.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 8);
-            return (idCurto + tam.replace(/\D/g, '')).substring(0, 20);
-          })();
-          if (codGerado === codigo) {
-            produtoEncontrado = p;
-            variacaoEncontrada = chave;
-            break;
+      // Hash de 2 chars igual ao gerarCodigo em etiquetas.js
+      const hashVar = (tam, cor) => {
+        const s = (tam + (cor && cor !== 'undefined' && cor !== 'null' ? cor : ''))
+          .replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = ((h * 31) + s.charCodeAt(i)) % 1296;
+        const c = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        return c[Math.floor(h / 36)] + c[h % 36];
+      };
+
+      // Formato atual: idCurto(6) + hash(2) = 8 chars
+      const gerarNovo = (p, chave) => {
+        const [tam, cor] = chave.split('||');
+        const idCurto = p.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 6);
+        return idCurto + hashVar(tam, cor);
+      };
+
+      // Formatos antigos (retrocompatibilidade com etiquetas já impressas)
+      const gerarAntigo = (p, chave, corLen) => {
+        const [tam, cor] = chave.split('||');
+        const corCode = (corLen > 0 && cor && cor !== 'undefined' && cor !== 'null')
+          ? cor.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, corLen)
+          : '';
+        if (p.codigoBarras) return (p.codigoBarras + tam + corCode).replace(/[^A-Za-z0-9]/g, '').substring(0, 20);
+        const idCurto = p.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 8);
+        return (idCurto + tam.replace(/\D/g, '') + corCode).substring(0, 20);
+      };
+
+      // Tenta novo formato primeiro, depois antigos (4 chars cor, 6 chars cor, sem cor)
+      const tentativas = [
+        (p, chave) => gerarNovo(p, chave),
+        (p, chave) => gerarAntigo(p, chave, 4),
+        (p, chave) => gerarAntigo(p, chave, 0),
+        (p, chave) => gerarAntigo(p, chave, 6),
+      ];
+
+      for (const gerarCod of tentativas) {
+        for (const p of produtos) {
+          for (const chave of Object.keys(p.variacoes || {})) {
+            if (gerarCod(p, chave) === codigo) {
+              produtoEncontrado = p;
+              variacaoEncontrada = chave;
+              break;
+            }
           }
+          if (produtoEncontrado) break;
         }
         if (produtoEncontrado) break;
       }
@@ -171,9 +203,12 @@ const PDV = {
         Utils.toast(`${produtoEncontrado.nome} Tam.${tam} — sem estoque!`, 'error');
         return;
       }
-      // Adiciona ao carrinho
+      // Adiciona ao carrinho e limpa a barra de busca
       _tamSelecionado[produtoEncontrado.id] = chave;
       PDV.adicionarAoCarrinho(produtoEncontrado.id);
+      document.getElementById('buscaInput').value = '';
+      PDV.renderProdutos('');
+      document.getElementById('buscaInput').focus();
       Utils.toast(`✅ ${produtoEncontrado.nome} Tam.${tam}${cor && cor !== 'undefined' ? ' ' + cor : ''} adicionado`, 'success');
       return;
     }
@@ -183,6 +218,9 @@ const PDV = {
     if (vars.length === 1) {
       _tamSelecionado[produtoEncontrado.id] = vars[0];
       PDV.adicionarAoCarrinho(produtoEncontrado.id);
+      document.getElementById('buscaInput').value = '';
+      PDV.renderProdutos('');
+      document.getElementById('buscaInput').focus();
       Utils.toast(`✅ ${produtoEncontrado.nome} adicionado`, 'success');
     } else {
       // Mostra o produto em destaque para selecionar tamanho
@@ -260,6 +298,9 @@ const PDV = {
         <div class="empty-icon">🔍</div>
         <div class="empty-title">Nenhum produto encontrado</div>
         <div class="empty-sub">Tente outro nome, marca ou SKU</div>
+        <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="PDV.abrirCadastroRapido()">
+          ➕ Cadastrar novo produto
+        </button>
       </div>`;
       return;
     }
@@ -594,6 +635,79 @@ const PDV = {
   },
 
   // === FOTO DO PRODUTO (PDV) ===
+  // ---- CADASTRO RÁPIDO DE PRODUTO ----
+  abrirCadastroRapido: () => {
+    const busca = document.getElementById('buscaInput').value.trim();
+    document.getElementById('rpNome').value = busca;
+    document.getElementById('rpMarca').value = '';
+    document.getElementById('rpPrecoVenda').value = '';
+    document.getElementById('rpPrecoCusto').value = '';
+    document.getElementById('rpTamanho').value = '';
+    document.getElementById('rpCor').value = '';
+    document.getElementById('rpEstoque').value = '1';
+    document.getElementById('rpTipo').value = 'calcado_adulto';
+    Utils.abrirModal('modalProdutoRapido');
+    setTimeout(() => {
+      const el = document.getElementById(busca ? 'rpPrecoVenda' : 'rpNome');
+      if (el) el.focus();
+    }, 120);
+  },
+
+  salvarProdutoRapido: () => {
+    const nome = document.getElementById('rpNome').value.trim();
+    const precoVenda = parseFloat(document.getElementById('rpPrecoVenda').value) || 0;
+
+    if (!nome) { Utils.toast('Informe o nome do produto', 'error'); return; }
+    if (!precoVenda) { Utils.toast('Informe o preço de venda', 'error'); return; }
+
+    const tipo = document.getElementById('rpTipo').value;
+    const tam = document.getElementById('rpTamanho').value.trim();
+    const cor = document.getElementById('rpCor').value.trim();
+    const estoque = parseInt(document.getElementById('rpEstoque').value) || 1;
+
+    const variacoes = {};
+    if (tam) {
+      const key = cor ? `${tam}||${cor}` : tam;
+      variacoes[key] = estoque;
+    }
+
+    const prod = DB.Produtos.salvar({
+      nome,
+      marca: document.getElementById('rpMarca').value.trim(),
+      tipo,
+      precoVenda,
+      precoCusto: parseFloat(document.getElementById('rpPrecoCusto').value) || 0,
+      variacoes,
+      estoqueMinimo: 5,
+      ativo: true
+    });
+
+    Utils.fecharModal('modalProdutoRapido');
+    Utils.toast(`"${nome}" cadastrado!`, 'success');
+
+    // Adicionar ao carrinho automaticamente
+    const chave = tam ? (cor ? `${tam}||${cor}` : tam) : '';
+    const [tamLabel, corLabel] = chave ? chave.split('||') : ['', ''];
+    const cartKey = prod.id + '_' + chave;
+    _carrinho.push({
+      _key: cartKey,
+      produtoId: prod.id,
+      nome: prod.nome,
+      tamanho: chave,
+      tamanhoLabel: tamLabel || '',
+      cor: corLabel || '',
+      sku: '',
+      precoUnitario: prod.precoVenda,
+      precoCusto: parseFloat(prod.precoCusto) || 0,
+      quantidade: 1,
+      total: prod.precoVenda
+    });
+
+    document.getElementById('buscaInput').value = '';
+    PDV.renderCarrinho();
+    PDV.renderProdutos('');
+  },
+
   _fotoPdvProdutoId: null,
   _fotoPdvBase64: null,
 
@@ -990,6 +1104,7 @@ const PDV = {
       desconto: descontoVal > 0 ? { tipo: _desconto.tipo, valor: _desconto.valor, calculado: descontoVal } : null,
       total,
       formaPagamento: _formaPagamento,
+      parcelasCartao: _formaPagamento === 'cartao_credito' ? _parcSimples : null,
       valorPago,
       troco,
       taxaCartao: _taxaPct,
