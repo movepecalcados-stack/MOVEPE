@@ -390,40 +390,62 @@ const CrediarioModule = {
   },
 
   pagarTudo: (credId) => {
-    const cred = DB.Crediario.buscar(credId);
-    if (!cred) return;
+    // Pega a compra clicada só para identificar o cliente
+    const credRef = DB.Crediario.buscar(credId);
+    if (!credRef) return;
 
-    const pendentes = cred.parcelas
-      .map((p, idx) => ({ idx, parcela: p }))
-      .filter(({ parcela }) => parcela.status !== 'pago');
+    const clienteNome = credRef.clienteNome || '';
+    const clienteId   = credRef.clienteId || null;
 
-    if (pendentes.length === 0) { Utils.toast('Nenhuma parcela pendente', 'warning'); return; }
-
-    let totalSemJuros = 0;
-    let totalJuros = 0;
-    const parcelas = pendentes.map(({ idx, parcela }) => {
-      const valor = parseFloat(parcela.valor) || 0;
-      const st = Utils.statusParcela(parcela.vencimento, parcela.status);
-      const { juros } = st === 'atrasado' ? calcularJuros(parcela.vencimento, valor) : { juros: 0 };
-      totalSemJuros += valor;
-      totalJuros += juros;
-      return { idx, numero: parcela.numero || (idx + 1), vencimento: parcela.vencimento, valor, juros, status: st };
+    // Busca TODAS as compras desse cliente no crediário
+    const todasAsCompras = DB.Crediario.listar().filter(c => {
+      if (clienteId) return c.clienteId === clienteId;
+      return (c.clienteNome || '') === clienteNome;
     });
 
-    _pagarTudoAtual = { credId, parcelas, totalSemJuros, totalJuros };
+    // Coleta todas as parcelas pendentes de todas as compras
+    let totalSemJuros = 0;
+    let totalJuros = 0;
+    // entries: [{ credId, credNome, idx, numero, vencimento, valor, juros, status }]
+    const entries = [];
 
-    document.getElementById('ptdCliente').textContent = cred.clienteNome || 'Cliente';
-    document.getElementById('ptdQtdParcelas').textContent = `${parcelas.length} parcela(s) pendente(s)`;
+    todasAsCompras.forEach(c => {
+      c.parcelas.forEach((p, idx) => {
+        if (p.status === 'pago') return;
+        const valor = parseFloat(p.valor) || 0;
+        const st = Utils.statusParcela(p.vencimento, p.status);
+        const { juros } = st === 'atrasado' ? calcularJuros(p.vencimento, valor) : { juros: 0 };
+        totalSemJuros += valor;
+        totalJuros += juros;
+        entries.push({ credId: c.id, idx, numero: p.numero || (idx + 1), totalParcelas: c.parcelas.length, vencimento: p.vencimento, valor, juros, status: st });
+      });
+    });
 
-    document.getElementById('ptdParcelasList').innerHTML = parcelas.map(p => `
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:var(--text-muted)">${p.numero}ª parcela · ${Utils.data(p.vencimento)}
-          <span class="badge ${p.status === 'atrasado' ? 'badge-danger' : 'badge-warning'}" style="font-size:10px;margin-left:4px">${p.status === 'atrasado' ? 'Atrasada' : 'Pendente'}</span>
-        </span>
-        <span style="font-weight:600">
-          ${Utils.moeda(p.valor)}${p.juros > 0 ? `<span style="color:var(--danger);font-size:11px;font-weight:400"> +${Utils.moeda(p.juros)} juros</span>` : ''}
-        </span>
-      </div>`).join('');
+    if (entries.length === 0) { Utils.toast('Nenhuma parcela pendente', 'warning'); return; }
+
+    _pagarTudoAtual = { clienteNome, entries, totalSemJuros, totalJuros };
+
+    document.getElementById('ptdCliente').textContent = clienteNome || 'Cliente';
+    document.getElementById('ptdQtdParcelas').textContent = `${entries.length} parcela(s) pendente(s) em ${todasAsCompras.filter(c => c.parcelas.some(p => p.status !== 'pago')).length} compra(s)`;
+
+    // Agrupa por compra para exibição
+    const comprasComPendentes = todasAsCompras.filter(c => c.parcelas.some(p => p.status !== 'pago'));
+    document.getElementById('ptdParcelasList').innerHTML = comprasComPendentes.map(c => {
+      const pendDessaCompra = entries.filter(e => e.credId === c.id);
+      return `
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:4px 0;border-bottom:2px solid var(--border);margin-bottom:4px">
+            Compra de ${Utils.data(c.criadoEm)} · ${Utils.moeda(c.total)}
+          </div>
+          ${pendDessaCompra.map(p => `
+            <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <span style="color:var(--text-muted)">${p.numero}/${p.totalParcelas} · ${Utils.data(p.vencimento)}
+                <span class="badge ${p.status === 'atrasado' ? 'badge-danger' : 'badge-warning'}" style="font-size:10px;margin-left:4px">${p.status === 'atrasado' ? 'Atrasada' : 'Pendente'}</span>
+              </span>
+              <span style="font-weight:600">${Utils.moeda(p.valor)}${p.juros > 0 ? `<span style="color:var(--danger);font-size:11px;font-weight:400"> +${Utils.moeda(p.juros)} j</span>` : ''}</span>
+            </div>`).join('')}
+        </div>`;
+    }).join('');
 
     document.getElementById('ptdSemJuros').textContent = Utils.moeda(totalSemJuros);
 
@@ -486,7 +508,7 @@ const CrediarioModule = {
 
   confirmarPagarTudo: () => {
     if (!_pagarTudoAtual) return;
-    const { credId, parcelas, totalSemJuros } = _pagarTudoAtual;
+    const { clienteNome, entries, totalSemJuros } = _pagarTudoAtual;
 
     const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
     const juros = incluirJuros ? (parseFloat(document.getElementById('ptdJurosInput').value) || 0) : 0;
@@ -498,22 +520,28 @@ const CrediarioModule = {
       Utils.toast('Valor insuficiente para quitar todas as parcelas', 'error'); return;
     }
 
-    const cred = DB.Crediario.buscar(credId);
-    if (!cred) return;
-
+    // Agrupa as entradas por credId para salvar cada compra de uma vez
     const lista = DB.Crediario.listar();
-    const credObj = lista.find(c => c.id === credId);
     const hoje = Utils.hoje();
-
-    parcelas.forEach(({ idx }) => {
-      credObj.parcelas[idx].status = 'pago';
-      credObj.parcelas[idx].dataPagamento = hoje;
+    const porCred = {};
+    entries.forEach(e => {
+      if (!porCred[e.credId]) porCred[e.credId] = [];
+      porCred[e.credId].push(e.idx);
     });
-    DB.Crediario.salvar(credObj);
+
+    Object.entries(porCred).forEach(([cId, idxs]) => {
+      const credObj = lista.find(c => c.id === cId);
+      if (!credObj) return;
+      idxs.forEach(idx => {
+        credObj.parcelas[idx].status = 'pago';
+        credObj.parcelas[idx].dataPagamento = hoje;
+      });
+      DB.Crediario.salvar(credObj);
+    });
 
     DB.FluxoCaixa.salvar({
       tipo: 'entrada',
-      descricao: `Crediário - ${cred.clienteNome} - Quitação total (${parcelas.length} parcela(s))${juros > 0 ? ' + juros' : ''}`,
+      descricao: `Crediário - ${clienteNome} - Quitação de todas as dívidas (${entries.length} parcela(s))${juros > 0 ? ' + juros' : ''}`,
       valor: totalDevido,
       categoria: 'crediario'
     });
@@ -523,7 +551,7 @@ const CrediarioModule = {
     CrediarioModule.renderStats();
     CrediarioModule.renderMensal();
     CrediarioModule.renderLista();
-    Utils.toast(troco > 0.01 ? `Dívida quitada! Troco: ${Utils.moeda(troco)}` : 'Dívida quitada com sucesso!', 'success');
+    Utils.toast(troco > 0.01 ? `Todas as dívidas quitadas! Troco: ${Utils.moeda(troco)}` : 'Todas as dívidas quitadas!', 'success');
     _pagarTudoAtual = null;
   },
 
