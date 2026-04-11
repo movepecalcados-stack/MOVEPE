@@ -264,6 +264,10 @@ const Utils = {
   },
 
   verificarVencimentos: () => {
+    // Só mostra nas páginas de caixa e crediário
+    const pagina = location.pathname.split('/').pop();
+    if (pagina !== 'caixa.html' && pagina !== 'crediario.html') return;
+
     const hoje = Utils.hoje();
     const em3dias = new Date();
     em3dias.setDate(em3dias.getDate() + 3);
