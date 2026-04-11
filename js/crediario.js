@@ -245,7 +245,7 @@ const CrediarioModule = {
                 </span>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.verDetalhes('${cred.id}')">🧾 Detalhes</button>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.imprimirContrato('${cred.id}')" title="Imprimir contrato de crediário">📄 Contrato</button>
-                ${!quitado && pendentes.length > 1 ? `<button class="btn btn-success btn-sm" onclick="CrediarioModule.pagarTudo('${cred.id}')" title="Pagar toda a dívida de uma vez">💰 Pagar Tudo</button>` : ''}
+                ${!quitado ? `<button class="btn btn-success btn-sm" onclick="CrediarioModule.pagarTudo('${cred.id}')" title="Pagar toda a dívida de uma vez">💰 Pagar Tudo</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.renegociar('${cred.id}')" title="Renegociar dívida">🔄 Reneg.</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.enviarWhatsApp('${cred.id}')" title="Enviar cobrança por WhatsApp" style="color:#25D366;border-color:#25D366">📱 WhatsApp</button>` : ''}
               </div>
