@@ -92,7 +92,8 @@ const Utils = {
       cartao_credito: 'Cartão Crédito',
       cartao_debito: 'Cartão Débito',
       pix: 'PIX',
-      crediario: 'Crediário'
+      crediario: 'Crediário',
+      multiplo: 'Múltiplos'
     };
     const base = map[forma] || forma || '';
     if (forma === 'cartao_credito' && parcelas && parseInt(parcelas) > 1) {

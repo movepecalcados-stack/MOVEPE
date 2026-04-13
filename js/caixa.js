@@ -64,7 +64,9 @@ const CaixaModule = {
         return formas.includes(v.formaPagamento) ? s + (parseFloat(v.total) || 0) : s;
       }, 0);
       const totalDinheiro = somarForma(['dinheiro']);
-      const totalCartao = somarForma(['cartao_credito', 'cartao_debito']);
+      const totalDebito   = somarForma(['cartao_debito']);
+      const totalCredito  = somarForma(['cartao_credito']);
+      const totalCartao   = totalDebito + totalCredito;
       const totalPix = somarForma(['pix']);
 
       // Recebimentos de crediário desde a abertura do caixa (pagamentos de parcelas)
@@ -101,8 +103,12 @@ const CaixaModule = {
             <div class="stat-value success">${Utils.moeda(totalDinheiro)}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Cartão</div>
-            <div class="stat-value">${Utils.moeda(totalCartao)}</div>
+            <div class="stat-label">Cartão Débito</div>
+            <div class="stat-value">${Utils.moeda(totalDebito)}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Cartão Crédito</div>
+            <div class="stat-value">${Utils.moeda(totalCredito)}</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">PIX</div>
@@ -355,7 +361,9 @@ const CaixaModule = {
       return formas.includes(v.formaPagamento) ? s + (parseFloat(v.total) || 0) : s;
     }, 0);
     const totalDinheiro = somarForma(['dinheiro']);
-    const totalCartao = somarForma(['cartao_credito', 'cartao_debito']);
+    const totalDebito   = somarForma(['cartao_debito']);
+    const totalCredito  = somarForma(['cartao_credito']);
+    const totalCartao   = totalDebito + totalCredito;
     const totalPix = somarForma(['pix']);
     const totalCrediario = somarForma(['crediario']);
     const totalVendas = totalDinheiro + totalCartao + totalPix;
@@ -390,7 +398,8 @@ VENDAS (${vendas.length}):
 ${linhasVendas || '  Nenhuma venda hoje'}
 ${linhaL}
 Dinheiro:         ${Utils.moeda(totalDinheiro).padStart(16)}
-Cartão:           ${Utils.moeda(totalCartao).padStart(16)}
+Cartão Débito:    ${Utils.moeda(totalDebito).padStart(16)}
+Cartão Crédito:   ${Utils.moeda(totalCredito).padStart(16)}
 PIX:              ${Utils.moeda(totalPix).padStart(16)}
 Crediário (vendas):${Utils.moeda(totalCrediario).padStart(14)}
 Receb. crediário: ${Utils.moeda(totalRecebCrediario).padStart(16)}

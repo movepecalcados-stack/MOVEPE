@@ -66,6 +66,44 @@
     .etiq.sz-80x40 .etiq-var   { font-size: 10px; }
     .etiq.sz-80x40 .etiq-preco { font-size: 18px; }
 
+    /* ---- ETIQUETA VITRINE 100x30 ---- */
+    .etiq.sz-100x30 {
+      width: 378px; height: 113px;
+      flex-direction: column; align-items: stretch;
+      padding: 0; gap: 0; overflow: hidden;
+    }
+    .etiq-vit-topo {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 10px; background: #111; height: 24px; flex-shrink: 0;
+    }
+    .etiq-vit-corpo {
+      flex: 1; display: flex; flex-direction: row; align-items: stretch;
+    }
+    .etiq.sz-100x30 .etiq-loja  { font-size: 11px; font-weight: 900; color: #fff; text-transform: uppercase; letter-spacing: 1.5px; }
+    .etiq.sz-100x30 .etiq-var   { font-size: 9px; color: #bbb; font-weight: 700; border: 1px solid #444; padding: 1px 5px; border-radius: 3px; }
+    /* Blocos lado a lado */
+    .etiq-vit-bloco-avista {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; border-right: 1.5px solid #e0e0e0; gap: 1px; padding: 2px 3px;
+    }
+    .etiq-vit-bloco-avista:only-child { border-right: none; }
+    .etiq-vit-bloco-cred {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 1px; padding: 2px 3px;
+    }
+    .etiq-vit-sep { display: none; }
+    /* Labels */
+    .etiq-vit-label-avista { font-size: 7px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .5px; line-height: 1; }
+    .etiq-vit-label-cred   { font-size: 7px; font-weight: 700; color: #b45309; text-transform: uppercase; letter-spacing: .5px; line-height: 1; }
+    /* Valores */
+    .etiq-vit-valor-avista { font-size: 38px; font-weight: 900; color: #111; line-height: 1; letter-spacing: -1px; }
+    .etiq-vit-valor-cred   { font-size: 38px; font-weight: 900; color: #c2610e; line-height: 1; letter-spacing: -1px; }
+    /* Preço único ocupa mais espaço */
+    .etiq-vit-bloco-avista:only-child .etiq-vit-valor-avista { font-size: 52px; }
+    /* Parcelas */
+    .etiq-vit-parcela      { font-size: 10px; font-weight: 700; color: #444; letter-spacing: .3px; line-height: 1.2; margin-top: 1px; }
+    .etiq-vit-parcela-cred { font-size: 10px; font-weight: 700; color: #b45309; letter-spacing: .3px; line-height: 1.2; margin-top: 1px; }
+
     /* ---- IMPRESSÃO ---- */
     @media print {
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -104,6 +142,7 @@
                 <option value="50x30">50 × 30 mm</option>
                 <option value="60x40">60 × 40 mm</option>
                 <option value="80x40">80 × 40 mm</option>
+                <option value="100x30">100 × 30 mm — Vitrine (preço visível)</option>
               </select>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -167,6 +206,10 @@
                 </label>
                 <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
                   <input type="checkbox" id="cfgShowCodNum" checked onchange="Etiquetas.renderPreview()"> Número cód. barras
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" id="cfgShowCrediario" checked onchange="Etiquetas.renderPreview()"> Preço crediário
+                  <span style="font-size:11px;color:var(--text-muted)">(apenas vitrine)</span>
                 </label>
               </div>
             </div>

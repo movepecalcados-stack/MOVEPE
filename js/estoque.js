@@ -6,8 +6,8 @@ let _produtoEditando = null;
 let _filtroTipo = '';
 let _filtroTamanho = '';
 let _busca = '';
-let _fotoBase64 = null;
-let _fotosVariacoes = {}; // { "preto": "base64...", "rosa": "base64..." }
+let _fotosGaleria = [];      // até 7 fotos; índice 0 = principal
+let _fotosVariacoes = {};   // { "rosa": "base64..." } — foto atribuída a cada cor
 
 const Estoque = {
 
@@ -16,6 +16,14 @@ const Estoque = {
     Utils.initModais();
     Estoque.renderStats();
     Estoque.renderProdutos();
+
+    // Abre edição direta via URL: estoque.html?editar=ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const editarId = urlParams.get('editar');
+    if (editarId) {
+      setTimeout(() => Estoque.abrirForm(editarId), 300);
+      history.replaceState(null, '', 'estoque.html');
+    }
 
     document.getElementById('buscaInput').addEventListener('input', (e) => {
       _busca = e.target.value;
@@ -38,7 +46,7 @@ const Estoque = {
 
     document.getElementById('formProduto').addEventListener('submit', Estoque.salvar);
 
-    document.getElementById('btnAdicionarVariacao').addEventListener('click', Estoque.adicionarLinhaVariacao);
+    document.getElementById('btnAdicionarVariacao').addEventListener('click', () => Estoque.adicionarLinhaVariacao());
 
     document.getElementById('btnCancelar').addEventListener('click', () => {
       Utils.fecharModal('modalProduto');
@@ -164,17 +172,20 @@ const Estoque = {
     // Fotos de variação por cor
     _fotosVariacoes = _produtoEditando ? JSON.parse(JSON.stringify(_produtoEditando.fotosVariacoes || {})) : {};
 
-    // Foto principal
-    _fotoBase64 = _produtoEditando ? (_produtoEditando.foto || null) : null;
-    document.getElementById('inputFotoProduto').value = '';
-    if (_fotoBase64) {
-      document.getElementById('fotoPreviewImg').src = _fotoBase64;
-      document.getElementById('fotoPreviewBox').style.display = 'block';
-      document.getElementById('fotoUploadZone').style.display = 'none';
+    // Galeria de fotos (até 7)
+    if (_produtoEditando) {
+      if (Array.isArray(_produtoEditando.fotos) && _produtoEditando.fotos.length > 0) {
+        _fotosGaleria = [..._produtoEditando.fotos];
+      } else if (_produtoEditando.foto) {
+        _fotosGaleria = [_produtoEditando.foto];
+      } else {
+        _fotosGaleria = [];
+      }
     } else {
-      document.getElementById('fotoPreviewBox').style.display = 'none';
-      document.getElementById('fotoUploadZone').style.display = 'block';
+      _fotosGaleria = [];
     }
+    document.getElementById('inputFotoGaleria').value = '';
+    Estoque.renderGaleria();
 
     // Renderizar variacoes
     const variacoes = _produtoEditando ? (_produtoEditando.variacoes || {}) : {};
@@ -185,55 +196,92 @@ const Estoque = {
 
   renderVariacoes: (variacoes) => {
     const cont = document.getElementById('variacoesCont');
+    cont.innerHTML = '';
     const entries = Object.entries(variacoes);
     if (entries.length === 0) {
-      cont.innerHTML = '<div class="text-muted fs-sm" style="padding:8px">Nenhum tamanho adicionado</div>';
+      cont.innerHTML = '<div class="text-muted fs-sm" style="padding:8px 0">Nenhum tamanho adicionado — use os botões acima ou clique em "+ Tamanho"</div>';
       return;
     }
-    cont.innerHTML = entries
+    entries
       .sort((a, b) => {
         const pa = a[0].split('||'); const pb = b[0].split('||');
         const na = parseFloat(pa[0]); const nb = parseFloat(pb[0]);
         if (!isNaN(na) && !isNaN(nb)) return na - nb || (pa[1]||'').localeCompare(pb[1]||'');
         return a[0].localeCompare(b[0]);
       })
-      .map(([key, qtd]) => {
+      .forEach(([key, qtd]) => {
         const [tam, cor] = key.split('||');
-        const fotoExist = cor ? (_fotosVariacoes[cor.toLowerCase()] || '') : '';
-        const fotoBtnHtml = fotoExist
-          ? `<img src="${fotoExist}" style="width:100%;height:100%;object-fit:cover">`
-          : '📷';
-        return `
-        <div class="form-row var-row" style="margin-bottom:6px;align-items:center">
-          <input class="form-control var-tam" value="${tam}" placeholder="Tamanho (ex: 38)" style="flex:1;min-width:70px">
-          <input class="form-control var-cor" value="${cor || ''}" placeholder="Cor (opcional)" style="flex:2" oninput="Estoque._atualizarFotoBtn(this)">
-          <button type="button" class="var-foto-btn" title="Foto desta cor" onclick="Estoque._clicarFotoVar(this)">${fotoBtnHtml}</button>
-          <input type="file" accept="image/*" style="display:none" onchange="Estoque._carregarFotoVar(this)">
-          <input class="form-control var-qty" type="number" min="0" value="${qtd}" placeholder="Qtd" style="flex:1;min-width:60px">
-          <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.closest('.var-row').remove()" title="Remover">✕</button>
-        </div>`;
-      }).join('');
+        Estoque.adicionarLinhaVariacao(tam, cor || '', qtd);
+      });
   },
 
-  adicionarLinhaVariacao: () => {
+  adicionarLinhaVariacao: (tam = '', cor = '', qtd = 0) => {
     const cont = document.getElementById('variacoesCont');
-    // Remove mensagem de vazio se existir
     const vazio = cont.querySelector('.text-muted');
     if (vazio) vazio.remove();
 
+    const fotoBtnHtml = cor && _fotosVariacoes[cor.toLowerCase()]
+      ? `<img src="${_fotosVariacoes[cor.toLowerCase()]}" style="width:100%;height:100%;object-fit:cover">`
+      : '📷';
+
     const div = document.createElement('div');
-    div.className = 'form-row var-row';
-    div.style.marginBottom = '6px';
-    div.style.alignItems = 'center';
+    div.className = 'var-row';
     div.innerHTML = `
-      <input class="form-control var-tam" placeholder="Tamanho (ex: 38)" style="flex:1;min-width:70px">
-      <input class="form-control var-cor" placeholder="Cor (opcional)" style="flex:2" oninput="Estoque._atualizarFotoBtn(this)">
-      <button type="button" class="var-foto-btn" title="Foto desta cor" onclick="Estoque._clicarFotoVar(this)">📷</button>
-      <input type="file" accept="image/*" style="display:none" onchange="Estoque._carregarFotoVar(this)">
-      <input class="form-control var-qty" type="number" min="0" value="0" placeholder="Qtd" style="flex:1;min-width:60px">
+      <input class="form-control var-tam" value="${tam}" placeholder="Ex: 38">
+      <input class="form-control var-cor" value="${cor}" placeholder="Cor (opcional)" oninput="Estoque._atualizarFotoBtn(this)">
+      <button type="button" class="var-foto-btn" title="Selecionar foto da galeria" onclick="Estoque._clicarFotoVar(this)">${fotoBtnHtml}</button>
+      <input class="form-control var-qty" type="number" min="0" value="${qtd}" placeholder="Qtd">
+      <button type="button" class="btn btn-outline btn-icon btn-sm" onclick="Estoque.duplicarLinha(this)" title="Duplicar esta linha" style="font-size:14px">⧉</button>
       <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.closest('.var-row').remove()" title="Remover">✕</button>`;
     cont.appendChild(div);
-    div.querySelector('.var-tam').focus();
+    if (!tam) div.querySelector('.var-tam').focus();
+    return div;
+  },
+
+  duplicarLinha: (btn) => {
+    const row = btn.closest('.var-row');
+    const tam = row.querySelector('.var-tam').value;
+    const cor = row.querySelector('.var-cor').value;
+    const qtd = parseInt(row.querySelector('.var-qty').value) || 0;
+    const novaRow = Estoque.adicionarLinhaVariacao(tam, cor, qtd);
+    novaRow.querySelector('.var-tam').focus();
+    novaRow.querySelector('.var-tam').select();
+  },
+
+  presetSerie: (lista) => {
+    const cor = document.getElementById('serieCor').value.trim();
+    const qtd = parseInt(document.getElementById('serieQtd').value) || 1;
+    const tamanhos = lista.split(',');
+    tamanhos.forEach(tam => Estoque.adicionarLinhaVariacao(tam.trim(), cor, qtd));
+    Utils.toast(`${tamanhos.length} tamanhos adicionados`);
+  },
+
+  gerarSerie: () => {
+    const from = document.getElementById('serieFrom').value.trim();
+    const to   = document.getElementById('serieTo').value.trim();
+    const cor  = document.getElementById('serieCor').value.trim();
+    const qtd  = parseInt(document.getElementById('serieQtd').value) || 1;
+
+    if (!from) { Utils.toast('Informe o tamanho inicial', 'error'); return; }
+
+    const nFrom = parseFloat(from.replace(',', '.'));
+    const nTo   = parseFloat(to.replace(',', '.'));
+    let tamanhos = [];
+
+    if (!isNaN(nFrom) && !isNaN(nTo) && to) {
+      for (let n = nFrom; n <= nTo + 0.001; n++) {
+        tamanhos.push(String(Math.round(n)));
+      }
+    } else if (to) {
+      tamanhos = [from, to];
+    } else {
+      tamanhos = [from];
+    }
+
+    tamanhos.forEach(tam => Estoque.adicionarLinhaVariacao(tam, cor, qtd));
+    document.getElementById('serieFrom').value = '';
+    document.getElementById('serieTo').value = '';
+    Utils.toast(`${tamanhos.length} tamanho(s) adicionado(s)`);
   },
 
   coletarVariacoes: () => {
@@ -262,34 +310,120 @@ const Estoque = {
     return fotos;
   },
 
-  _clicarFotoVar: (btn) => {
-    btn.nextElementSibling.click();
+  // ── Galeria de fotos ─────────────────────────────────────────
+  renderGaleria: () => {
+    const el = document.getElementById('fotoGaleria');
+    if (!el) return;
+    let html = '';
+    _fotosGaleria.forEach((foto, idx) => {
+      const label = idx === 0 ? 'Principal' : `Foto ${idx + 1}`;
+      html += `
+        <div class="foto-slot tem-foto" onclick="document.getElementById('inputFotoGaleria').dataset.slot='${idx}';document.getElementById('inputFotoGaleria').click()" title="Trocar foto">
+          <img src="${foto}">
+          <div class="foto-slot-badge">${label}</div>
+          <button type="button" class="foto-slot-x" onclick="event.stopPropagation();Estoque.removerFotoGaleria(${idx})" title="Remover">✕</button>
+        </div>`;
+    });
+    if (_fotosGaleria.length < 7) {
+      const label = _fotosGaleria.length === 0 ? 'Principal' : `Foto ${_fotosGaleria.length + 1}`;
+      html += `
+        <div class="foto-slot" onclick="document.getElementById('inputFotoGaleria').dataset.slot='new';document.getElementById('inputFotoGaleria').click()" title="Adicionar foto">
+          <div>📷</div>
+          <div style="font-size:9px;margin-top:3px;color:var(--text-muted);font-weight:600">${label}</div>
+        </div>`;
+    }
+    el.innerHTML = html;
   },
 
-  _carregarFotoVar: (input) => {
+  adicionarFotoGaleria: (input) => {
     const file = input.files[0];
     if (!file) return;
-    const row = input.closest('.var-row');
+    const slot = input.dataset.slot;
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const maxW = 600;
+        const maxW = 900;
         const scale = img.width > maxW ? maxW / img.width : 1;
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
+        canvas.width  = Math.round(img.width  * scale);
         canvas.height = Math.round(img.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         const b64 = canvas.toDataURL('image/jpeg', 0.80);
-        const btn = row.querySelector('.var-foto-btn');
-        btn.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover">`;
+        if (slot === 'new') {
+          if (_fotosGaleria.length < 7) _fotosGaleria.push(b64);
+        } else {
+          _fotosGaleria[parseInt(slot)] = b64;
+        }
         input.value = '';
-        const cor = row.querySelector('.var-cor').value.trim().toLowerCase();
-        if (cor) _fotosVariacoes[cor] = b64;
+        Estoque.renderGaleria();
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
+  },
+
+  removerFotoGaleria: (idx) => {
+    _fotosGaleria.splice(idx, 1);
+    Estoque.renderGaleria();
+  },
+
+  // ── Picker de foto para variações ────────────────────────────
+  _clicarFotoVar: (btn) => {
+    if (_fotosGaleria.length === 0) {
+      Utils.toast('Adicione fotos na galeria primeiro', 'warning');
+      return;
+    }
+    // Remove picker existente
+    const old = document.getElementById('fotoPicker');
+    if (old) { old.remove(); return; }
+
+    const popup = document.createElement('div');
+    popup.id = 'fotoPicker';
+    popup.className = 'foto-picker-popup';
+    popup.innerHTML = '<div class="foto-picker-titulo">Escolha uma foto</div>';
+
+    _fotosGaleria.forEach((foto, idx) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'foto-picker-thumb';
+      thumb.title = idx === 0 ? 'Principal' : `Foto ${idx + 1}`;
+      thumb.innerHTML = `<img src="${foto}">`;
+      thumb.onclick = () => {
+        Estoque._selecionarFotoGaleria(btn.closest('.var-row'), idx);
+        popup.remove();
+      };
+      popup.appendChild(thumb);
+    });
+
+    document.body.appendChild(popup);
+
+    // Posicionar próximo ao botão
+    const rect = btn.getBoundingClientRect();
+    let top  = rect.bottom + 6;
+    let left = rect.left;
+    if (left + 310 > window.innerWidth - 12) left = window.innerWidth - 322;
+    if (top  + 160 > window.innerHeight)     top  = rect.top - 166;
+    popup.style.top  = top  + 'px';
+    popup.style.left = left + 'px';
+
+    // Fechar ao clicar fora
+    setTimeout(() => {
+      document.addEventListener('click', function handler(e) {
+        if (!popup.contains(e.target) && e.target !== btn) {
+          popup.remove();
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 10);
+  },
+
+  _selecionarFotoGaleria: (rowEl, idx) => {
+    const foto = _fotosGaleria[idx];
+    if (!foto || !rowEl) return;
+    const btn = rowEl.querySelector('.var-foto-btn');
+    btn.innerHTML = `<img src="${foto}" style="width:100%;height:100%;object-fit:cover">`;
+    const cor = rowEl.querySelector('.var-cor').value.trim().toLowerCase();
+    if (cor) _fotosVariacoes[cor] = foto;
   },
 
   _atualizarFotoBtn: (corInput) => {
@@ -301,37 +435,6 @@ const Estoque = {
     } else if (!btn.querySelector('img')) {
       btn.innerHTML = '📷';
     }
-  },
-
-  selecionarFoto: (input) => {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        // Comprimir: máx 900px largura, JPEG 80%
-        const maxW = 900;
-        const scale = img.width > maxW ? maxW / img.width : 1;
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        _fotoBase64 = canvas.toDataURL('image/jpeg', 0.80);
-        document.getElementById('fotoPreviewImg').src = _fotoBase64;
-        document.getElementById('fotoPreviewBox').style.display = 'block';
-        document.getElementById('fotoUploadZone').style.display = 'none';
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  },
-
-  removerFoto: () => {
-    _fotoBase64 = null;
-    document.getElementById('inputFotoProduto').value = '';
-    document.getElementById('fotoPreviewBox').style.display = 'none';
-    document.getElementById('fotoUploadZone').style.display = 'block';
   },
 
   salvar: (e) => {
@@ -351,7 +454,8 @@ const Estoque = {
       precoCusto: parseFloat(f.precoCusto.value) || 0,
       estoqueMinimo: parseInt(f.estoqueMinimo.value) || 5,
       descricao: f.descricao.value.trim(),
-      foto: _fotoBase64,
+      foto: _fotosGaleria[0] || null,
+      fotos: [..._fotosGaleria],
       fotosVariacoes: Estoque.coletarFotosVariacoes(),
       variacoes,
       ativo: true
@@ -364,7 +468,12 @@ const Estoque = {
     Utils.fecharModal('modalProduto');
     Estoque.renderStats();
     Estoque.renderProdutos();
-    Utils.toast(_produtoEditando ? 'Produto atualizado!' : 'Produto cadastrado!');
+    const semTamanhos = Object.keys(variacoes).length === 0;
+    if (semTamanhos) {
+      Utils.toast((_produtoEditando ? 'Produto atualizado' : 'Produto cadastrado') + ' — sem tamanhos. Adicione tamanhos para controlar estoque.', 'warning');
+    } else {
+      Utils.toast(_produtoEditando ? 'Produto atualizado!' : 'Produto cadastrado!');
+    }
   },
 
   excluir: (id) => {

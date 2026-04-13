@@ -305,73 +305,121 @@ const PDV = {
       return;
     }
 
-    grid.innerHTML = prods.map(p => {
+    // Monta tabela: cada variação é uma linha
+    const linhas = [];
+    prods.forEach(p => {
       const variacoes = p.variacoes || {};
-      const total = DB.Produtos.estoqueTotal(p);
-      const baixo = total <= (p.estoqueMinimo || 5);
-      const tamSel = _tamSelecionado[p.id] || '';
+      const sku = p.sku || p.codigo || '—';
+      const preco = Utils.moeda(p.precoVenda);
+      const estoqueMin = p.estoqueMinimo || 3;
 
-      const tamanhosHtml = Object.entries(variacoes)
-        .sort((a, b) => {
-          const pa = a[0].split('||'); const pb = b[0].split('||');
-          const na = parseFloat(pa[0]); const nb = parseFloat(pb[0]);
-          if (!isNaN(na) && !isNaN(nb)) return na - nb || (pa[1]||'').localeCompare(pb[1]||'');
-          return a[0].localeCompare(b[0]);
-        })
-        .map(([key, qtd]) => {
-          const [tam, cor] = key.split('||');
-          return `
-          <button class="tamanho-btn ${qtd <= 0 ? 'sem-estoque' : ''} ${tamSel === key ? 'selecionado' : ''}"
-            onclick="PDV.selecionarTamanho('${p.id}', '${key}', ${qtd})"
-            ${qtd <= 0 ? 'disabled' : ''}
-            title="${cor ? cor + ' · ' : ''}Estoque: ${qtd}">
-            <span>${tam}</span>
-            ${cor ? `<span style="font-size:9px;display:block;line-height:1.2;opacity:0.8;max-width:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cor}</span>` : ''}
-          </button>`;
-        }).join('');
+      const entries = Object.entries(variacoes).sort((a, b) => {
+        const na = parseFloat(a[0].split('||')[0]);
+        const nb = parseFloat(b[0].split('||')[0]);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a[0].localeCompare(b[0]);
+      });
 
-      return `
-        <div class="produto-card ${baixo ? 'low-stock' : ''}">
-          <div style="position:relative">
-            ${p.foto
-              ? `<img class="produto-card-foto" src="${p.foto}" loading="lazy">`
-              : `<div class="produto-card-sem-foto">👟</div>`
-            }
-            <button onclick="PDV.abrirFotoPdv('${p.id}')" title="Adicionar/trocar foto"
-              style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.55);border:none;color:#fff;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;backdrop-filter:blur(2px)">
-              📷 ${p.foto ? 'Trocar' : 'Adicionar foto'}
-            </button>
-          </div>
-          <div class="produto-card-body">
-            <div>
-              <div class="produto-nome">${p.nome}</div>
-              ${p.marca ? `<div class="produto-sku">${p.marca}${p.categoria ? ' · ' + p.categoria : ''}</div>` : ''}
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-              <div class="produto-preco">${Utils.moeda(p.precoVenda)}</div>
-              <span class="produto-tipo-badge">${Utils.labelTipo(p.tipo)}</span>
-            </div>
-            ${baixo ? `<span style="font-size:10px;color:var(--danger);font-weight:700">⚠ Estoque baixo</span>` : ''}
-            ${Object.keys(variacoes).length > 0 ? `
-              <div>
-                <div class="text-muted fs-sm" style="margin-bottom:4px">Tamanho:</div>
-                <div class="tamanhos-grid">${tamanhosHtml}</div>
-              </div>
-            ` : ''}
-            <div class="produto-card-add">
-              <button class="btn btn-primary btn-sm btn-full" onclick="PDV.adicionarAoCarrinho('${p.id}')">
-                + Adicionar
-              </button>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
+      if (entries.length === 0) {
+        // Produto sem variações — exibe linha única com link para cadastrar
+        linhas.push(`
+          <tr class="pdv-row primeiro-do-grupo">
+            <td class="col-desc">
+              <div class="col-desc-nome">${p.nome}</div>
+              <div class="col-desc-var" style="color:var(--danger)">Sem tamanhos — <a href="estoque.html?editar=${p.id}" style="color:var(--primary)">Cadastrar</a></div>
+            </td>
+            <td class="col-sku">${sku}</td>
+            <td class="col-preco">${preco}</td>
+            <td class="col-qtd"><span class="pdv-qtd-badge sem">0</span></td>
+            <td class="col-acao"><button class="pdv-add-btn" disabled title="Sem tamanhos cadastrados">+</button></td>
+          </tr>`);
+        return;
+      }
+
+      entries.forEach(([key, qtd], idx) => {
+        const [tam, cor] = key.split('||');
+        const zerado = qtd <= 0;
+        const baixo  = !zerado && qtd <= estoqueMin;
+        const varLabel = [tam, cor].filter(Boolean).join(' — ');
+        const qtdClass = zerado ? 'sem' : baixo ? 'baixo' : '';
+        const rowClass = [
+          idx === 0 ? 'primeiro-do-grupo' : '',
+          zerado ? 'zerado' : baixo ? 'baixo' : ''
+        ].filter(Boolean).join(' ');
+        const keyEsc = key.replace(/'/g, "\\'");
+
+        linhas.push(`
+          <tr class="pdv-row ${rowClass}">
+            <td class="col-desc">
+              ${idx === 0 ? `<div class="col-desc-nome">${p.nome}</div>` : ''}
+              <div class="col-desc-var">${varLabel}</div>
+            </td>
+            <td class="col-sku">${idx === 0 ? sku : ''}</td>
+            <td class="col-preco">${idx === 0 ? preco : ''}</td>
+            <td class="col-qtd"><span class="pdv-qtd-badge ${qtdClass}">${qtd}</span></td>
+            <td class="col-acao">
+              <button class="pdv-add-btn" onclick="PDV.adicionarVariacao('${p.id}','${keyEsc}')"
+                ${zerado ? 'disabled title="Sem estoque"' : ''}>+</button>
+            </td>
+          </tr>`);
+      });
+    });
+
+    grid.innerHTML = `
+      <div class="pdv-lista-wrap">
+        <table class="pdv-lista">
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th>Código</th>
+              <th class="col-preco">Preço</th>
+              <th class="col-qtd">Estoque</th>
+              <th class="col-acao"></th>
+            </tr>
+          </thead>
+          <tbody>${linhas.join('')}</tbody>
+        </table>
+      </div>`;
   },
 
   selecionarTamanho: (prodId, tamanho, qtd) => {
     if (qtd <= 0) return;
     _tamSelecionado[prodId] = tamanho;
     PDV.renderProdutos(document.getElementById('buscaInput').value);
+  },
+
+  // Adiciona direto da tabela sem precisar selecionar tamanho antes
+  adicionarVariacao: (prodId, varKey) => {
+    const prod = DB.Produtos.buscar(prodId);
+    if (!prod) return;
+    const variacoes = prod.variacoes || {};
+    const qtd = variacoes[varKey] || 0;
+    if (qtd <= 0) { Utils.toast('Sem estoque!', 'error'); return; }
+    const [tamLabel, corLabel] = varKey.split('||');
+    const key = prodId + '_' + varKey;
+    const existente = _carrinho.find(i => i._key === key);
+    if (existente) {
+      if (existente.quantidade >= qtd) { Utils.toast('Estoque insuficiente!', 'error'); return; }
+      existente.quantidade++;
+      existente.total = existente.quantidade * existente.precoUnitario;
+    } else {
+      _carrinho.push({
+        _key: key,
+        produtoId: prodId,
+        nome: prod.nome,
+        tamanho: varKey,
+        tamanhoLabel: tamLabel,
+        cor: corLabel || '',
+        sku: prod.sku || '',
+        precoUnitario: prod.precoVenda,
+        precoCusto: parseFloat(prod.precoCusto) || 0,
+        quantidade: 1,
+        total: prod.precoVenda
+      });
+    }
+    PDV.renderCarrinho();
+    const desc = tamLabel ? ` (Tam ${tamLabel}${corLabel ? ' · ' + corLabel : ''})` : '';
+    Utils.toast(`${prod.nome}${desc} adicionado!`, 'success');
   },
 
   adicionarAoCarrinho: (prodId) => {
@@ -455,7 +503,13 @@ const PDV = {
     const descontoVal = _desconto.tipo === 'pct'
       ? Math.round(subtotal * (_desconto.valor / 100) * 100) / 100
       : Math.min(_desconto.valor, subtotal);
-    const total = Math.max(0, subtotal - descontoVal);
+    const totalBase = Math.max(0, subtotal - descontoVal);
+
+    // Acréscimo crediário
+    const taxaCrediario = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const ehCrediario   = _formaPagamento === 'crediario';
+    const acrescimo     = ehCrediario ? Math.round(totalBase * (taxaCrediario / 100) * 100) / 100 : 0;
+    const total         = totalBase + acrescimo;
 
     lista.innerHTML = _carrinho.map((item, idx) => `
       <div class="carrinho-item">
@@ -475,6 +529,15 @@ const PDV = {
     if (descontoVal > 0) {
       document.getElementById('carrinhoDescontoVal').textContent = Utils.moeda(descontoVal);
       document.getElementById('carrinhoDescontoArea').style.display = '';
+    }
+    // Mostrar/esconder acréscimo
+    const acrescimoArea = document.getElementById('carrinhoAcrescimoArea');
+    if (ehCrediario && acrescimo > 0) {
+      document.getElementById('carrinhoAcrescimoPct').textContent = taxaCrediario;
+      document.getElementById('carrinhoAcrescimoVal').textContent = Utils.moeda(acrescimo);
+      acrescimoArea.style.display = '';
+    } else {
+      acrescimoArea.style.display = 'none';
     }
     totalEl.textContent = Utils.moeda(total);
     btnPagar.disabled = false;
@@ -975,15 +1038,19 @@ const PDV = {
     else document.getElementById('creditoInfo').style.display = 'none';
     if (forma === 'cartao_credito') PDV.atualizarParcelasCartao();
     PDV.atualizarTaxaInfo();
+    PDV.renderCarrinho(); // atualiza total com/sem acréscimo crediário
   },
 
   atualizarParcelas: () => {
-    const total = _carrinho.reduce((s, i) => s + i.total, 0);
+    const subtotal   = _carrinho.reduce((s, i) => s + i.total, 0);
+    const taxaCrediario = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const acrescimo  = Math.round(subtotal * (taxaCrediario / 100) * 100) / 100;
+    const total      = subtotal + acrescimo;
     const num = parseInt(document.getElementById('inputNumeroParcelas').value) || 1;
     const valorParcela = total / num;
     const venc = document.getElementById('inputVencimento1').value;
     const resumo = document.getElementById('crediarioResumo');
-    let texto = `${num}x de ${Utils.moeda(valorParcela)}`;
+    let texto = `${num}x de ${Utils.moeda(valorParcela)} (total ${Utils.moeda(total)} c/ ${taxaCrediario}% acréscimo)`;
     if (venc) texto += `  ·  1º vencimento: ${Utils.data(venc)}`;
     resumo.textContent = texto;
     resumo.style.display = '';
@@ -1075,7 +1142,12 @@ const PDV = {
     const descontoVal = _desconto.tipo === 'pct'
       ? Math.round(subtotal * (_desconto.valor / 100) * 100) / 100
       : Math.min(_desconto.valor, subtotal);
-    const total = Math.max(0, subtotal - descontoVal);
+    const totalBase = Math.max(0, subtotal - descontoVal);
+    // Acréscimo crediário
+    const taxaCrediario   = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const acrescimoCrediario = _formaPagamento === 'crediario'
+      ? Math.round(totalBase * (taxaCrediario / 100) * 100) / 100 : 0;
+    const total = totalBase + acrescimoCrediario;
     const valorPago = parseFloat(document.getElementById('inputValorPago').value) || total;
     const troco = Math.max(0, valorPago - total);
 
@@ -1111,6 +1183,7 @@ const PDV = {
       itens: _carrinho.map(i => ({ ...i })),
       subtotal,
       desconto: descontoVal > 0 ? { tipo: _desconto.tipo, valor: _desconto.valor, calculado: descontoVal } : null,
+      acrescimoCrediario: acrescimoCrediario > 0 ? { pct: taxaCrediario, valor: acrescimoCrediario } : null,
       total,
       formaPagamento: _formaPagamento,
       parcelasCartao: _formaPagamento === 'cartao_credito' ? _parcSimples : null,
@@ -1593,7 +1666,7 @@ PDV.rcConfirmarPagamento = () => {
 document.addEventListener('DOMContentLoaded', PDV.init);
 document.addEventListener('movePe-sync', (e) => {
   PDV.verificarCaixaStatus();
-  if (!e.detail || e.detail.col === 'produtos') {
+  if (!e.detail || e.detail.col === 'all' || e.detail.col === 'produtos') {
     const busca = document.getElementById('buscaInput');
     PDV.renderProdutos(busca ? busca.value : '');
   }

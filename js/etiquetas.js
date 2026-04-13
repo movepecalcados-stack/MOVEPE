@@ -224,12 +224,13 @@ const Etiquetas = {
   // ---- PRESET → preenche campos ----
   aplicarPreset: () => {
     const presets = {
-      '55x25': { pageW: 100, w: 44, h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 40, bcX: 0 },
-      '50x25': { pageW: 100, w: 39, h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 35, bcX: 0 },
-      '40x25': { pageW: 100, w: 29, h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 25, bcX: 0 },
-      '50x30': { pageW: 100, w: 39, h: 30, gap: 0.3, marginL: 0, marginR: 0, bcH: 11, bcW: 35, bcX: 0 },
-      '60x40': { pageW: 120, w: 49, h: 40, gap: 0.3, marginL: 0, marginR: 0, bcH: 15, bcW: 45, bcX: 0 },
-      '80x40': { pageW: 160, w: 69, h: 40, gap: 0.3, marginL: 0, marginR: 0, bcH: 15, bcW: 65, bcX: 0 },
+      '55x25':  { pageW: 100, w: 44,  h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 40, bcX: 0 },
+      '50x25':  { pageW: 100, w: 39,  h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 35, bcX: 0 },
+      '40x25':  { pageW: 100, w: 29,  h: 25, gap: 0.3, marginL: 0, marginR: 0, bcH: 9,  bcW: 25, bcX: 0 },
+      '50x30':  { pageW: 100, w: 39,  h: 30, gap: 0.3, marginL: 0, marginR: 0, bcH: 11, bcW: 35, bcX: 0 },
+      '60x40':  { pageW: 120, w: 49,  h: 40, gap: 0.3, marginL: 0, marginR: 0, bcH: 15, bcW: 45, bcX: 0 },
+      '80x40':  { pageW: 160, w: 69,  h: 40, gap: 0.3, marginL: 0, marginR: 0, bcH: 15, bcW: 65, bcX: 0 },
+      '100x30': { pageW: 100, w: 100, h: 30, gap: 0,   marginL: 0, marginR: 0, bcH: 10, bcW: 70, bcX: 0 },
     };
     const val = document.getElementById('selTamanho').value;
     const p = presets[val] || presets['55x25'];
@@ -259,11 +260,12 @@ const Etiquetas = {
     bcH:        pf('cfgBcH',   9),
     bcW:        pf('cfgBcW',   40),
     bcX:        pf('cfgBcX',   0),
-    showLoja:   ck('cfgShowLoja'),
-    showNome:   ck('cfgShowNome'),
-    showPreco:  ck('cfgShowPreco'),
-    showVar:    ck('cfgShowVar'),
-    showCodNum: ck('cfgShowCodNum'),
+    showLoja:      ck('cfgShowLoja'),
+    showNome:      ck('cfgShowNome'),
+    showPreco:     ck('cfgShowPreco'),
+    showVar:       ck('cfgShowVar'),
+    showCodNum:    ck('cfgShowCodNum'),
+    showCrediario: ck('cfgShowCrediario'),
     cols: 2,
   };},
 
@@ -301,17 +303,53 @@ const Etiquetas = {
 
     document.getElementById('totalEtiquetas').textContent = `${totalEtiq} etiqueta(s)`;
 
-    wrap.innerHTML = etiquetas.map(e => `
-      <div class="etiq" style="width:${pxW}px;height:${pxH}px">
-        ${d.showLoja  ? `<div class="etiq-loja">${nomeLoja}</div>` : ''}
-        ${d.showNome  ? `<div class="etiq-nome">${_produtoAtivo.nome}</div>` : ''}
-        ${d.showVar   ? `<div class="etiq-var">${e.varLabel}</div>` : ''}
-        ${d.showPreco ? `<div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>` : ''}
-        <div class="etiq-bc" style="height:${bcHeightPx}px;width:${Math.round(d.bcW*PX)}px;margin-left:${Math.round(((d.w-d.bcW)/2+d.bcX)*PX)}px">
-          <svg id="${e.uid}" style="width:100%;height:100%"></svg>
-        </div>
-        ${d.showCodNum ? `<div class="etiq-bc-num">${e.codigo}</div>` : ''}
-      </div>`).join('');
+    const isVitrine = d.w >= 90 && d.h <= 35;
+
+    if (isVitrine) {
+      // Preço crediário
+      const taxaCrediario   = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+      const precoCrediario  = _produtoAtivo.precoVenda * (1 + taxaCrediario / 100);
+      const parcCartao      = 5;
+      const parcCred        = 3;
+      const vlrParcCartao   = Utils.moeda(_produtoAtivo.precoVenda / parcCartao);
+      const vlrParcCred     = Utils.moeda(precoCrediario / parcCred);
+
+      // Layout vitrine: topo = loja + tamanho, centro = preços grandes
+      wrap.innerHTML = etiquetas.map(e => `
+        <div class="etiq sz-100x30">
+          <div class="etiq-vit-topo">
+            ${d.showLoja ? `<div class="etiq-loja">${nomeLoja}</div>` : '<div></div>'}
+            ${d.showVar  ? `<div class="etiq-var">${e.varLabel}</div>` : ''}
+          </div>
+          <div class="etiq-vit-corpo">
+            ${d.showPreco ? `
+              <div class="etiq-vit-bloco-avista">
+                <div class="etiq-vit-label-avista">Cartão / À vista</div>
+                <div class="etiq-vit-valor-avista">${Utils.moeda(_produtoAtivo.precoVenda)}</div>
+                <div class="etiq-vit-parcela">${parcCartao}x de ${vlrParcCartao} sem juros</div>
+              </div>` : ''}
+            ${d.showPreco && d.showCrediario ? `
+              <div class="etiq-vit-sep"></div>
+              <div class="etiq-vit-bloco-cred">
+                <div class="etiq-vit-label-cred">Crediário</div>
+                <div class="etiq-vit-valor-cred">${Utils.moeda(precoCrediario)}</div>
+                <div class="etiq-vit-parcela-cred">${parcCred}x de ${vlrParcCred} sem juros</div>
+              </div>` : ''}
+          </div>
+        </div>`).join('');
+    } else {
+      wrap.innerHTML = etiquetas.map(e => `
+        <div class="etiq" style="width:${pxW}px;height:${pxH}px">
+          ${d.showLoja  ? `<div class="etiq-loja">${nomeLoja}</div>` : ''}
+          ${d.showNome  ? `<div class="etiq-nome">${_produtoAtivo.nome}</div>` : ''}
+          ${d.showVar   ? `<div class="etiq-var">${e.varLabel}</div>` : ''}
+          ${d.showPreco ? `<div class="etiq-preco">${Utils.moeda(_produtoAtivo.precoVenda)}</div>` : ''}
+          <div class="etiq-bc" style="height:${bcHeightPx}px;width:${Math.round(d.bcW*PX)}px;margin-left:${Math.round(((d.w-d.bcW)/2+d.bcX)*PX)}px">
+            <svg id="${e.uid}" style="width:100%;height:100%"></svg>
+          </div>
+          ${d.showCodNum ? `<div class="etiq-bc-num">${e.codigo}</div>` : ''}
+        </div>`).join('');
+    }
 
     const w = bcHeightPx;
 
@@ -361,8 +399,106 @@ const Etiquetas = {
     // Cria PDF com página de tamanho exato igual ao papel físico
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: [d.h, pageW] });
+    const isVitrine = d.w >= 90 && d.h <= 35;
 
-    // Função que desenha uma etiqueta no PDF a partir de (x, y)
+    // ── Layout VITRINE 100x30 ─────────────────────────────────────────────────
+    const taxaCrediario  = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const precoCrediario = _produtoAtivo.precoVenda * (1 + taxaCrediario / 100);
+    const parcCartaoPDF  = 5;
+    const parcCredPDF    = 3;
+
+    const desenharEtiquelaVitrine = (x, y, etiq) => {
+      const topoH  = 5.8;                     // altura do topo (mm)
+      const bodyY  = y + topoH;               // início do corpo
+      const bodyH  = d.h - topoH;             // 30 - 5.8 = 24.2mm
+      const bodyCY = bodyY + bodyH / 2;       // centro vertical do corpo
+
+      // ── TOPO: fundo escuro + loja + variação ─────────────────
+      doc.setFillColor(17, 17, 17);
+      doc.rect(x, y, d.w, topoH, 'F');
+
+      const topoTextY = y + 4.2;
+      if (d.showLoja) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text(nomeLoja, x + 4, topoTextY);
+      }
+      if (d.showVar) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(170, 170, 170);
+        doc.text(etiq.varLabel, x + d.w - 4, topoTextY, { align: 'right' });
+      }
+
+      // ── CORPO: preços ─────────────────────────────────────────
+      const showCred = d.showCrediario && d.showPreco;
+
+      if (d.showPreco && !showCred) {
+        // Preço único — largura total, fonte maior
+        const xC = x + d.w / 2;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 100, 100);
+        doc.text('CARTÃO / À VISTA', xC, bodyCY - 7, { align: 'center' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(30);
+        doc.setTextColor(0, 0, 0);
+        doc.text(preco, xC, bodyCY + 3, { align: 'center', maxWidth: d.w - 4 });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(60, 60, 60);
+        doc.text(`${parcCartaoPDF}x de ${Utils.moeda(_produtoAtivo.precoVenda / parcCartaoPDF)} sem juros`, xC, bodyCY + 8.5, { align: 'center' });
+      }
+
+      if (d.showPreco && showCred) {
+        // Dois preços lado a lado — cada um em 50mm
+        const colW = d.w / 2;              // 50mm por coluna
+        const xA   = x + colW / 2;        // centro à vista: x+25
+        const xCr  = x + colW + colW / 2; // centro crediário: x+75
+
+        // Linha divisória vertical
+        doc.setDrawColor(210, 210, 210);
+        doc.setLineWidth(0.3);
+        doc.line(x + colW, bodyY + 1, x + colW, y + d.h - 1);
+
+        // ─ Coluna CARTÃO / À VISTA
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(90, 90, 90);
+        doc.text('CARTÃO / À VISTA', xA, bodyCY - 7, { align: 'center' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(22);
+        doc.setTextColor(0, 0, 0);
+        doc.text(preco, xA, bodyCY + 2, { align: 'center', maxWidth: colW - 2 });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(60, 60, 60);
+        doc.text(`${parcCartaoPDF}x de ${Utils.moeda(_produtoAtivo.precoVenda / parcCartaoPDF)} sem juros`, xA, bodyCY + 7.5, { align: 'center', maxWidth: colW - 2 });
+
+        // ─ Coluna CREDIÁRIO
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(180, 83, 9);
+        doc.text('CREDIÁRIO', xCr, bodyCY - 7, { align: 'center' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(22);
+        doc.setTextColor(180, 83, 9);
+        doc.text(Utils.moeda(precoCrediario), xCr, bodyCY + 2, { align: 'center', maxWidth: colW - 2 });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(180, 83, 9);
+        doc.text(`${parcCredPDF}x de ${Utils.moeda(precoCrediario / parcCredPDF)} sem juros`, xCr, bodyCY + 7.5, { align: 'center', maxWidth: colW - 2 });
+      }
+    };
+
+    // ── Layout NORMAL (impressora térmica) ────────────────────────────────────
     const desenharEtiqueta = (x, y, etiq) => {
       const pad = 2;            // padding interno (mm) em cada lado
       const innerW = d.w - pad * 2;  // largura útil dentro da coluna
@@ -437,13 +573,15 @@ const Etiquetas = {
       }
     };
 
-    // Preenche páginas com 2 etiquetas por linha
-    for (let i = 0; i < lista.length; i += d.cols) {
+    // Preenche páginas — vitrine: 1 etiqueta por página; normal: cols por linha
+    const cols = isVitrine ? 1 : d.cols;
+    const fn   = isVitrine ? desenharEtiquelaVitrine : desenharEtiqueta;
+    for (let i = 0; i < lista.length; i += cols) {
       if (i > 0) doc.addPage([d.h, pageW], 'l');
-      for (let col = 0; col < d.cols; col++) {
+      for (let col = 0; col < cols; col++) {
         if (i + col < lista.length) {
           const x = d.marginL + col * (d.w + d.gap);
-          desenharEtiqueta(x, 0, lista[i + col]);
+          fn(x, 0, lista[i + col]);
         }
       }
     }

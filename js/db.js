@@ -80,12 +80,56 @@ const DB = (() => {
             if (docs.length === 0 && local.length > 0 && !_fbReady) {
               local.forEach(item => {
                 if (item && item.id) {
-                  _fbDb.collection('movePe_' + col).doc(item.id).set(item).catch(e => console.error(e));
+                  const sanitized = Sync._sanitizeForFirestore(col, item);
+                  _fbDb.collection('movePe_' + col).doc(item.id).set(sanitized).catch(e => console.error(e));
                 }
               });
               // Mantém localStorage como está (não apaga)
             } else {
-              _set(col, docs);
+              // Merge inteligente: preserva dados locais que podem não ter sincronizado
+              if (col === 'produtos') {
+                const merged = docs.map(fbDoc => {
+                  const localDoc = local.find(l => l.id === fbDoc.id);
+                  if (!localDoc) return fbDoc;
+
+                  const localVars = Object.keys(localDoc.variacoes || {}).length;
+                  const fbVars   = Object.keys(fbDoc.variacoes   || {}).length;
+
+                  // Compara timestamps — prefer o mais recente
+                  const localTime = localDoc.atualizadoEm || localDoc.criadoEm || '';
+                  const fbTime    = fbDoc.atualizadoEm    || fbDoc.criadoEm    || '';
+                  const localIsNewer = localTime > fbTime;
+
+                  // Foto sempre vem do local (não salva no Firestore)
+                  const fotoMerge = localDoc.foto || fbDoc.foto || '';
+                  const fotosVar  = localDoc.fotosVariacoes || fbDoc.fotosVariacoes || {};
+
+                  // Regra 1: se local tem MAIS variacoes — local vence, reenvia ao Firestore
+                  if (localVars > fbVars) {
+                    Sync.save('produtos', localDoc);
+                    return { ...fbDoc, variacoes: localDoc.variacoes, foto: fotoMerge, fotosVariacoes: fotosVar };
+                  }
+
+                  // Regra 2: mesma quantidade de variacoes mas local é mais recente — usa local
+                  if (localIsNewer && localVars >= fbVars) {
+                    Sync.save('produtos', localDoc);
+                    return { ...localDoc, foto: fotoMerge, fotosVariacoes: fotosVar };
+                  }
+
+                  // Regra 3: Firebase é mais recente, mas preserva foto local
+                  return { ...fbDoc, foto: fotoMerge, fotosVariacoes: fotosVar };
+                });
+                // Adiciona itens locais que não existem no Firestore ainda
+                local.forEach(localDoc => {
+                  if (localDoc && localDoc.id && !merged.find(m => m.id === localDoc.id)) {
+                    merged.push(localDoc);
+                    Sync.save('produtos', localDoc);
+                  }
+                });
+                _set(col, merged);
+              } else {
+                _set(col, docs);
+              }
             }
 
             const wasReady = _fbReady;
@@ -119,11 +163,29 @@ const DB = (() => {
       });
     },
 
+    // Remove base64 antes de enviar ao Firestore (evita falha por documento > 1MB)
+    _sanitizeForFirestore: (col, item) => {
+      if (col !== 'produtos') return item;
+      const s = { ...item };
+      // Remove foto principal se for base64
+      if (s.foto && s.foto.startsWith('data:')) delete s.foto;
+      // Remove fotos de variação base64
+      if (s.fotosVariacoes) {
+        const fv = {};
+        Object.entries(s.fotosVariacoes).forEach(([k, v]) => {
+          if (v && !v.startsWith('data:')) fv[k] = v;
+        });
+        s.fotosVariacoes = fv;
+      }
+      return s;
+    },
+
     save: (col, item) => {
       if (!_fbDb || !item || !item.id) return;
       try {
+        const sanitized = Sync._sanitizeForFirestore(col, item);
         Sync.updateStatus('syncing');
-        _fbDb.collection('movePe_' + col).doc(item.id).set(item)
+        _fbDb.collection('movePe_' + col).doc(sanitized.id).set(sanitized)
           .then(() => Sync.updateStatus('synced'))
           .catch((e) => {
             console.error('Erro ao salvar no Firestore:', e);
@@ -159,8 +221,9 @@ const DB = (() => {
         const lista = _get(col);
         lista.forEach(item => {
           if (item && item.id) {
+            const sanitized = Sync._sanitizeForFirestore(col, item);
             promises.push(
-              _fbDb.collection('movePe_' + col).doc(item.id).set(item)
+              _fbDb.collection('movePe_' + col).doc(sanitized.id).set(sanitized)
             );
           }
         });
@@ -229,11 +292,12 @@ const DB = (() => {
     salvar: (prod) => {
       const lista = _get('produtos');
       const idx = lista.findIndex(p => p.id === prod.id);
+      prod.atualizadoEm = new Date().toISOString();
       if (idx >= 0) {
         lista[idx] = { ...lista[idx], ...prod };
       } else {
         prod.id = genId();
-        prod.criadoEm = new Date().toISOString();
+        prod.criadoEm = prod.atualizadoEm;
         lista.push(prod);
       }
       _set('produtos', lista);
