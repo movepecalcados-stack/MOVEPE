@@ -26,7 +26,7 @@ const Fin = {
     _tabAtual = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    ['resumo','dre','fluxo30','ranking','precificacao','contas','metas','diagnostico'].forEach(t => {
+    ['resumo','dre','fluxo30','ranking','reposicao','precificacao','contas','metas','diagnostico'].forEach(t => {
       const el = document.getElementById('tab-' + t);
       if (el) el.style.display = t === tab ? '' : 'none';
     });
@@ -50,6 +50,7 @@ const Fin = {
     if (_tabAtual === 'dre')          Fin.renderDRE();
     if (_tabAtual === 'fluxo30')      Fin.renderFluxo30();
     if (_tabAtual === 'ranking')      Fin.renderRanking();
+    if (_tabAtual === 'reposicao')    Fin.renderReposicao();
     if (_tabAtual === 'precificacao') Fin.renderPrecificacao();
     if (_tabAtual === 'contas')       Fin.renderContas();
     if (_tabAtual === 'metas')        Fin.renderMetas();
@@ -765,6 +766,195 @@ const Fin = {
             <span style="font-size:16px;flex-shrink:0">${iconeSugestao[s.tipo]}</span>
             <div style="font-size:13px;line-height:1.5">${s.msg}</div>
           </div>`).join('')}
+      </div>`;
+  },
+
+  // ---- ABA REPOSIÇÃO DE ESTOQUE ----
+  renderReposicao: () => {
+    const cont = document.getElementById('reposicaoConteudo');
+    if (!cont) return;
+
+    // Parâmetros
+    const periodo  = document.getElementById('reposicaoPeriodo')?.value || 'mes';
+    const pctExtra = parseInt(document.getElementById('reposicaoPct')?.value || 15);
+    const hoje     = Utils.hoje();
+
+    // Saldo atual
+    const inputSaldo = document.getElementById('reposicaoSaldo');
+    const saldoSalvo = parseFloat(DB.Config.get('fluxoSaldoInicial', '')) || 0;
+    if (inputSaldo && !inputSaldo.value && saldoSalvo) inputSaldo.value = saldoSalvo;
+    const saldoAtual = parseFloat(inputSaldo?.value || saldoSalvo) || 0;
+
+    // Datas do período
+    let inicio, fim = hoje, labelPeriodo;
+    if (periodo === 'semana') {
+      const d = new Date(hoje); d.setDate(d.getDate() - 7);
+      inicio = d.toISOString().split('T')[0]; labelPeriodo = 'última semana';
+    } else if (periodo === 'mes') {
+      inicio = hoje.substring(0, 7) + '-01'; labelPeriodo = 'mês atual';
+    } else if (periodo === 'mes_ant') {
+      const d = new Date(hoje); d.setDate(1); d.setMonth(d.getMonth() - 1);
+      inicio = d.toISOString().split('T')[0];
+      const fimD = new Date(d); fimD.setMonth(fimD.getMonth() + 1); fimD.setDate(0);
+      fim = fimD.toISOString().split('T')[0]; labelPeriodo = 'mês anterior';
+    } else {
+      const d = new Date(hoje); d.setDate(d.getDate() - 30);
+      inicio = d.toISOString().split('T')[0]; labelPeriodo = 'últimos 30 dias';
+    }
+
+    // Vendas do período
+    const vendas = DB.Vendas.listarPorPeriodo(inicio, fim);
+    const vendidos = {}; // produtoId → { qtd, cmv, nome, marca }
+
+    vendas.forEach(v => {
+      (v.itens || []).forEach(item => {
+        const id = item.produtoId;
+        if (!id) return;
+        if (!vendidos[id]) {
+          const prod = DB.Produtos.buscar(id);
+          vendidos[id] = {
+            nome:  item.nomeSnapshot || (prod ? prod.nome  : 'Produto removido'),
+            marca: prod ? (prod.marca || '') : '',
+            qtd: 0, cmv: 0, precoCusto: parseFloat(prod?.precoCusto) || 0
+          };
+        }
+        const qtd   = parseInt(item.quantidade) || 1;
+        const custo = parseFloat(item.precoCusto) || vendidos[id].precoCusto;
+        vendidos[id].qtd += qtd;
+        vendidos[id].cmv += custo * qtd;
+      });
+    });
+
+    const cmvTotal = Object.values(vendidos).reduce((s, v) => s + v.cmv, 0);
+
+    // Orçamento sugerido = CMV × (1 + % extra)
+    const orcamento = cmvTotal * (1 + pctExtra / 100);
+
+    // Verificação de caixa
+    // Contas a vencer em 30 dias + crediário a receber em 30 dias
+    const em30str  = (() => { const d = new Date(hoje); d.setDate(d.getDate()+30); return d.toISOString().split('T')[0]; })();
+    const contasProx  = DB.Despesas.listar().filter(d => !d.pago && d.vencimento && d.vencimento >= hoje && d.vencimento <= em30str)
+      .reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    const credProx = DB.Crediario.listar().reduce((s, cred) => {
+      cred.parcelas.forEach(p => {
+        if (p.status !== 'pago' && p.vencimento >= hoje && p.vencimento <= em30str)
+          s += parseFloat(p.valor) || 0;
+      }); return s;
+    }, 0);
+
+    // Caixa disponível = saldo + crediário a receber - contas a pagar - reserva 20%
+    const reservaSeguranca = (saldoAtual + credProx) * 0.20;
+    const disponivelReal   = Math.max(0, saldoAtual + credProx - contasProx - reservaSeguranca);
+    const seguro           = disponivelReal >= orcamento;
+    const limiteSugerido   = Math.min(orcamento, disponivelReal);
+
+    // Lista de produtos para repor (ordenada por CMV consumido)
+    const listaRepor = Object.entries(vendidos)
+      .map(([id, dados]) => {
+        const prod        = DB.Produtos.buscar(id);
+        const estoqueAtual = prod ? DB.Produtos.estoqueTotal(prod) : 0;
+        const qtdRepor     = Math.ceil(dados.qtd * (1 + pctExtra / 100));
+        const custoEstim   = qtdRepor * dados.precoCusto;
+        return { id, ...dados, estoqueAtual, qtdRepor, custoEstim };
+      })
+      .filter(r => r.qtdRepor > 0)
+      .sort((a, b) => b.cmv - a.cmv);
+
+    const custoTotalRepor = listaRepor.reduce((s, r) => s + r.custoEstim, 0);
+    const semCusto = listaRepor.every(r => r.precoCusto === 0);
+
+    // ── RENDER ──
+    const corDisp = seguro ? 'var(--success)' : 'var(--warning)';
+    const emojiDisp = seguro ? '✅' : '⚠️';
+
+    cont.innerHTML = `
+      <!-- Cards resumo -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px">
+        <div class="stat-card">
+          <div class="stat-label">CMV do período</div>
+          <div class="stat-value">${Utils.moeda(cmvTotal)}</div>
+          <div class="stat-sub">custo do que foi vendido (${labelPeriodo})</div>
+        </div>
+        <div class="stat-card stat-destaque">
+          <div class="stat-label">Orçamento sugerido</div>
+          <div class="stat-value primary">${Utils.moeda(orcamento)}</div>
+          <div class="stat-sub">CMV + ${pctExtra}% de crescimento</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Disponível no caixa</div>
+          <div class="stat-value" style="color:${corDisp}">${Utils.moeda(disponivelReal)}</div>
+          <div class="stat-sub">após pagar contas + reserva 20%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Custo estimado da lista</div>
+          <div class="stat-value ${custoTotalRepor > disponivelReal ? 'danger' : 'success'}">${Utils.moeda(custoTotalRepor)}</div>
+          <div class="stat-sub">${semCusto ? 'cadastre preços de custo' : 'com base no preço de custo'}</div>
+        </div>
+      </div>
+
+      <!-- Alerta de viabilidade -->
+      <div style="background:${seguro ? 'rgba(34,197,94,.08)' : 'rgba(234,179,8,.08)'};border:1px solid ${seguro ? 'var(--success)' : 'rgba(234,179,8,.5)'};border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:22px">${emojiDisp}</span>
+        <div>
+          <div style="font-weight:700;margin-bottom:4px;color:${corDisp}">
+            ${seguro ? 'Compra dentro da capacidade do caixa' : 'Atenção: orçamento acima do disponível'}
+          </div>
+          <div style="font-size:13px;color:var(--text)">
+            ${seguro
+              ? `Você tem <strong>${Utils.moeda(disponivelReal)}</strong> disponível e o orçamento é de <strong>${Utils.moeda(orcamento)}</strong>. Pode comprar com segurança.`
+              : `Seu caixa tem <strong>${Utils.moeda(disponivelReal)}</strong> disponível (após pagar contas e reserva). Considere comprar no máximo <strong>${Utils.moeda(limiteSugerido)}</strong> agora e o restante na próxima semana.`
+            }
+          </div>
+          ${!saldoAtual ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">⚙️ Informe seu saldo atual no campo acima para o cálculo de disponibilidade ser preciso.</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Lista de produtos para repor -->
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+        Lista de Reposição — ${listaRepor.length} produto(s)
+      </div>
+      ${listaRepor.length === 0 ? `<div class="card"><div class="empty-state"><div class="empty-icon">🛒</div><div class="empty-title">Nenhuma venda no período</div></div></div>` : `
+      <div class="card" style="padding:0">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;font-size:12px;font-weight:700;color:var(--text-muted)">
+          <span>Produto</span>
+          <span style="text-align:right">Vendido</span>
+          <span style="text-align:right">Estoque atual</span>
+          <span style="text-align:right">Repor (+${pctExtra}%)</span>
+          <span style="text-align:right">Custo estimado</span>
+        </div>
+        ${listaRepor.map(r => {
+          const estoqueOk  = r.estoqueAtual >= r.qtdRepor;
+          const estoqueBaixo = r.estoqueAtual < r.qtdVendida * 0.3;
+          return `
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;align-items:center">
+            <div>
+              <div style="font-weight:600;font-size:13px">${r.nome}</div>
+              ${r.marca ? `<div style="font-size:11px;color:var(--text-muted)">${r.marca}</div>` : ''}
+            </div>
+            <div style="text-align:right;font-size:13px">${r.qtd} un</div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:${estoqueBaixo ? 'var(--danger)' : estoqueOk ? 'var(--success)' : 'var(--warning)'}">
+              ${r.estoqueAtual} un${estoqueBaixo ? ' ⚠️' : ''}
+            </div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:var(--primary)">${r.qtdRepor} un</div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:${r.precoCusto > 0 ? 'var(--text)' : 'var(--text-muted)'}">
+              ${r.precoCusto > 0 ? Utils.moeda(r.custoEstim) : '— sem custo'}
+            </div>
+          </div>`;
+        }).join('')}
+        <div style="padding:10px 16px;background:var(--bg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span style="font-size:13px;color:var(--text-muted)">
+            ${semCusto ? '⚙️ Cadastre o preço de custo nos produtos para ver o custo estimado' : `${listaRepor.filter(r=>r.precoCusto>0).length} de ${listaRepor.length} produtos com custo cadastrado`}
+          </span>
+          <span style="font-weight:800;font-size:15px">Total estimado: <span style="color:${custoTotalRepor > disponivelReal ? 'var(--danger)' : 'var(--success)'}">${Utils.moeda(custoTotalRepor)}</span></span>
+        </div>
+      </div>`}
+
+      <!-- Dica de uso -->
+      <div style="margin-top:12px;padding:12px 16px;background:rgba(99,102,241,.07);border-radius:var(--radius-sm);font-size:13px;color:var(--text-muted);line-height:1.6">
+        💡 <strong>Como usar:</strong> A lista mostra tudo que foi vendido no período.
+        A coluna <em>Repor</em> sugere a quantidade considerando o crescimento de ${pctExtra}%.
+        Priorize os produtos com estoque baixo (⚠️) e maior CMV consumido.
+        O orçamento é seguro quando o caixa disponível cobre a compra com reserva de 20%.
       </div>`;
   },
 

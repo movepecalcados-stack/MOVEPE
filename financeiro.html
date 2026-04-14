@@ -26,6 +26,7 @@
         <button class="tab-btn" onclick="Fin.setTab('dre',this)">📋 DRE</button>
         <button class="tab-btn" onclick="Fin.setTab('fluxo30',this)">💰 Fluxo 30d</button>
         <button class="tab-btn" onclick="Fin.setTab('ranking',this)">🏆 Ranking</button>
+        <button class="tab-btn" onclick="Fin.setTab('reposicao',this)">🛒 Reposição</button>
         <button class="tab-btn" onclick="Fin.setTab('precificacao',this)">🏷️ Precificação</button>
         <button class="tab-btn" onclick="Fin.setTab('contas',this)">📅 Contas</button>
         <button class="tab-btn" onclick="Fin.setTab('metas',this)">🎯 Metas</button>
@@ -75,6 +76,39 @@
           </div>
         </div>
         <div id="fluxo30Conteudo"></div>
+      </div>
+
+      <!-- ===== ABA REPOSIÇÃO ===== -->
+      <div id="tab-reposicao" style="display:none">
+        <!-- Controles -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">🛒 Plano de Reposição de Estoque</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="margin:0;min-width:180px">
+              <label class="form-label">Período de análise</label>
+              <select id="reposicaoPeriodo" class="form-control" onchange="Fin.renderReposicao()">
+                <option value="semana">Última semana</option>
+                <option value="mes" selected>Mês atual</option>
+                <option value="mes_ant">Mês anterior</option>
+                <option value="30d">Últimos 30 dias</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;min-width:160px">
+              <label class="form-label">Investimento extra: <strong id="reposicaoPctLabel">15%</strong></label>
+              <input type="range" id="reposicaoPct" min="0" max="30" value="15" step="5"
+                style="width:100%;accent-color:var(--primary)"
+                oninput="document.getElementById('reposicaoPctLabel').textContent=this.value+'%'; Fin.renderReposicao()">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)"><span>0%</span><span>só repor</span><span>+30%</span></div>
+            </div>
+            <div class="form-group" style="margin:0;min-width:200px">
+              <label class="form-label">Saldo atual (caixa + banco)</label>
+              <input type="number" id="reposicaoSaldo" class="form-control" placeholder="R$ 0,00" step="0.01"
+                oninput="DB.Config.set('fluxoSaldoInicial',this.value); Fin.renderReposicao()"
+                value="">
+            </div>
+          </div>
+        </div>
+        <div id="reposicaoConteudo"></div>
       </div>
 
       <!-- ===== ABA RANKING ===== -->
