@@ -128,6 +128,7 @@ const Fin = {
 
   // ---- ABA RESUMO ----
   renderResumo: () => {
+    Fin.renderMetaDia();
     const mes = Fin.getMes();
     const d   = Fin.calcularDRE(mes);
     const aReceber = DB.Crediario.totalPendente();
@@ -755,6 +756,111 @@ const Fin = {
             <span style="font-size:16px;flex-shrink:0">${iconeSugestao[s.tipo]}</span>
             <div style="font-size:13px;line-height:1.5">${s.msg}</div>
           </div>`).join('')}
+      </div>`;
+  },
+
+  // ---- META DO DIA ----
+  renderMetaDia: () => {
+    const cont = document.getElementById('cardMetaDia');
+    if (!cont) return;
+
+    const mes     = Fin.getMes();
+    const hoje    = Utils.hoje();
+    const mesHoje = hoje.substring(0, 7);
+    const [ano, m] = mes.split('-').map(Number);
+
+    const d = Fin.calcularDRE(mes);
+
+    // Despesas cadastradas no mês
+    const despesas = DB.Despesas.listar().filter(dep =>
+      dep.recorrente || (dep.vencimento || '').startsWith(mes)
+    );
+    const totalDesp = despesas.reduce((s, dep) => s + (parseFloat(dep.valor) || 0), 0);
+    const semDespesas = totalDesp === 0;
+
+    // Margem de contribuição real (lucro bruto / receita); assume 40% se sem dados
+    const mc = d.receitaBruta > 0 ? d.lucroBruto / d.receitaBruta : 0.40;
+
+    // Ponto de equilíbrio mensal
+    const pe = mc > 0 ? (totalDesp + d.taxasCartao) / mc : 0;
+
+    // Dias úteis e meta diária
+    const diasUteis  = Fin._diasUteis(ano, m);
+    const metaDiaria = diasUteis > 0 && pe > 0 ? pe / diasUteis : 0;
+
+    // Vendido hoje (só se estiver vendo o mês atual)
+    let vendidoHoje = 0;
+    if (mes === mesHoje) {
+      vendidoHoje = DB.Vendas.listarPorPeriodo(hoje, hoje)
+        .filter(v => v.formaPagamento !== 'crediario')
+        .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    }
+
+    // Progresso
+    const pct     = metaDiaria > 0 ? Math.min((vendidoHoje / metaDiaria) * 100, 100) : 0;
+    const falta   = Math.max(0, metaDiaria - vendidoHoje);
+    const batida  = vendidoHoje >= metaDiaria && metaDiaria > 0;
+
+    // Status
+    let statusCor, statusMsg, statusEmoji;
+    if (semDespesas) {
+      statusCor = 'var(--text-muted)'; statusEmoji = '⚙️';
+      statusMsg = 'Cadastre suas despesas fixas na aba <strong>Contas</strong> para calcular a meta real.';
+    } else if (batida) {
+      statusCor = 'var(--success)'; statusEmoji = '🎉';
+      statusMsg = `Meta do dia batida! Você vendeu <strong>${Utils.moeda(vendidoHoje - metaDiaria)}</strong> a mais.`;
+    } else if (pct >= 75) {
+      statusCor = 'var(--warning)'; statusEmoji = '💪';
+      statusMsg = `Quase lá! Faltam <strong>${Utils.moeda(falta)}</strong> para cobrir os custos de hoje.`;
+    } else if (pct >= 40) {
+      statusCor = 'var(--warning)'; statusEmoji = '⚠️';
+      statusMsg = `Metade do caminho. Ainda faltam <strong>${Utils.moeda(falta)}</strong>.`;
+    } else {
+      statusCor = 'var(--danger)'; statusEmoji = '🔴';
+      statusMsg = mes !== mesHoje
+        ? `Neste mês o ponto de equilíbrio diário foi <strong>${Utils.moeda(metaDiaria)}</strong>.`
+        : `Precisa acelerar! Faltam <strong>${Utils.moeda(falta)}</strong> para cobrir os custos de hoje.`;
+    }
+
+    const barCor = batida ? 'var(--success)' : pct >= 75 ? 'var(--warning)' : pct >= 40 ? 'var(--warning)' : 'var(--danger)';
+
+    cont.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+          <div style="font-size:16px;font-weight:800">🎯 Meta do Dia</div>
+          <div style="font-size:12px;color:var(--text-muted)">${diasUteis} dias úteis no mês · ponto de equilíbrio: <strong style="color:var(--text)">${Utils.moeda(pe)}/mês</strong></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:16px">
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Meta do dia</div>
+            <div style="font-size:28px;font-weight:900;color:var(--primary);line-height:1">${Utils.moeda(metaDiaria)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">para cobrir custos</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${mes === mesHoje ? 'Vendido hoje' : 'Receita do mês'}</div>
+            <div style="font-size:28px;font-weight:900;color:${vendidoHoje >= metaDiaria && metaDiaria > 0 ? 'var(--success)' : 'var(--text)'};line-height:1">${Utils.moeda(mes === mesHoje ? vendidoHoje : d.receitaBruta)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${mes === mesHoje ? 'até agora' : d.qtdVendas + ' vendas'}</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${batida ? 'Excedente' : 'Falta'}</div>
+            <div style="font-size:28px;font-weight:900;color:${batida ? 'var(--success)' : 'var(--danger)'};line-height:1">${batida ? '+' : ''}${Utils.moeda(batida ? vendidoHoje - metaDiaria : falta)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${batida ? 'acima da meta' : 'para equilibrar'}</div>
+          </div>
+        </div>
+
+        <!-- Barra de progresso -->
+        <div style="height:14px;background:var(--border);border-radius:7px;overflow:hidden;margin-bottom:10px">
+          <div style="height:100%;width:${pct}%;background:${barCor};border-radius:7px;transition:width .6s;position:relative">
+            ${pct > 15 ? `<span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#fff">${pct.toFixed(0)}%</span>` : ''}
+          </div>
+        </div>
+
+        <!-- Status -->
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:${statusCor}">
+          <span style="font-size:18px">${statusEmoji}</span>
+          <span>${statusMsg}</span>
+        </div>
       </div>`;
   },
 
