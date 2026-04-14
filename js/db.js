@@ -659,6 +659,35 @@ const DB = (() => {
     }
   };
 
+  // ---- RETIRADAS DO DONO ----
+  const Retiradas = {
+    listar: () => _get('retiradas'),
+
+    listarPorMes: (mes) => _get('retiradas').filter(r => (r.data || '').startsWith(mes)),
+
+    totalMes: (mes) => _get('retiradas')
+      .filter(r => (r.data || '').startsWith(mes))
+      .reduce((s, r) => s + (parseFloat(r.valor) || 0), 0),
+
+    salvar: (ret) => {
+      const lista = _get('retiradas');
+      const idx = lista.findIndex(r => r.id === ret.id);
+      if (idx >= 0) {
+        lista[idx] = { ...lista[idx], ...ret };
+      } else {
+        ret.id = genId();
+        ret.criadoEm = new Date().toISOString();
+        lista.push(ret);
+      }
+      _set('retiradas', lista);
+      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+    },
+
+    excluir: (id) => {
+      _set('retiradas', _get('retiradas').filter(r => r.id !== id));
+    }
+  };
+
   // ---- BACKUP ----
   const exportar = () => {
     const agora = new Date();
@@ -727,5 +756,5 @@ const DB = (() => {
   // Inicializa Firebase ao carregar a página
   document.addEventListener('DOMContentLoaded', Sync.init);
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
 })();

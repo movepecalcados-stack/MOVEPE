@@ -75,8 +75,10 @@ const Dashboard = {
     document.getElementById('statFaturamentoMes').textContent = Utils.moeda(totalMes);
     document.getElementById('statQtdMes').textContent = vendasMes.length + ' venda(s)';
     document.getElementById('statEstoqueBaixo').textContent = estoqueBaixo;
-    document.getElementById('statInadimplentes').textContent = clientesInad;
-    document.getElementById('statTotalInad').textContent = Utils.moeda(totalInad);
+    document.getElementById('statInadimplentes').textContent = clientesInad + ' cliente(s)';
+    document.getElementById('statTotalInad').textContent = Utils.moeda(totalInad) + ' em atraso';
+    const elClientesInad = document.getElementById('statClientesInad');
+    if (elClientesInad) elClientesInad.textContent = clientesInad > 0 ? 'Ver Financeiro →' : '';
   },
 
   renderGrafico7Dias: () => {

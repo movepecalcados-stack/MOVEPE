@@ -25,6 +25,7 @@
         <button class="tab-btn active" onclick="Fin.setTab('resumo',this)">📊 Resumo</button>
         <button class="tab-btn" onclick="Fin.setTab('dre',this)">📋 DRE</button>
         <button class="tab-btn" onclick="Fin.setTab('fluxo30',this)">💰 Fluxo 30d</button>
+        <button class="tab-btn" onclick="Fin.setTab('ranking',this)">🏆 Ranking</button>
         <button class="tab-btn" onclick="Fin.setTab('precificacao',this)">🏷️ Precificação</button>
         <button class="tab-btn" onclick="Fin.setTab('contas',this)">📅 Contas</button>
         <button class="tab-btn" onclick="Fin.setTab('metas',this)">🎯 Metas</button>
@@ -76,6 +77,20 @@
         <div id="fluxo30Conteudo"></div>
       </div>
 
+      <!-- ===== ABA RANKING ===== -->
+      <div id="tab-ranking" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="font-size:14px;font-weight:600">Período:</div>
+          <select id="rankingPeriodo" class="form-control" style="width:200px" onchange="Fin.renderRanking()">
+            <option value="mes">Mês atual</option>
+            <option value="3m">Últimos 3 meses</option>
+            <option value="6m">Últimos 6 meses</option>
+            <option value="ano">Ano atual</option>
+          </select>
+        </div>
+        <div id="rankingConteudo"></div>
+      </div>
+
       <!-- ===== ABA PRECIFICAÇÃO ===== -->
       <div id="tab-precificacao" style="display:none">
         <div style="display:grid;grid-template-columns:400px 1fr;gap:20px;align-items:start" id="precLayout">
@@ -111,12 +126,14 @@
       <!-- ===== ABA CONTAS ===== -->
       <div id="tab-contas" style="display:none">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm tab-btn-sub active" onclick="Fin.setSubContas('pagar',this)">📤 A Pagar</button>
             <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('receber',this)">📥 A Receber</button>
+            <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('retiradas',this)">💸 Retiradas do Dono</button>
           </div>
-          <div style="display:flex;gap:8px" id="btnNovaDespesa">
-            <button class="btn btn-outline btn-sm" onclick="Fin.abrirScannerBoleto()">📷 Escanear Boleto</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="btnNovaDespesa">
+            <button class="btn btn-outline btn-sm" onclick="Fin.abrirFormCompraParcelada()">📦 Compra Parcelada</button>
+            <button class="btn btn-outline btn-sm" onclick="Fin.abrirScannerBoleto()">📷 Boleto</button>
             <button class="btn btn-primary btn-sm" onclick="Fin.abrirFormDespesa(null)">+ Nova Despesa</button>
           </div>
         </div>
@@ -125,6 +142,9 @@
         </div>
         <div id="contasReceber" style="display:none">
           <div class="card" style="padding:0" id="listaReceber"></div>
+        </div>
+        <div id="contasRetiradas" style="display:none">
+          <div class="card" style="padding:0" id="listaRetiradas"></div>
         </div>
       </div>
 
@@ -239,6 +259,77 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalDespesa')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">💾 Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Compra Parcelada -->
+  <div class="modal-overlay" id="modalCompraParcelada" style="display:none">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <span class="modal-title">📦 Registrar Compra Parcelada</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalCompraParcelada')">✕</button>
+      </div>
+      <form id="formCompraParcelada" onsubmit="Fin.salvarCompraParcelada(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Fornecedor *</label>
+            <input type="text" name="fornecedor" class="form-control" placeholder="Ex: Fornecedor ABC" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descrição / Produto *</label>
+            <input type="text" name="descricao" class="form-control" placeholder="Ex: Coleção Verão 2025" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor Total (R$) *</label>
+            <input type="number" name="valorTotal" class="form-control" step="0.01" placeholder="0,00" required oninput="Fin.previewParcelasCompra()">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Nº de Parcelas *</label>
+              <input type="number" name="parcelas" class="form-control" min="1" max="24" value="1" required oninput="Fin.previewParcelasCompra()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">1ª Parcela *</label>
+              <input type="date" name="primeiraParcela" class="form-control" required>
+            </div>
+          </div>
+          <div id="previewParcelasCompra" style="font-size:13px;color:var(--text-muted);padding:8px;background:var(--bg);border-radius:var(--radius-sm)"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalCompraParcelada')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">💾 Salvar Parcelas</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Retirada do Dono -->
+  <div class="modal-overlay" id="modalRetirada" style="display:none">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <span class="modal-title" id="modalRetiradaTitulo">Nova Retirada</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalRetirada')">✕</button>
+      </div>
+      <form id="formRetirada" onsubmit="Fin.salvarRetirada(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Data *</label>
+            <input type="date" name="data" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor (R$) *</label>
+            <input type="number" name="valor" class="form-control" step="0.01" placeholder="0,00" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descrição</label>
+            <input type="text" name="descricao" class="form-control" placeholder="Ex: Pró-labore, pagamento pessoal...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalRetirada')">Cancelar</button>
           <button type="submit" class="btn btn-primary">💾 Salvar</button>
         </div>
       </form>

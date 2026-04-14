@@ -51,10 +51,11 @@
           <div class="stat-value warning" id="statEstoqueBaixo">0</div>
           <div class="stat-sub"><a href="estoque.html" style="color:var(--warning)">Ver estoque →</a></div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Inadimplentes</div>
+        <div class="stat-card" style="cursor:pointer" onclick="location.href='financeiro.html'" title="Ver no financeiro">
+          <div class="stat-label">Crediário Vencido</div>
           <div class="stat-value danger" id="statInadimplentes">0</div>
           <div class="stat-sub" id="statTotalInad" style="color:var(--danger)">R$ 0,00 em atraso</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px" id="statClientesInad"></div>
         </div>
       </div>
 

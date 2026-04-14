@@ -26,7 +26,7 @@ const Fin = {
     _tabAtual = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    ['resumo','dre','fluxo30','precificacao','contas','metas','diagnostico'].forEach(t => {
+    ['resumo','dre','fluxo30','ranking','precificacao','contas','metas','diagnostico'].forEach(t => {
       const el = document.getElementById('tab-' + t);
       if (el) el.style.display = t === tab ? '' : 'none';
     });
@@ -37,10 +37,11 @@ const Fin = {
     _subContasAtual = sub;
     document.querySelectorAll('.tab-btn-sub').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    document.getElementById('contasPagar').style.display  = sub === 'pagar'   ? '' : 'none';
-    document.getElementById('contasReceber').style.display = sub === 'receber' ? '' : 'none';
+    document.getElementById('contasPagar').style.display    = sub === 'pagar'     ? '' : 'none';
+    document.getElementById('contasReceber').style.display  = sub === 'receber'   ? '' : 'none';
+    document.getElementById('contasRetiradas').style.display = sub === 'retiradas' ? '' : 'none';
     const btnNova = document.getElementById('btnNovaDespesa');
-    if (btnNova) btnNova.style.display = sub === 'pagar' ? 'flex' : 'none';
+    if (btnNova) btnNova.style.display = sub === 'receber' ? 'none' : 'flex';
     Fin.renderContas();
   },
 
@@ -48,6 +49,7 @@ const Fin = {
     if (_tabAtual === 'resumo')       Fin.renderResumo();
     if (_tabAtual === 'dre')          Fin.renderDRE();
     if (_tabAtual === 'fluxo30')      Fin.renderFluxo30();
+    if (_tabAtual === 'ranking')      Fin.renderRanking();
     if (_tabAtual === 'precificacao') Fin.renderPrecificacao();
     if (_tabAtual === 'contas')       Fin.renderContas();
     if (_tabAtual === 'metas')        Fin.renderMetas();
@@ -112,16 +114,19 @@ const Fin = {
     const outrasEntradas = fluxoMes.filter(f => f.tipo === 'entrada' && f.categoria !== 'venda')
       .reduce((s, f) => s + (parseFloat(f.valor) || 0), 0);
 
-    const lucroBruto   = receitaBruta - cmv;
+    // Retiradas do dono no mês
+    const totalRetiradas = DB.Retiradas.totalMes(mes);
+
+    const lucroBruto    = receitaBruta - cmv;
     const totalDespesas = despFixas + despVariaveis + taxasCartao;
-    const lucroLiquido = lucroBruto - totalDespesas;
-    const margemBruta  = receitaBruta > 0 ? (lucroBruto / receitaBruta) * 100 : 0;
+    const lucroLiquido  = lucroBruto - totalDespesas - totalRetiradas;
+    const margemBruta   = receitaBruta > 0 ? (lucroBruto / receitaBruta) * 100 : 0;
     const margemLiquida = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0;
 
     return {
       receitaBruta, cmv, lucroBruto, margemBruta,
       despFixas, despVariaveis, taxasCartao, totalDespesas,
-      lucroLiquido, margemLiquida,
+      totalRetiradas, lucroLiquido, margemLiquida,
       crediarioRecebido, outrasEntradas,
       qtdVendas: vendas.length
     };
@@ -141,6 +146,7 @@ const Fin = {
       { label: 'Despesas do Mês', valor: d.totalDespesas, cor: 'danger', sub: 'fixas + variáveis + taxas' },
       { label: 'Lucro Líquido', valor: d.lucroLiquido, cor: d.lucroLiquido >= 0 ? 'success' : 'danger', sub: `Margem: ${d.margemLiquida.toFixed(1)}%`, destaque: true },
       { label: 'A Receber (crediário)', valor: aReceber, cor: 'warning', sub: 'saldo total em aberto' },
+      { label: 'Retiradas do Dono', valor: d.totalRetiradas, cor: d.totalRetiradas > 0 ? 'danger' : 'text-muted', sub: 'pró-labore e retiradas pessoais' },
     ];
 
     document.getElementById('statsResumo').innerHTML = stats.map(s => `
@@ -243,6 +249,7 @@ const Fin = {
       ${linha('(−) Despesas Fixas', d.despFixas, 'neg', 'aluguel, salários, energia...')}
       ${linha('(−) Despesas Variáveis', d.despVariaveis, 'neg', 'fornecedores, fretes, outros')}
       ${linha('(−) Taxas de Cartão / PIX', d.taxasCartao, 'neg', 'cobradas pela maquininha')}
+      ${d.totalRetiradas > 0 ? linha('(−) Retiradas do Dono', d.totalRetiradas, 'neg', 'pró-labore e retiradas pessoais') : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:${d.lucroLiquido >= 0 ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'};border-radius:var(--radius-sm);margin-top:12px">
         <div style="font-weight:700;font-size:16px">= LUCRO LÍQUIDO</div>
         <div style="font-weight:800;font-size:22px;color:${d.lucroLiquido >= 0 ? 'var(--success)' : 'var(--danger)'}">${Utils.moeda(d.lucroLiquido)} <span style="font-size:13px;font-weight:600">(${d.margemLiquida.toFixed(1)}%)</span></div>
@@ -367,8 +374,9 @@ const Fin = {
 
   // ---- ABA CONTAS ----
   renderContas: () => {
-    if (_subContasAtual === 'pagar') Fin._renderDespesas();
-    else Fin._renderReceber();
+    if (_subContasAtual === 'pagar')     Fin._renderDespesas();
+    else if (_subContasAtual === 'receber')   Fin._renderReceber();
+    else if (_subContasAtual === 'retiradas') Fin._renderRetiradas();
   },
 
   _renderDespesas: () => {
@@ -758,6 +766,213 @@ const Fin = {
             <div style="font-size:13px;line-height:1.5">${s.msg}</div>
           </div>`).join('')}
       </div>`;
+  },
+
+  // ---- ABA RANKING DE PRODUTOS ----
+  renderRanking: () => {
+    const cont = document.getElementById('rankingConteudo');
+    if (!cont) return;
+
+    const periodo = document.getElementById('rankingPeriodo')?.value || 'mes';
+    const hoje    = Utils.hoje();
+    let inicio, fim = hoje;
+
+    if (periodo === 'mes') {
+      inicio = hoje.substring(0, 7) + '-01';
+    } else if (periodo === '3m') {
+      const d = new Date(hoje); d.setMonth(d.getMonth() - 3);
+      inicio = d.toISOString().split('T')[0];
+    } else if (periodo === '6m') {
+      const d = new Date(hoje); d.setMonth(d.getMonth() - 6);
+      inicio = d.toISOString().split('T')[0];
+    } else {
+      inicio = hoje.substring(0, 4) + '-01-01';
+    }
+
+    const vendas = DB.Vendas.listarPorPeriodo(inicio, fim);
+    const ranking = {};
+
+    vendas.forEach(v => {
+      (v.itens || []).forEach(item => {
+        const id = item.produtoId || 'desconhecido';
+        if (!ranking[id]) {
+          const prod = DB.Produtos.buscar(id);
+          ranking[id] = {
+            nome: item.nomeSnapshot || (prod ? prod.nome : 'Produto removido'),
+            marca: prod ? (prod.marca || '') : '',
+            qtd: 0, receita: 0, custo: 0
+          };
+        }
+        const qtd   = parseInt(item.quantidade) || 1;
+        const preco = parseFloat(item.precoUnitario) || parseFloat(item.precoVenda) || 0;
+        const custo = parseFloat(item.precoCusto) || 0;
+        ranking[id].qtd     += qtd;
+        ranking[id].receita += preco * qtd;
+        ranking[id].custo   += custo * qtd;
+      });
+    });
+
+    const lista = Object.values(ranking)
+      .map(r => ({ ...r, lucro: r.receita - r.custo, margem: r.receita > 0 ? ((r.receita - r.custo) / r.receita) * 100 : 0 }))
+      .sort((a, b) => b.lucro - a.lucro);
+
+    if (!lista.length) {
+      cont.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">Nenhuma venda no período</div></div></div>`;
+      return;
+    }
+
+    const totalReceita = lista.reduce((s, r) => s + r.receita, 0);
+    const totalLucro   = lista.reduce((s, r) => s + r.lucro, 0);
+    const totalQtd     = lista.reduce((s, r) => s + r.qtd, 0);
+    const maxLucro     = lista[0].lucro;
+
+    cont.innerHTML = `
+      <div class="stats-grid" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-label">Total vendido</div><div class="stat-value success">${Utils.moeda(totalReceita)}</div><div class="stat-sub">${totalQtd} peças</div></div>
+        <div class="stat-card"><div class="stat-label">Lucro total gerado</div><div class="stat-value ${totalLucro >= 0 ? 'success' : 'danger'}">${Utils.moeda(totalLucro)}</div><div class="stat-sub">${totalReceita > 0 ? ((totalLucro/totalReceita)*100).toFixed(1) : 0}% de margem</div></div>
+        <div class="stat-card"><div class="stat-label">Produtos diferentes</div><div class="stat-value">${lista.length}</div><div class="stat-sub">vendidos no período</div></div>
+      </div>
+      <div class="card" style="padding:0">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;gap:8px;color:var(--text-muted)">
+          <span>Produto</span><span style="text-align:right">Receita</span><span style="text-align:right">Lucro</span><span style="text-align:right">Margem</span><span style="text-align:right">Qtd</span>
+        </div>
+        ${lista.map((r, i) => {
+          const barW = maxLucro > 0 ? Math.max(0, (r.lucro / maxLucro) * 100) : 0;
+          const corMargem = r.margem < 20 ? 'var(--danger)' : r.margem < 35 ? 'var(--warning)' : 'var(--success)';
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}º`;
+          return `
+            <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;gap:8px;align-items:center;margin-bottom:4px">
+                <div><span style="font-size:14px;margin-right:4px">${medal}</span><strong style="font-size:13px">${r.nome}</strong>${r.marca ? `<span style="font-size:11px;color:var(--text-muted);margin-left:4px">${r.marca}</span>` : ''}</div>
+                <div style="text-align:right;font-size:13px">${Utils.moeda(r.receita)}</div>
+                <div style="text-align:right;font-weight:700;font-size:13px;color:${r.lucro >= 0 ? 'var(--success)' : 'var(--danger)'}">${Utils.moeda(r.lucro)}</div>
+                <div style="text-align:right;font-weight:700;font-size:13px;color:${corMargem}">${r.margem.toFixed(1)}%</div>
+                <div style="text-align:right;font-size:13px;color:var(--text-muted)">${r.qtd} un</div>
+              </div>
+              <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                <div style="height:100%;width:${barW}%;background:${r.lucro >= 0 ? 'var(--success)' : 'var(--danger)'};border-radius:2px"></div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:8px;padding:4px">
+        💡 Margem: 🔴 &lt;20% | 🟡 20–35% | 🟢 &gt;35% — Produtos sem custo cadastrado aparecem com margem zerada.
+      </div>`;
+  },
+
+  // ---- RETIRADAS DO DONO ----
+  _retiradasEditando: null,
+
+  _renderRetiradas: () => {
+    const mes  = Fin.getMes();
+    const cont = document.getElementById('listaRetiradas');
+    const lista = DB.Retiradas.listarPorMes(mes).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    const total = lista.reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
+
+    const acoes = `
+      <div style="padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span style="font-size:13px">Total retirado no mês: <strong style="color:var(--danger)">${Utils.moeda(total)}</strong></span>
+        <button class="btn btn-primary btn-sm" onclick="Fin.abrirFormRetirada()">+ Nova Retirada</button>
+      </div>`;
+
+    if (!lista.length) {
+      cont.innerHTML = acoes + `<div class="empty-state" style="padding:32px"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma retirada em ${mes}</div><div class="empty-sub">Registre suas retiradas pessoais para ter controle financeiro real</div></div>`;
+      return;
+    }
+
+    cont.innerHTML = acoes + lista.map(r => `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px">${r.descricao || 'Retirada'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${Utils.data(r.data)}</div>
+        </div>
+        <div style="font-weight:800;font-size:16px;color:var(--danger)">− ${Utils.moeda(r.valor)}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="Fin.abrirFormRetirada('${r.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="Fin.excluirRetirada('${r.id}')">🗑</button>
+        </div>
+      </div>`).join('');
+  },
+
+  abrirFormRetirada: (id) => {
+    Fin._retiradasEditando = id ? DB.Retiradas.listar().find(r => r.id === id) : null;
+    document.getElementById('modalRetiradaTitulo').textContent = Fin._retiradasEditando ? 'Editar Retirada' : 'Nova Retirada';
+    const f = document.getElementById('formRetirada');
+    const src = Fin._retiradasEditando || {};
+    f.data.value      = src.data      || Utils.hoje();
+    f.valor.value     = src.valor     || '';
+    f.descricao.value = src.descricao || 'Pró-labore';
+    Utils.abrirModal('modalRetirada');
+  },
+
+  salvarRetirada: (e) => {
+    e.preventDefault();
+    const f = document.getElementById('formRetirada');
+    DB.Retiradas.salvar({
+      id: Fin._retiradasEditando?.id,
+      data: f.data.value,
+      valor: parseFloat(f.valor.value) || 0,
+      descricao: f.descricao.value.trim() || 'Retirada'
+    });
+    Utils.fecharModal('modalRetirada');
+    Fin._renderRetiradas();
+    Utils.toast('Retirada salva!', 'success');
+  },
+
+  excluirRetirada: (id) => {
+    if (!Utils.confirmar('Excluir esta retirada?')) return;
+    DB.Retiradas.excluir(id);
+    Fin._renderRetiradas();
+    Utils.toast('Retirada excluída');
+  },
+
+  // ---- COMPRA PARCELADA ----
+  abrirFormCompraParcelada: () => {
+    document.getElementById('formCompraParcelada').reset();
+    document.getElementById('previewParcelasCompra').textContent = '';
+    const f = document.getElementById('formCompraParcelada');
+    f.primeiraParcela.value = Utils.hoje();
+    Utils.abrirModal('modalCompraParcelada');
+  },
+
+  previewParcelasCompra: () => {
+    const f = document.getElementById('formCompraParcelada');
+    const total    = parseFloat(f.valorTotal?.value) || 0;
+    const parcelas = parseInt(f.parcelas?.value) || 1;
+    const prev     = document.getElementById('previewParcelasCompra');
+    if (!total || !prev) return;
+    const vlrParcela = total / parcelas;
+    prev.textContent = `${parcelas}x de ${Utils.moeda(vlrParcela)} = ${Utils.moeda(total)}`;
+  },
+
+  salvarCompraParcelada: (e) => {
+    e.preventDefault();
+    const f = document.getElementById('formCompraParcelada');
+    const fornecedor = f.fornecedor.value.trim();
+    const descricao  = f.descricao.value.trim();
+    const total      = parseFloat(f.valorTotal.value) || 0;
+    const nParcelas  = parseInt(f.parcelas.value) || 1;
+    const primeira   = f.primeiraParcela.value;
+
+    if (!total || !primeira) return;
+
+    const vlrParcela = total / nParcelas;
+    for (let i = 0; i < nParcelas; i++) {
+      const venc = new Date(primeira + 'T12:00:00');
+      venc.setMonth(venc.getMonth() + i);
+      const vencStr = venc.toISOString().split('T')[0];
+      DB.Despesas.salvar({
+        descricao: `${fornecedor} — ${descricao} (${i+1}/${nParcelas})`,
+        valor: vlrParcela,
+        vencimento: vencStr,
+        categoria: 'fornecedor',
+        recorrente: false,
+        pago: false
+      });
+    }
+    Utils.fecharModal('modalCompraParcelada');
+    Fin._renderDespesas();
+    Utils.toast(`${nParcelas} parcela(s) criadas para ${fornecedor}!`, 'success');
   },
 
   // ---- FLUXO DE CAIXA 30 DIAS ----
