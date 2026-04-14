@@ -6,6 +6,7 @@ let _produtoEditando = null;
 let _filtroTipo = '';
 let _filtroTamanho = '';
 let _busca = '';
+let _filtroParado = false;
 let _fotosGaleria = [];      // até 7 fotos; índice 0 = principal
 let _fotosVariacoes = {};   // { "rosa": "base64..." } — foto atribuída a cada cor
 
@@ -17,11 +18,17 @@ const Estoque = {
     Estoque.renderStats();
     Estoque.renderProdutos();
 
-    // Abre edição direta via URL: estoque.html?editar=ID
+    // Parâmetros de URL
     const urlParams = new URLSearchParams(window.location.search);
     const editarId = urlParams.get('editar');
     if (editarId) {
       setTimeout(() => Estoque.abrirForm(editarId), 300);
+      history.replaceState(null, '', 'estoque.html');
+    }
+    if (urlParams.get('parado') === '1') {
+      _filtroParado = true;
+      const btn = document.getElementById('btnFiltroParado');
+      if (btn) btn.classList.add('active');
       history.replaceState(null, '', 'estoque.html');
     }
 
@@ -69,19 +76,24 @@ const Estoque = {
     document.getElementById('statBaixo').textContent = estoqueBaixo;
   },
 
+  toggleFiltroParado: () => {
+    _filtroParado = !_filtroParado;
+    const btn = document.getElementById('btnFiltroParado');
+    if (btn) btn.classList.toggle('active', _filtroParado);
+    Estoque.renderProdutos();
+  },
+
   renderProdutos: () => {
     let prods = DB.Produtos.listarAtivos();
 
-    if (_busca.trim()) {
-      prods = DB.Produtos.buscarPorTexto(_busca);
-    }
-
-    if (_filtroTipo) {
-      prods = prods.filter(p => p.tipo === _filtroTipo);
-    }
-
-    if (_filtroTamanho) {
-      prods = prods.filter(p => p.variacoes && Object.keys(p.variacoes).some(key => key.split('||')[0] === _filtroTamanho && p.variacoes[key] > 0));
+    if (_filtroParado) {
+      const parados = DB.Produtos.listarParados(60);
+      const idsParados = new Set(parados.map(p => p.id));
+      prods = parados; // já tem diasSemVenda e capitalPreso
+    } else {
+      if (_busca.trim()) prods = DB.Produtos.buscarPorTexto(_busca);
+      if (_filtroTipo)   prods = prods.filter(p => p.tipo === _filtroTipo);
+      if (_filtroTamanho) prods = prods.filter(p => p.variacoes && Object.keys(p.variacoes).some(key => key.split('||')[0] === _filtroTamanho && p.variacoes[key] > 0));
     }
 
     const grid = document.getElementById('estoquegrid');
@@ -94,9 +106,21 @@ const Estoque = {
       return;
     }
 
-    grid.innerHTML = prods.map(p => {
+    // Banner de filtro ativo
+    const bannerParado = _filtroParado ? `
+      <div style="grid-column:1/-1;background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.4);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:4px">
+        📦 Mostrando ${prods.length} produto${prods.length !== 1 ? 's' : ''} sem vender há +60 dias
+        · <strong>Capital parado: ${Utils.moeda(prods.reduce((s, p) => s + (p.capitalPreso || 0), 0))}</strong>
+        <button class="btn btn-outline btn-sm" style="margin-left:12px" onclick="Estoque.toggleFiltroParado()">✕ Limpar filtro</button>
+      </div>` : '';
+
+    grid.innerHTML = bannerParado + prods.map(p => {
       const total = DB.Produtos.estoqueTotal(p);
       const baixo = total <= (p.estoqueMinimo || 5);
+      const diasParado = p.diasSemVenda || null;
+      const badgeParado = diasParado
+        ? `<span style="font-size:10px;font-weight:700;color:${diasParado >= 120 ? 'var(--danger)' : 'var(--warning)'};background:${diasParado >= 120 ? 'rgba(239,68,68,.1)' : 'rgba(234,179,8,.1)'};padding:2px 6px;border-radius:4px;white-space:nowrap">${diasParado >= 999 ? 'Nunca vendido' : diasParado + 'd parado'}</span>`
+        : '';
       const variacoes = p.variacoes || {};
       const fotoHtml = p.foto
         ? `<img src="${p.foto}" style="width:100%;height:130px;object-fit:cover;display:block;border-bottom:1px solid var(--border)" loading="lazy">`
@@ -134,6 +158,7 @@ const Estoque = {
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
               <span class="badge badge-muted">${Utils.labelTipo(p.tipo)}</span>
               ${baixo ? '<span class="low-stock-tag">⚠ Baixo</span>' : ''}
+              ${badgeParado}
             </div>
           </div>
           <div class="estoque-tamanhos">${tamanhosHtml || '<span class="text-muted fs-sm">Sem tamanhos</span>'}</div>

@@ -42,6 +42,7 @@ const Dashboard = {
     Dashboard.renderStats2();
     Dashboard.renderAtalhos();
     Dashboard.renderMeta();
+    Dashboard.renderEstoqueParado();
     Dashboard.renderGrafico7Dias();
     Dashboard.renderTop5();
     Dashboard.renderAlertas();
@@ -507,6 +508,53 @@ const Dashboard = {
             }).join('')}
           </tbody>
         </table>
+      </div>`;
+  },
+
+  renderEstoqueParado: () => {
+    const cont = document.getElementById('cardEstoqueParado');
+    if (!cont) return;
+
+    const parados = DB.Produtos.listarParados(60);
+    if (parados.length === 0) { cont.innerHTML = ''; return; }
+
+    const capitalTotal = parados.reduce((s, p) => s + p.capitalPreso, 0);
+    const top5 = parados.slice(0, 5);
+
+    const labelDias = (d) => d >= 999 ? 'Nunca vendido' : `${d} dias sem vender`;
+
+    cont.innerHTML = `
+      <div style="background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.4);border-radius:var(--radius);padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">📦</span>
+            <div>
+              <div style="font-weight:800;font-size:15px">Estoque Parado — ${parados.length} produto${parados.length > 1 ? 's' : ''} sem vender há +60 dias</div>
+              <div style="font-size:13px;color:var(--text-muted)"><strong style="color:var(--warning)">${Utils.moeda(capitalTotal)}</strong> em capital parado que poderia estar girando</div>
+            </div>
+          </div>
+          <a href="estoque.html?parado=1" class="btn btn-outline btn-sm" style="white-space:nowrap">Ver todos →</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${top5.map(p => {
+            const qtd = DB.Produtos.estoqueTotal(p);
+            const corDias = p.diasSemVenda >= 999 ? 'var(--danger)' : p.diasSemVenda >= 120 ? 'var(--danger)' : 'var(--warning)';
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;background:var(--card);border-radius:var(--radius-sm);border:1px solid var(--border)">
+              <div style="flex:1;min-width:0">
+                <span style="font-weight:600;font-size:13px">${p.nome}</span>
+                <span style="font-size:12px;color:var(--text-muted);margin-left:6px">${p.marca || ''}</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);white-space:nowrap">${qtd} peça${qtd > 1 ? 's' : ''}</div>
+              <div style="font-size:12px;font-weight:700;color:${corDias};white-space:nowrap">${labelDias(p.diasSemVenda)}</div>
+              ${p.capitalPreso > 0 ? `<div style="font-size:13px;font-weight:700;white-space:nowrap">${Utils.moeda(p.capitalPreso)}</div>` : ''}
+            </div>`;
+          }).join('')}
+          ${parados.length > 5 ? `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:4px">+${parados.length - 5} outros produtos parados</div>` : ''}
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:10px">
+          💡 <strong>Sugestão:</strong> considere dar desconto, fazer promoção ou devolver ao fornecedor para liberar esse capital.
+        </div>
       </div>`;
   },
 

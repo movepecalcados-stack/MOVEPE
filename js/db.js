@@ -329,6 +329,37 @@ const DB = (() => {
     estoqueTotal: (prod) => {
       if (!prod || !prod.variacoes) return 0;
       return Object.values(prod.variacoes).reduce((s, v) => s + (parseInt(v) || 0), 0);
+    },
+
+    // Retorna produtos com estoque > 0 que não vendem há X dias
+    listarParados: (diasMinimos = 60) => {
+      const hoje = Utils.hoje();
+      const d180 = new Date(hoje); d180.setDate(d180.getDate() - 180);
+      const d180str = d180.toISOString().split('T')[0];
+
+      // Última venda por produto nos últimos 180 dias
+      const ultimaVenda = {};
+      DB.Vendas.listarPorPeriodo(d180str, hoje).forEach(v => {
+        (v.itens || []).forEach(item => {
+          const dt = (v.criadoEm || '').substring(0, 10);
+          if (!ultimaVenda[item.produtoId] || dt > ultimaVenda[item.produtoId]) {
+            ultimaVenda[item.produtoId] = dt;
+          }
+        });
+      });
+
+      return Produtos.listarAtivos()
+        .filter(p => Produtos.estoqueTotal(p) > 0)
+        .map(p => {
+          const ultima = ultimaVenda[p.id] || null;
+          const dias = ultima
+            ? Math.floor((new Date(hoje) - new Date(ultima)) / (1000 * 60 * 60 * 24))
+            : 999;
+          const capitalPreso = Produtos.estoqueTotal(p) * (parseFloat(p.precoCusto) || 0);
+          return { ...p, ultimaVenda: ultima, diasSemVenda: dias, capitalPreso };
+        })
+        .filter(p => p.diasSemVenda >= diasMinimos)
+        .sort((a, b) => b.diasSemVenda - a.diasSemVenda);
     }
   };
 
