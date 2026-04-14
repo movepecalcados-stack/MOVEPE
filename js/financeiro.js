@@ -26,7 +26,7 @@ const Fin = {
     _tabAtual = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    ['resumo','dre','precificacao','contas','metas','diagnostico'].forEach(t => {
+    ['resumo','dre','fluxo30','precificacao','contas','metas','diagnostico'].forEach(t => {
       const el = document.getElementById('tab-' + t);
       if (el) el.style.display = t === tab ? '' : 'none';
     });
@@ -47,6 +47,7 @@ const Fin = {
   render: () => {
     if (_tabAtual === 'resumo')       Fin.renderResumo();
     if (_tabAtual === 'dre')          Fin.renderDRE();
+    if (_tabAtual === 'fluxo30')      Fin.renderFluxo30();
     if (_tabAtual === 'precificacao') Fin.renderPrecificacao();
     if (_tabAtual === 'contas')       Fin.renderContas();
     if (_tabAtual === 'metas')        Fin.renderMetas();
@@ -757,6 +758,214 @@ const Fin = {
             <div style="font-size:13px;line-height:1.5">${s.msg}</div>
           </div>`).join('')}
       </div>`;
+  },
+
+  // ---- FLUXO DE CAIXA 30 DIAS ----
+  renderFluxo30: () => {
+    const cont = document.getElementById('fluxo30Conteudo');
+    if (!cont) return;
+
+    // Saldo inicial
+    const inputEl = document.getElementById('inputSaldoAtual');
+    const saldoSalvo = parseFloat(DB.Config.get('fluxoSaldoInicial', '')) || 0;
+    if (inputEl && !inputEl.value && saldoSalvo) inputEl.value = saldoSalvo;
+    const saldoInicial = parseFloat(inputEl ? inputEl.value : saldoSalvo) || 0;
+
+    // Datas
+    const hoje = Utils.hoje();
+    const dataFim = new Date(hoje);
+    dataFim.setDate(dataFim.getDate() + 30);
+    const dataFimStr = dataFim.toISOString().split('T')[0];
+
+    // ── Calcular projeção de vendas diária (últimos 60 dias) ──
+    const d60inicio = new Date(hoje); d60inicio.setDate(d60inicio.getDate() - 60);
+    const d60str = d60inicio.toISOString().split('T')[0];
+    const vendasRecentes = DB.Vendas.listarPorPeriodo(d60str, hoje)
+      .filter(v => v.formaPagamento !== 'crediario');
+    const totalVendas60 = vendasRecentes.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    // Dias úteis nos últimos 60 dias
+    let diasUteis60 = 0;
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(hoje); d.setDate(d.getDate() - i);
+      if (d.getDay() !== 0) diasUteis60++;
+    }
+    const mediaDiariaVendas = diasUteis60 > 0 ? totalVendas60 / diasUteis60 : 0;
+
+    // ── Montar eventos para cada dia ──
+    const diasMap = {}; // { 'YYYY-MM-DD': { entradas: [], saidas: [] } }
+    const adicionarDia = (data) => {
+      if (!diasMap[data]) diasMap[data] = { entradas: [], saidas: [] };
+    };
+
+    // Despesas a pagar (com vencimento nos próximos 30 dias)
+    DB.Despesas.listar()
+      .filter(d => !d.pago && d.vencimento && d.vencimento >= hoje && d.vencimento <= dataFimStr)
+      .forEach(d => {
+        adicionarDia(d.vencimento);
+        diasMap[d.vencimento].saidas.push({ desc: d.descricao, valor: parseFloat(d.valor) || 0, tipo: 'conta' });
+      });
+
+    // Crediário a receber
+    DB.Crediario.listar().forEach(cred => {
+      cred.parcelas.forEach(p => {
+        if (p.status !== 'pago' && p.vencimento && p.vencimento >= hoje && p.vencimento <= dataFimStr) {
+          adicionarDia(p.vencimento);
+          diasMap[p.vencimento].entradas.push({
+            desc: `Crediário — ${cred.clienteNome || 'Cliente'} Parc.${p.numero}`,
+            valor: parseFloat(p.valor) || 0, tipo: 'crediario'
+          });
+        }
+      });
+    });
+
+    // Projeção de vendas — cada dia útil dos próximos 30 dias
+    if (mediaDiariaVendas > 0) {
+      for (let i = 0; i <= 30; i++) {
+        const d = new Date(hoje); d.setDate(d.getDate() + i);
+        const ds = d.toISOString().split('T')[0];
+        if (d.getDay() !== 0) { // não domingo
+          adicionarDia(ds);
+          diasMap[ds].entradas.push({ desc: 'Vendas (projeção)', valor: mediaDiariaVendas, tipo: 'venda', projecao: true });
+        }
+      }
+    }
+
+    // Ordenar datas
+    const datas = Object.keys(diasMap).sort();
+
+    // Calcular saldo corrente
+    let saldoCorrente = saldoInicial;
+    let saldoMinimo = saldoInicial;
+    let dataSaldoMinimo = hoje;
+    let primeiroNegativo = null;
+    let totalEntradasPrev = 0, totalSaidasPrev = 0;
+
+    const diasProcessados = datas.map(data => {
+      const dia = diasMap[data];
+      const entradasDia = dia.entradas.reduce((s, e) => s + e.valor, 0);
+      const saidasDia   = dia.saidas.reduce((s, e) => s + e.valor, 0);
+      saldoCorrente += entradasDia - saidasDia;
+
+      // Só conta previsto (não projeção de vendas) para totais
+      const entradasCertas = dia.entradas.filter(e => !e.projecao).reduce((s, e) => s + e.valor, 0);
+      totalEntradasPrev += entradasCertas;
+      totalSaidasPrev   += saidasDia;
+
+      if (saldoCorrente < saldoMinimo) { saldoMinimo = saldoCorrente; dataSaldoMinimo = data; }
+      if (!primeiroNegativo && saldoCorrente < 0) primeiroNegativo = { data, saldo: saldoCorrente };
+
+      return { data, dia, entradasDia, saidasDia, saldoApos: saldoCorrente };
+    });
+
+    const saldoFinal = saldoCorrente;
+    const semEventos  = datas.length === 0;
+    const diasUteis30 = diasProcessados.filter(d => new Date(d.data).getDay() !== 0).length;
+
+    // ── RENDERIZAR ──
+    const fmtData = (ds) => {
+      const [a, m2, d2] = ds.split('-');
+      const dt = new Date(parseInt(a), parseInt(m2)-1, parseInt(d2));
+      return dt.toLocaleDateString('pt-BR', { weekday:'short', day:'2-digit', month:'2-digit' });
+    };
+
+    // Cards resumo
+    const corFinal = saldoFinal >= 0 ? 'var(--success)' : 'var(--danger)';
+    const emojiFinal = saldoFinal >= 0 ? '✅' : '⚠️';
+
+    const cardResumo = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+        <div class="stat-card">
+          <div class="stat-label">Saldo inicial</div>
+          <div class="stat-value">${Utils.moeda(saldoInicial)}</div>
+          <div class="stat-sub">caixa + banco hoje</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Contas a receber</div>
+          <div class="stat-value success">${Utils.moeda(totalEntradasPrev)}</div>
+          <div class="stat-sub">crediários confirmados</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Contas a pagar</div>
+          <div class="stat-value danger">${Utils.moeda(totalSaidasPrev)}</div>
+          <div class="stat-sub">despesas com vencimento</div>
+        </div>
+        ${mediaDiariaVendas > 0 ? `
+        <div class="stat-card">
+          <div class="stat-label">Vendas projetadas</div>
+          <div class="stat-value">${Utils.moeda(mediaDiariaVendas * diasUteis30)}</div>
+          <div class="stat-sub">${Utils.moeda(mediaDiariaVendas)}/dia (média 60d)</div>
+        </div>` : ''}
+        <div class="stat-card stat-destaque">
+          <div class="stat-label">Saldo projetado em 30d</div>
+          <div class="stat-value" style="color:${corFinal}">${emojiFinal} ${Utils.moeda(saldoFinal)}</div>
+          <div class="stat-sub">${saldoFinal >= 0 ? 'situação favorável' : 'atenção: saldo negativo'}</div>
+        </div>
+      </div>`;
+
+    // Alerta de saldo negativo
+    let alertaNegativo = '';
+    if (primeiroNegativo) {
+      alertaNegativo = `
+        <div style="background:rgba(239,68,68,.1);border:1px solid var(--danger);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start">
+          <span style="font-size:22px">🚨</span>
+          <div>
+            <div style="font-weight:700;color:var(--danger);margin-bottom:4px">Alerta: saldo negativo previsto</div>
+            <div style="font-size:13px;color:var(--text)">Em <strong>${fmtData(primeiroNegativo.data)}</strong> o saldo pode chegar a <strong style="color:var(--danger)">${Utils.moeda(primeiroNegativo.saldo)}</strong>. Verifique se há uma conta grande vencendo ou se as vendas do período serão suficientes.</div>
+          </div>
+        </div>`;
+    }
+
+    // Aviso sem dados
+    let avisoSemDados = '';
+    if (!mediaDiariaVendas && totalEntradasPrev === 0 && totalSaidasPrev === 0) {
+      avisoSemDados = `
+        <div style="background:rgba(99,102,241,.08);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text-muted)">
+          💡 Cadastre suas <strong style="color:var(--text)">despesas com vencimento</strong> na aba Contas e registre crediários para que o fluxo mostre os compromissos reais.
+        </div>`;
+    }
+
+    // Timeline dia a dia (agrupa dias sem eventos de contas/crediário como "dias de venda")
+    const timelinesHtml = diasProcessados
+      .filter(dp => dp.dia.saidas.length > 0 || dp.dia.entradas.filter(e => !e.projecao).length > 0)
+      .map(dp => {
+        const { data, dia, entradasDia, saidasDia, saldoApos } = dp;
+        const saldoCor = saldoApos >= 0 ? 'var(--success)' : 'var(--danger)';
+        const entCertas = dia.entradas.filter(e => !e.projecao);
+        const temVendaProj = dia.entradas.some(e => e.projecao);
+
+        return `
+          <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--border)">
+              <div style="font-weight:700;font-size:14px">${fmtData(data)}</div>
+              <div style="font-size:13px;font-weight:800;color:${saldoCor}">Saldo: ${Utils.moeda(saldoApos)}</div>
+            </div>
+            <div style="padding:8px 14px">
+              ${entCertas.map(e => `
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0">
+                  <span style="color:var(--success)">⬆️ ${e.desc}</span>
+                  <span style="font-weight:700;color:var(--success)">+${Utils.moeda(e.valor)}</span>
+                </div>`).join('')}
+              ${dia.saidas.map(e => `
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0">
+                  <span style="color:var(--danger)">⬇️ ${e.desc}</span>
+                  <span style="font-weight:700;color:var(--danger)">−${Utils.moeda(e.valor)}</span>
+                </div>`).join('')}
+              ${temVendaProj ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ${Utils.moeda(mediaDiariaVendas)} em vendas projetadas (média)</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+    const semTimeline = timelinesHtml === '' ? `
+      <div style="text-align:center;padding:32px;color:var(--text-muted);font-size:14px">
+        Nenhuma conta com vencimento ou crediário nos próximos 30 dias.
+      </div>` : '';
+
+    cont.innerHTML = cardResumo + alertaNegativo + avisoSemDados + `
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+        Compromissos e recebimentos previstos
+      </div>
+      ${timelinesHtml}${semTimeline}
+      ${mediaDiariaVendas > 0 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;padding:8px;background:var(--bg);border-radius:var(--radius-sm)">📈 Vendas projetadas com base na média dos últimos 60 dias (${Utils.moeda(mediaDiariaVendas)}/dia útil). O valor real pode variar.</div>` : ''}`;
   },
 
   // ---- META DO DIA ----
