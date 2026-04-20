@@ -9,19 +9,18 @@ let _pagamentoAtual = null; // { credId, parcelaIdx, valorOriginal, jurosCalc }
 let _pagarTudoAtual = null; // { credId, parcelas: [{idx, numero, vencimento, valor, juros, status}], totalSemJuros, totalJuros }
 let _renegociacaoAtual = null; // { credId }
 
-const CARENCIA_DIAS = 5;
-const JUROS_DIA = 0.004; // 0,4% ao dia
-
 const calcularJuros = (vencimento, valor) => {
   if (!vencimento) return { diasAtraso: 0, diasComJuros: 0, juros: 0 };
+  const carencia = DB.Config.get('carenciaDias', 5);
+  const jurosDia = DB.Config.get('jurosDia', 0.004);
   const hoje = new Date();
   hoje.setHours(0,0,0,0);
   const venc = new Date(vencimento + 'T00:00:00');
   const diffMs = hoje - venc;
   if (diffMs <= 0) return { diasAtraso: 0, diasComJuros: 0, juros: 0 };
   const diasAtraso = Math.floor(diffMs / 86400000);
-  const diasComJuros = Math.max(0, diasAtraso - CARENCIA_DIAS);
-  const juros = diasComJuros > 0 ? parseFloat(valor) * JUROS_DIA * diasComJuros : 0;
+  const diasComJuros = Math.max(0, diasAtraso - carencia);
+  const juros = diasComJuros > 0 ? parseFloat(valor) * jurosDia * diasComJuros : 0;
   return { diasAtraso, diasComJuros, juros: Math.round(juros * 100) / 100 };
 };
 
@@ -387,7 +386,7 @@ const CrediarioModule = {
 
       const lista = DB.Crediario.listar();
       const credObj = lista.find(c => c.id === credId);
-      credObj.parcelas[parcelaIdx].valor = saldo.toFixed(2);
+      credObj.parcelas[parcelaIdx].valor = Math.round(saldo * 100) / 100;
       DB.Crediario.salvar(credObj);
 
       DB.FluxoCaixa.salvar({
@@ -716,13 +715,26 @@ const CrediarioModule = {
     const parcela = cred.parcelas[parcelaIdx];
     if (!parcela) return;
 
+    const totalParcelas = cred.parcelas.length;
+    const pagas = cred.parcelas.filter(p => p.status === 'pago').length;
+    const pendentes = cred.parcelas.filter(p => p.status !== 'pago');
+    const saldoRestante = pendentes.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+
+    const venda = cred.vendaId ? DB.Vendas.buscar(cred.vendaId) : null;
+    const itens = cred.itens || (venda ? venda.itens : null);
+
     const comp = Utils.gerarComprovanteParcela({
       clienteNome: cred.clienteNome || 'Cliente',
-      numero: `${parcela.numero}/${cred.parcelas.length}`,
+      numero: parcela.numero || (parcelaIdx + 1),
+      totalParcelas,
+      parcelasPagas: pagas,
       vencimento: parcela.vencimento,
+      dataPagamento: parcela.dataPagamento || null,
       valor: parcela.valor,
+      saldoRestante,
+      itens: itens || [],
       credId: cred.id,
-      formaPagamento: formaPagamento || null
+      formaPagamento: formaPagamento || parcela.formaPagamento || null
     });
     Utils.imprimirComprovante(comp);
   },

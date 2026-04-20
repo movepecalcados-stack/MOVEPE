@@ -15,16 +15,15 @@ let _formasSplit = []; // [{forma, valor}]
 let _rcClienteSel = null;
 let _rcCredSel = null;
 let _rcParcelaSel = null;
-const RC_CARENCIA = 5;
-const RC_JUROS_DIA = 0.004;
-
 const rcCalcJuros = (vencimento, valor) => {
+  const carencia = DB.Config.get('carenciaDias', 5);
+  const jurosDia = DB.Config.get('jurosDia', 0.004);
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const venc = new Date(vencimento + 'T00:00:00');
   const dias = Math.floor((hoje - venc) / 86400000);
   if (dias <= 0) return { diasAtraso: 0, diasJuros: 0, juros: 0 };
-  const diasJuros = Math.max(0, dias - RC_CARENCIA);
-  const juros = diasJuros > 0 ? Math.round(parseFloat(valor) * RC_JUROS_DIA * diasJuros * 100) / 100 : 0;
+  const diasJuros = Math.max(0, dias - carencia);
+  const juros = diasJuros > 0 ? Math.round(parseFloat(valor) * jurosDia * diasJuros * 100) / 100 : 0;
   return { diasAtraso: dias, diasJuros, juros };
 };
 
@@ -1212,7 +1211,8 @@ const PDV = {
     // Atualizar estoque após salvar
     _carrinho.forEach(item => {
       if (item.tamanho) {
-        DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
+        const ok = DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
+        if (ok === false) Utils.toast(`Atenção: estoque de "${item.nome}" não foi atualizado (produto não encontrado)`, 'warning');
       }
     });
 
@@ -1321,7 +1321,10 @@ const PDV = {
 
     // Atualizar estoque após salvar
     _carrinho.forEach(item => {
-      if (item.tamanho) DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
+      if (item.tamanho) {
+        const ok = DB.Produtos.atualizarEstoque(item.produtoId, item.tamanho, -item.quantidade);
+        if (ok === false) Utils.toast(`Atenção: estoque de "${item.nome}" não foi atualizado (produto não encontrado)`, 'warning');
+      }
     });
 
     // Gerar crediário para a parte parcelada (se houver)

@@ -198,7 +198,7 @@ const ClientesModule = {
 
     // --- STATS ---
     const totalGasto = compras.reduce((s, c) => s + (parseFloat(c.total) || 0), 0);
-    const ticketMedio = totalGasto / compras.length;
+    const ticketMedio = compras.length > 0 ? totalGasto / compras.length : 0;
     const saldoDevedor = crediarios.reduce((s, cred) => {
       const obj = DB.Crediario.buscar(cred.id);
       if (!obj) return s;
@@ -327,22 +327,40 @@ const ClientesModule = {
   },
 
   imprimirCompra: (idx, clienteId) => {
+    // Se a venda tem ID completo, usar gerarComprovante padrão (já corrigido para crediário)
     const c = _comprasCache[idx];
     if (!c) return;
+
+    if (c.vendaId || c.id) {
+      const venda = DB.Vendas.buscar(c.vendaId || c.id);
+      if (venda) {
+        Utils.imprimirComprovante(Utils.gerarComprovante(venda));
+        return;
+      }
+    }
+
+    // Fallback para compras antigas sem vendaId
     const cliente = DB.Clientes.buscar(clienteId);
     const nomeCliente = cliente ? cliente.nome : 'Cliente';
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS').toUpperCase();
     const num = String(_comprasCache.length - idx).padStart(2, '0');
-    const formaLabel = { dinheiro: 'Dinheiro', cartao_debito: 'Cartão Débito', cartao_credito: 'Cartão Crédito', crediario: 'Crediário', pix: 'Pix' };
     const credObj = c.credId ? DB.Crediario.buscar(c.credId) : null;
+    const ehCrediario = c.formaPagamento === 'crediario' || !!credObj;
+
+    // Fator de acréscimo crediário
+    const vendaRef = (c.vendaId || c.id) ? DB.Vendas.buscar(c.vendaId || c.id) : null;
+    const fator = (vendaRef && vendaRef.acrescimoCrediario)
+      ? (1 + (vendaRef.acrescimoCrediario.pct || 0) / 100)
+      : 1;
 
     const linhas = [
       '================================',
-      '       MOVE PÉ CALÇADOS         ',
+      `   ${nomeLoja}`,
       '================================',
       `CLIENTE: ${nomeCliente}`,
       `COMPRA Nº ${num}`,
       `DATA: ${Utils.data(c.data)}`,
-      `PAGAMENTO: ${formaLabel[c.formaPagamento] || c.formaPagamento}`,
+      `PAGAMENTO: ${ehCrediario ? 'Crediário' : Utils.labelFormaPagamento(c.formaPagamento)}`,
       '--------------------------------',
     ];
 
@@ -350,11 +368,14 @@ const ClientesModule = {
       linhas.push('PRODUTOS:');
       c.itens.forEach(item => {
         const nome = item.nome || item.produtoNome || '—';
-        const tam = item.tamanho ? ` Tam.${item.tamanho}` : '';
+        const tam = item.tamanho ? ` Tam.${item.tamanho.split('||')[0]}` : '';
+        const cor = item.cor || (item.tamanho && item.tamanho.includes('||') ? item.tamanho.split('||')[1] : '');
         const qtd = item.quantidade || 1;
-        const preco = item.precoUnitario || item.preco || 0;
-        linhas.push(`  ${nome}${tam}`);
-        linhas.push(`  ${qtd}x ${Utils.moeda(preco)} = ${Utils.moeda(preco * qtd)}`);
+        const totalItem = item.total != null ? item.total : (item.precoUnitario || item.preco || 0) * qtd;
+        // Crediário: exibe preço crediário; à vista: preço normal
+        const precoExib = ehCrediario ? Math.round(totalItem * fator * 100) / 100 : totalItem;
+        linhas.push(`  ${nome}${tam}${cor ? ' ' + cor : ''}`);
+        linhas.push(`  ${qtd}x = ${Utils.moeda(precoExib)}`);
       });
       linhas.push('--------------------------------');
     }
@@ -362,11 +383,19 @@ const ClientesModule = {
     linhas.push(`TOTAL: ${Utils.moeda(c.total)}`);
 
     if (credObj) {
+      const pagas    = credObj.parcelas.filter(p => p.status === 'pago').length;
+      const total    = credObj.parcelas.length;
+      const saldo    = credObj.parcelas.filter(p => p.status !== 'pago').reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      linhas.push('--------------------------------');
+      linhas.push(`CREDIÁRIO: ${total}x de ${Utils.moeda(credObj.parcelas[0]?.valor)}`);
+      linhas.push(`Pagas: ${pagas} de ${total} parcelas`);
+      if (saldo > 0) linhas.push(`Saldo restante: ${Utils.moeda(saldo)}`);
       linhas.push('--------------------------------');
       linhas.push('PARCELAS:');
       credObj.parcelas.forEach((p, i) => {
-        const st = { pago: 'PAGO', atrasado: 'ATRASADO', pendente: 'PENDENTE' }[Utils.statusParcela(p.vencimento, p.status)];
-        linhas.push(`  ${p.numero || i+1}ª - ${Utils.data(p.vencimento)} - ${Utils.moeda(p.valor)} [${st}]`);
+        const st = { pago: 'PAGO', atrasado: 'ATRAS', pendente: 'PEND' }[Utils.statusParcela(p.vencimento, p.status)] || '';
+        const dataPag = p.dataPagamento ? ` pg:${new Date(p.dataPagamento).toLocaleDateString('pt-BR')}` : '';
+        linhas.push(`  ${p.numero || i+1}ª ${Utils.data(p.vencimento)} ${Utils.moeda(p.valor)} [${st}]${dataPag}`);
       });
     }
 

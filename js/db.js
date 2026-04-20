@@ -317,12 +317,16 @@ const DB = (() => {
     atualizarEstoque: (produtoId, tamanho, delta) => {
       const lista = _get('produtos');
       const idx = lista.findIndex(p => p.id === produtoId);
-      if (idx < 0) return;
+      if (idx < 0) {
+        console.warn(`[Estoque] Produto não encontrado: ${produtoId} — estoque não atualizado`);
+        return false;
+      }
       if (!lista[idx].variacoes) lista[idx].variacoes = {};
       const atual = lista[idx].variacoes[tamanho] || 0;
       lista[idx].variacoes[tamanho] = Math.max(0, atual + delta);
       _set('produtos', lista);
       Sync.save('produtos', lista[idx]);
+      return true;
     },
 
     // Retorna estoque total (soma de todas variacoes)
@@ -659,6 +663,32 @@ const DB = (() => {
     }
   };
 
+  // ---- GRADES DE REPOSIÇÃO ----
+  const Grades = {
+    listar: () => _get('grades'),
+
+    buscar: (id) => _get('grades').find(g => g.id === id),
+
+    salvar: (grade) => {
+      const lista = _get('grades');
+      // Calcula totalPares automaticamente
+      grade.totalPares = (grade.tamanhos || []).reduce((s, t) => s + (parseInt(t.qtd) || 1), 0);
+      const idx = lista.findIndex(g => g.id === grade.id);
+      if (idx >= 0) {
+        lista[idx] = { ...lista[idx], ...grade };
+      } else {
+        grade.id = genId();
+        lista.push(grade);
+      }
+      _set('grades', lista);
+      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+    },
+
+    excluir: (id) => {
+      _set('grades', _get('grades').filter(g => g.id !== id));
+    }
+  };
+
   // ---- RETIRADAS DO DONO ----
   const Retiradas = {
     listar: () => _get('retiradas'),
@@ -686,6 +716,34 @@ const DB = (() => {
     excluir: (id) => {
       _set('retiradas', _get('retiradas').filter(r => r.id !== id));
     }
+  };
+
+  // ---- TRÁFEGO PAGO ----
+  const Trafego = {
+    listar: () => _get('trafego'),
+
+    // semana = 'YYYY-MM-DD' da segunda-feira da semana
+    listarSemana: (semana) => _get('trafego').filter(t => t.semana === semana),
+
+    totalSemana: (semana) => _get('trafego')
+      .filter(t => t.semana === semana)
+      .reduce((s, t) => s + (parseFloat(t.valor) || 0), 0),
+
+    salvar: (item) => {
+      const lista = _get('trafego');
+      const idx = lista.findIndex(t => t.id === item.id);
+      if (idx >= 0) {
+        lista[idx] = { ...lista[idx], ...item };
+      } else {
+        item.id = genId();
+        item.criadoEm = new Date().toISOString();
+        lista.push(item);
+      }
+      _set('trafego', lista);
+      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+    },
+
+    excluir: (id) => { _set('trafego', _get('trafego').filter(t => t.id !== id)); }
   };
 
   // ---- BACKUP ----
@@ -756,5 +814,5 @@ const DB = (() => {
   // Inicializa Firebase ao carregar a página
   document.addEventListener('DOMContentLoaded', Sync.init);
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
 })();
