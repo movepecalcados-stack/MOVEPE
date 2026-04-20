@@ -24,6 +24,7 @@ const DB = (() => {
   let _fbReady = false;
   let _onReadyCallbacks = [];
   let _collectionsLoaded = {};
+  let _unsubscribers = []; // guarda funções de cancelamento dos listeners do Firestore
 
   const COLS = ['produtos', 'clientes', 'vendas', 'crediario', 'caixa', 'fluxo', 'despesas'];
 
@@ -69,10 +70,14 @@ const DB = (() => {
     _setupListeners: () => {
       if (!_fbDb) return;
 
+      // Cancela listeners anteriores antes de criar novos (evita acúmulo entre reloads)
+      _unsubscribers.forEach(unsub => { try { unsub(); } catch (e) {} });
+      _unsubscribers = [];
+
       COLS.forEach(col => {
         _collectionsLoaded[col] = false;
         try {
-          _fbDb.collection('movePe_' + col).onSnapshot((snap) => {
+          const unsub = _fbDb.collection('movePe_' + col).onSnapshot((snap) => {
             const docs = snap.docs.map(d => d.data());
             const local = _get(col);
 
@@ -157,10 +162,16 @@ const DB = (() => {
             console.error('Erro no listener Firestore [' + col + ']:', err);
             Sync.updateStatus('error');
           });
+          _unsubscribers.push(unsub);
         } catch (e) {
           console.error('Erro ao configurar listener [' + col + ']:', e);
         }
       });
+
+      // Cancela todos os listeners quando a página for fechada
+      window.addEventListener('beforeunload', () => {
+        _unsubscribers.forEach(unsub => { try { unsub(); } catch (e) {} });
+      }, { once: true });
     },
 
     // Remove base64 antes de enviar ao Firestore (evita falha por documento > 1MB)
@@ -338,8 +349,9 @@ const DB = (() => {
     // Retorna produtos com estoque > 0 que não vendem há X dias
     listarParados: (diasMinimos = 60) => {
       const hoje = Utils.hoje();
-      const d180 = new Date(hoje); d180.setDate(d180.getDate() - 180);
-      const d180str = d180.toISOString().split('T')[0];
+      // Força meia-noite local (sem 'T00:00:00', new Date interpreta "YYYY-MM-DD" como UTC)
+      const d180 = new Date(hoje + 'T00:00:00'); d180.setDate(d180.getDate() - 180);
+      const d180str = `${d180.getFullYear()}-${String(d180.getMonth()+1).padStart(2,'0')}-${String(d180.getDate()).padStart(2,'0')}`;
 
       // Última venda por produto nos últimos 180 dias
       const ultimaVenda = {};
@@ -357,7 +369,7 @@ const DB = (() => {
         .map(p => {
           const ultima = ultimaVenda[p.id] || null;
           const dias = ultima
-            ? Math.floor((new Date(hoje) - new Date(ultima)) / (1000 * 60 * 60 * 24))
+            ? Math.floor((new Date(hoje + 'T00:00:00') - new Date(ultima + 'T00:00:00')) / (1000 * 60 * 60 * 24))
             : 999;
           const capitalPreso = Produtos.estoqueTotal(p) * (parseFloat(p.precoCusto) || 0);
           return { ...p, ultimaVenda: ultima, diasSemVenda: dias, capitalPreso };

@@ -1172,7 +1172,7 @@ ${linhaH}
     for (let i = 0; i < qtd; i++) {
       novasParcelas.push({
         numero: i + 1,
-        valor: i < qtd - 1 ? valorParcela : Math.round((totalRenegociado - valorParcela * (qtd - 1)) * 100) / 100, // última parcela absorve centavos
+        valor: i < qtd - 1 ? valorParcela : Math.max(0.01, Math.round((totalRenegociado - valorParcela * (qtd - 1)) * 100) / 100),
         vencimento: Utils.adicionarMeses(venc1Str, i),
         status: 'pendente',
         renegociada: true
