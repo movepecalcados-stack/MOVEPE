@@ -162,9 +162,10 @@ const CaixaModule = {
             hora: f.data,
             tipo: 'crediario',
             descricao: f.descricao || 'Recebimento Crediário',
-            forma: 'Crediário',
+            forma: Utils.labelFormaPagamento(f.formaPagamento) || 'Crediário',
             valor: parseFloat(f.valor) || 0,
-            entrada: true
+            entrada: true,
+            fluxoId: f.id
           });
         });
 
@@ -190,8 +191,10 @@ const CaixaModule = {
             const cor = m.entrada ? 'var(--success)' : 'var(--danger)';
             const sinal = m.entrada ? '+' : '-';
             const btnReimprimir = m.vendaId
-              ? `<button class="btn btn-outline btn-sm" onclick="CaixaModule.reimprimirVenda('${m.vendaId}')" title="Reimprimir">🖨️</button>`
-              : '';
+              ? `<button class="btn btn-outline btn-sm" onclick="CaixaModule.reimprimirVenda('${m.vendaId}')" title="Reimprimir comprovante">🖨️</button>`
+              : m.fluxoId
+                ? `<button class="btn btn-outline btn-sm" onclick="CaixaModule.reimprimirCrediario('${m.fluxoId}')" title="Reimprimir recibo">🖨️</button>`
+                : '';
             return `
               <tr style="border-bottom:1px solid var(--border)">
                 <td style="padding:8px 0;color:var(--text-muted);font-size:12px">${hora}</td>
@@ -345,6 +348,34 @@ const CaixaModule = {
     const venda = DB.Vendas.buscar(vendaId);
     if (!venda) { Utils.toast('Venda não encontrada', 'error'); return; }
     Utils.imprimirComprovante(Utils.gerarComprovante(venda));
+  },
+
+  reimprimirCrediario: (fluxoId) => {
+    const f = DB.FluxoCaixa.listar().find(x => x.id === fluxoId);
+    if (!f) { Utils.toast('Recibo não encontrado', 'error'); return; }
+    const H = '='.repeat(40);
+    const L = '-'.repeat(40);
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS').toUpperCase();
+    const dataEmissao = new Date(f.data).toLocaleDateString('pt-BR') + ' '
+      + new Date(f.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const formaStr = f.formaPagamento ? Utils.labelFormaPagamento(f.formaPagamento) : '—';
+    const texto = `
+${H}
+     RECIBO DE RECEBIMENTO
+        ${nomeLoja}
+${H}
+Emitido:  ${dataEmissao}
+${L}
+${f.descricao || 'Recebimento Crediário'}
+${L}
+VALOR RECEBIDO:${Utils.moeda(parseFloat(f.valor) || 0).padStart(17)}
+Forma:    ${formaStr}
+${L}
+   Obrigado pelo pagamento!
+      ${nomeLoja}
+${H}
+`.trim();
+    Utils.imprimirComprovante(texto);
   },
 
   imprimirDia: () => {

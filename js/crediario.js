@@ -638,6 +638,15 @@ const CrediarioModule = {
 
     const troco = recebido - totalDevido;
     Utils.fecharModal('modalPagarTudo');
+    CrediarioModule.imprimirReciboMultiplas({
+      clienteNome,
+      parcelas: entries.map(e => ({ numero: e.numero, totalParcelas: e.totalParcelas, vencimento: e.vencimento, valor: e.valor, juros: e.juros || 0 })),
+      total: totalDevido,
+      desconto: 0,
+      forma,
+      saldoRestante: 0,
+      troco
+    });
     if (clienteIdPTD) CrediarioModule._avaliarCredito(clienteIdPTD, entries.map(e => e.vencimento));
     CrediarioModule.renderStats();
     CrediarioModule.renderMensal();
@@ -802,6 +811,49 @@ const CrediarioModule = {
       formaPagamento: formaPagamento || parcela.formaPagamento || null
     });
     Utils.imprimirComprovante(comp);
+  },
+
+  imprimirReciboMultiplas: (opts) => {
+    const H = '='.repeat(40);
+    const L = '-'.repeat(40);
+    const now = new Date();
+    const dataEmissao = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS').toUpperCase();
+    const formaStr = opts.forma ? Utils.labelFormaPagamento(opts.forma) : '';
+
+    let parcelasStr = '';
+    opts.parcelas.forEach(p => {
+      const valorTotal = (p.valor || 0) + (p.juros || 0);
+      const jurosStr = p.juros > 0 ? ` +juros ${Utils.moeda(p.juros)}` : '';
+      parcelasStr += `  ${String(p.numero).padStart(2)}/${p.totalParcelas}  ${Utils.data(p.vencimento)}  ${Utils.moeda(valorTotal)}${jurosStr}\n`;
+    });
+
+    const descontoStr = opts.desconto > 0 ? `Desconto: -${Utils.moeda(opts.desconto)}\n` : '';
+    const trocoStr = opts.troco > 0.01 ? `Troco:    ${Utils.moeda(opts.troco)}\n` : '';
+    const saldoStr = opts.saldoRestante > 0
+      ? `Saldo:    ${Utils.moeda(opts.saldoRestante)} restante\n`
+      : `Saldo:    QUITADO ✓\n`;
+
+    const texto = `
+${H}
+     COMPROVANTE DE PAGAMENTO
+        ${nomeLoja}
+${H}
+Emitido:  ${dataEmissao}
+${L}
+Cliente:  ${opts.clienteNome || ''}
+Parcelas pagas: ${opts.parcelas.length}
+${L}
+DETALHAMENTO (Nº / Vencto / Valor):
+${parcelasStr}${L}
+${descontoStr}TOTAL PAGO:${Utils.moeda(opts.total).padStart(20)}
+${trocoStr}${saldoStr}Forma:    ${formaStr}
+${L}
+   Obrigado pelo pagamento!
+      ${nomeLoja}
+${H}
+`.trim();
+    Utils.imprimirComprovante(texto);
   },
 
   imprimirContrato: (credId) => {
@@ -1573,8 +1625,22 @@ Queremos muito evitar isso e resolver de forma tranquila! Entre em contato *hoje
     });
 
     const troco = recebido - totalDevido;
+    const _clienteIdSel = _selecionarParcAtual?.clienteId;
+    const _saldoRestanteSel = DB.Crediario.listar()
+      .filter(c => _clienteIdSel ? c.clienteId === _clienteIdSel : (c.clienteNome || '') === clienteNome)
+      .flatMap(c => (c.parcelas || []).filter(p => p.status !== 'pago'))
+      .reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
     Utils.fecharModal('modalSelecionarParcelas');
-    if (_selecionarParcAtual?.clienteId) CrediarioModule._avaliarCredito(_selecionarParcAtual.clienteId, selecionadas.map(e => e.vencimento));
+    CrediarioModule.imprimirReciboMultiplas({
+      clienteNome,
+      parcelas: selecionadas.map(e => ({ numero: e.numero, totalParcelas: e.totalParcelas, vencimento: e.vencimento, valor: e.valor, juros: e.juros || 0 })),
+      total: totalDevido,
+      desconto,
+      forma,
+      saldoRestante: _saldoRestanteSel,
+      troco
+    });
+    if (_clienteIdSel) CrediarioModule._avaliarCredito(_clienteIdSel, selecionadas.map(e => e.vencimento));
     CrediarioModule.renderStats();
     CrediarioModule.renderMensal();
     CrediarioModule.renderLista();
