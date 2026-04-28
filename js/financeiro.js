@@ -3172,21 +3172,28 @@ const Fin = {
 
   // ---- HISTÓRICO TINY ----
 
-  importarHistoricoTiny: async () => {
-    const btn = document.getElementById('btnImportarTiny');
-    if (btn) { btn.disabled = true; btn.textContent = 'Carregando...'; }
-    try {
-      const base = location.pathname.includes('/MOVEPE/') ? '/MOVEPE' : '';
-      const resp = await fetch(base + '/dados_tiny_historico.json');
-      if (!resp.ok) throw new Error('Arquivo não encontrado');
-      const data = await resp.json();
-      DB.HistoricoTiny.salvar(data);
-      Utils.toast('Histórico importado: ' + data.length + ' pedidos', 'success');
-      Fin.renderHistorico();
-    } catch (e) {
-      Utils.toast('Erro ao importar: ' + e.message, 'error');
-      if (btn) { btn.disabled = false; btn.textContent = 'Importar Histórico Tiny'; }
-    }
+  importarHistoricoTiny: () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (!Array.isArray(data)) throw new Error('Formato inválido');
+          DB.HistoricoTiny.salvar(data);
+          Utils.toast('Histórico importado: ' + data.length + ' pedidos', 'success');
+          Fin.renderHistorico();
+        } catch (err) {
+          Utils.toast('Erro ao ler arquivo: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   },
 
   limparHistoricoTiny: () => {
@@ -3208,11 +3215,12 @@ const Fin = {
         <div class="card" style="text-align:center;padding:40px 20px">
           <div style="font-size:48px;margin-bottom:16px">📦</div>
           <div style="font-size:18px;font-weight:700;margin-bottom:8px">Histórico do sistema anterior (Tiny/Olist)</div>
-          <div style="color:var(--text-muted);margin-bottom:24px;max-width:400px;margin-left:auto;margin-right:auto">
-            Importe os dados do Tiny para visualizar tendências, sazonalidade e projeções sem misturar com os dados atuais.
+          <div style="color:var(--text-muted);margin-bottom:24px;max-width:440px;margin-left:auto;margin-right:auto">
+            Importe os dados do Tiny para visualizar tendências, sazonalidade e projeções sem misturar com os dados atuais.<br><br>
+            <strong>Arquivo:</strong> <code>dados_tiny_historico.json</code> — está na pasta <strong>MovePe</strong> do seu computador.
           </div>
           <button id="btnImportarTiny" class="btn btn-primary" onclick="Fin.importarHistoricoTiny()">
-            Importar Histórico Tiny
+            Selecionar arquivo dados_tiny_historico.json
           </button>
         </div>`;
       return;
