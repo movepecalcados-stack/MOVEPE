@@ -1242,7 +1242,7 @@ const Fin = {
         </div>
         ${listaRepor.map(r => {
           const estoqueOk  = r.estoqueAtual >= r.qtdRepor;
-          const estoqueBaixo = r.estoqueAtual < r.qtdVendida * 0.3;
+          const estoqueBaixo = r.estoqueAtual < r.qtd * 0.3;
           return `
           <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:8px;align-items:center">
             <div>
