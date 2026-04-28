@@ -27,7 +27,7 @@ const Fin = {
     _tabAtual = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    ['resumo','dre','fluxo30','ranking','reposicao','precificacao','contas','metas','diagnostico','trafego'].forEach(t => {
+    ['resumo','dre','fluxo30','ranking','reposicao','precificacao','contas','metas','diagnostico','trafego','historico'].forEach(t => {
       const el = document.getElementById('tab-' + t);
       if (el) el.style.display = t === tab ? '' : 'none';
     });
@@ -92,6 +92,7 @@ const Fin = {
     if (_tabAtual === 'metas')        Fin.renderMetas();
     if (_tabAtual === 'diagnostico')  Fin.renderDiagnostico();
     if (_tabAtual === 'trafego')      Fin.renderTrafego();
+    if (_tabAtual === 'historico')    Fin.renderHistorico();
   },
 
   // ---- CÁLCULOS BASE ----
@@ -3167,6 +3168,208 @@ const Fin = {
     DB.Trafego.excluir(id);
     Fin.renderTrafego();
     Utils.toast('Lançamento excluído');
+  },
+
+  // ---- HISTÓRICO TINY ----
+
+  importarHistoricoTiny: async () => {
+    const btn = document.getElementById('btnImportarTiny');
+    if (btn) { btn.disabled = true; btn.textContent = 'Carregando...'; }
+    try {
+      const base = location.pathname.includes('/MOVEPE/') ? '/MOVEPE' : '';
+      const resp = await fetch(base + '/dados_tiny_historico.json');
+      if (!resp.ok) throw new Error('Arquivo não encontrado');
+      const data = await resp.json();
+      DB.HistoricoTiny.salvar(data);
+      Utils.toast('Histórico importado: ' + data.length + ' pedidos', 'success');
+      Fin.renderHistorico();
+    } catch (e) {
+      Utils.toast('Erro ao importar: ' + e.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Importar Histórico Tiny'; }
+    }
+  },
+
+  limparHistoricoTiny: () => {
+    if (!Utils.confirmar('Remover todos os dados do histórico Tiny?')) return;
+    DB.HistoricoTiny.limpar();
+    Fin.renderHistorico();
+    Utils.toast('Histórico removido');
+  },
+
+  renderHistorico: () => {
+    const cont = document.getElementById('historicoConteudo');
+    if (!cont) return;
+
+    const importado = DB.HistoricoTiny.importado();
+    const dados = importado ? DB.HistoricoTiny.listar() : [];
+
+    if (!importado || dados.length === 0) {
+      cont.innerHTML = `
+        <div class="card" style="text-align:center;padding:40px 20px">
+          <div style="font-size:48px;margin-bottom:16px">📦</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:8px">Histórico do sistema anterior (Tiny/Olist)</div>
+          <div style="color:var(--text-muted);margin-bottom:24px;max-width:400px;margin-left:auto;margin-right:auto">
+            Importe os dados do Tiny para visualizar tendências, sazonalidade e projeções sem misturar com os dados atuais.
+          </div>
+          <button id="btnImportarTiny" class="btn btn-primary" onclick="Fin.importarHistoricoTiny()">
+            Importar Histórico Tiny
+          </button>
+        </div>`;
+      return;
+    }
+
+    // Agrupa por mês
+    const mensal = {};
+    dados.forEach(r => {
+      if (!r.data) return;
+      const mes = r.data.substring(0, 7);
+      if (!mensal[mes]) mensal[mes] = { total: 0, qtd: 0, formas: {} };
+      mensal[mes].total += parseFloat(r.valorTotal) || 0;
+      mensal[mes].qtd++;
+      const f = r.forma || 'outros';
+      mensal[mes].formas[f] = (mensal[mes].formas[f] || 0) + 1;
+    });
+
+    const mesesOrdenados = Object.keys(mensal).sort();
+    const totalGeral = dados.reduce((s, r) => s + (parseFloat(r.valorTotal) || 0), 0);
+    const ticketMedio = totalGeral / dados.length;
+
+    // Formas de pagamento
+    const formasTotais = {};
+    dados.forEach(r => { const f = r.forma || 'outros'; formasTotais[f] = (formasTotais[f] || 0) + 1; });
+    const labelForma = { crediario: 'Crediário', cartao_credito: 'Cartão Crédito', pix: 'Pix', dinheiro: 'Dinheiro', cartao_debito: 'Cartão Débito', multiplas: 'Múltiplas' };
+    const corForma  = { crediario: 'var(--warning)', cartao_credito: 'var(--primary)', pix: '#00c6a7', dinheiro: 'var(--success)', cartao_debito: '#6366f1', multiplas: 'var(--text-muted)' };
+
+    // Projeções: média dos últimos 3 meses disponíveis no histórico aplicada para os próximos 3 meses
+    const ultimos3 = mesesOrdenados.slice(-3).map(m => mensal[m].total);
+    const mediaUlt3 = ultimos3.reduce((s, v) => s + v, 0) / (ultimos3.length || 1);
+    const hoje = Utils.hoje().substring(0, 7);
+    const projecoes = [];
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(hoje + '-01');
+      d.setMonth(d.getMonth() + i);
+      const mesProj = d.toISOString().substring(0, 7);
+      // Se o mesmo mês existir no histórico do ano anterior, usa como base
+      const mesAnoAnterior = (parseInt(mesProj.substring(0, 4)) - 1) + mesProj.substring(4);
+      const baseHistorico = mensal[mesAnoAnterior] ? mensal[mesAnoAnterior].total : mediaUlt3;
+      projecoes.push({ mes: mesProj, valor: baseHistorico });
+    }
+
+    // Gráfico de barras simples
+    const maxVal = Math.max(...mesesOrdenados.map(m => mensal[m].total), ...projecoes.map(p => p.valor), 1);
+    const nomeMes = (ym) => {
+      const [y, m] = ym.split('-');
+      const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      return nomes[parseInt(m) - 1] + '/' + y.substring(2);
+    };
+
+    const barrasHistorico = mesesOrdenados.map(m => {
+      const pct = (mensal[m].total / maxVal * 100).toFixed(1);
+      return `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:48px">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">${Utils.moeda(mensal[m].total).replace('R$','')}</div>
+          <div style="width:100%;background:var(--border);border-radius:4px;overflow:hidden;height:80px;display:flex;align-items:flex-end">
+            <div style="width:100%;height:${pct}%;background:var(--primary);border-radius:4px 4px 0 0;transition:height .3s" title="${nomeMes(m)}: ${Utils.moeda(mensal[m].total)}"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted)">${nomeMes(m)}</div>
+          <div style="font-size:9px;color:var(--text-muted)">${mensal[m].qtd} ped</div>
+        </div>`;
+    }).join('');
+
+    const barrasProjecao = projecoes.map(p => {
+      const pct = (p.valor / maxVal * 100).toFixed(1);
+      return `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:48px">
+          <div style="font-size:10px;color:var(--warning);font-weight:600">${Utils.moeda(p.valor).replace('R$','')}</div>
+          <div style="width:100%;background:var(--border);border-radius:4px;overflow:hidden;height:80px;display:flex;align-items:flex-end">
+            <div style="width:100%;height:${pct}%;background:rgba(251,191,36,.4);border:2px dashed var(--warning);border-radius:4px 4px 0 0;box-sizing:border-box"></div>
+          </div>
+          <div style="font-size:10px;color:var(--warning);font-weight:600">${nomeMes(p.mes)} ★</div>
+          <div style="font-size:9px;color:var(--text-muted)">projeção</div>
+        </div>`;
+    }).join('');
+
+    // Cards formas de pagamento
+    const formasHtml = Object.entries(formasTotais)
+      .sort((a, b) => b[1] - a[1])
+      .map(([f, qtd]) => {
+        const pct = (qtd / dados.length * 100).toFixed(0);
+        return `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="width:10px;height:10px;border-radius:50%;background:${corForma[f]||'var(--text-muted)'};flex-shrink:0"></div>
+            <div style="flex:1;font-size:13px">${labelForma[f] || f}</div>
+            <div style="font-size:13px;font-weight:600">${qtd}</div>
+            <div style="font-size:12px;color:var(--text-muted);min-width:36px;text-align:right">${pct}%</div>
+          </div>`;
+      }).join('');
+
+    // Melhor e pior mês
+    const melhorMes = mesesOrdenados.reduce((best, m) => mensal[m].total > (mensal[best]?.total || 0) ? m : best, mesesOrdenados[0]);
+    const piorMes   = mesesOrdenados.reduce((worst, m) => mensal[m].total < (mensal[worst]?.total || Infinity) ? m : worst, mesesOrdenados[0]);
+
+    // Crescimento (último mês vs penúltimo)
+    let crescHtml = '';
+    if (mesesOrdenados.length >= 2) {
+      const ult = mensal[mesesOrdenados[mesesOrdenados.length - 1]].total;
+      const pen = mensal[mesesOrdenados[mesesOrdenados.length - 2]].total;
+      const cresc = pen > 0 ? ((ult - pen) / pen * 100).toFixed(1) : 0;
+      const cor = cresc >= 0 ? 'var(--success)' : 'var(--danger)';
+      crescHtml = `<div style="font-size:13px;color:${cor};font-weight:600">${cresc >= 0 ? '+' : ''}${cresc}% vs mês ant.</div>`;
+    }
+
+    cont.innerHTML = `
+      <!-- Cards resumo -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total Faturado</div>
+          <div style="font-size:22px;font-weight:700;color:var(--primary);margin:4px 0">${Utils.moeda(totalGeral)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${mesesOrdenados.length} meses de histórico</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total de Pedidos</div>
+          <div style="font-size:22px;font-weight:700;margin:4px 0">${dados.length}</div>
+          <div style="font-size:12px;color:var(--text-muted)">Ticket médio: ${Utils.moeda(ticketMedio)}</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Melhor Mês</div>
+          <div style="font-size:18px;font-weight:700;color:var(--success);margin:4px 0">${nomeMes(melhorMes)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${Utils.moeda(mensal[melhorMes].total)}</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Último Mês</div>
+          <div style="font-size:18px;font-weight:700;margin:4px 0">${nomeMes(mesesOrdenados[mesesOrdenados.length-1])}</div>
+          ${crescHtml}
+        </div>
+      </div>
+
+      <!-- Gráfico mensal + projeção -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div class="card-title" style="margin:0">Faturamento Mensal</div>
+            <div style="font-size:12px;color:var(--text-muted)">Histórico Tiny + projeção próximos 3 meses (★)</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="Fin.limparHistoricoTiny()" style="color:var(--danger)">Remover dados</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-end;overflow-x:auto;padding-bottom:4px">
+          ${barrasHistorico}
+          <div style="width:1px;background:var(--border);height:100px;align-self:center;flex-shrink:0;margin:0 4px"></div>
+          ${barrasProjecao}
+        </div>
+        <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--text-muted)">
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;margin-right:4px"></span>Realizado (Tiny)</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:rgba(251,191,36,.4);border:2px dashed var(--warning);border-radius:2px;margin-right:4px"></span>Projeção (baseada no mesmo período do ano anterior)</span>
+        </div>
+      </div>
+
+      <!-- Formas de pagamento -->
+      <div class="card">
+        <div class="card-title">Formas de Pagamento (histórico Tiny)</div>
+        ${formasHtml}
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted)">
+          ⚠️ Esses dados são do Tiny e estão <strong>isolados</strong> — não afetam caixa, crediário ou estoque do sistema atual.
+        </div>
+      </div>`;
   },
 
 };

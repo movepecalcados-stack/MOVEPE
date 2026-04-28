@@ -878,8 +878,15 @@ const DB = (() => {
 
   const ultimoBackup = () => localStorage.getItem(P + 'ultimo_backup') || null;
 
+  const HistoricoTiny = {
+    listar: () => JSON.parse(localStorage.getItem(P + 'historico_tiny') || '[]'),
+    salvar: (data) => { localStorage.setItem(P + 'historico_tiny', JSON.stringify(data)); },
+    limpar: () => localStorage.removeItem(P + 'historico_tiny'),
+    importado: () => localStorage.getItem(P + 'historico_tiny') !== null,
+  };
+
   // Inicializa Firebase ao carregar a página
   document.addEventListener('DOMContentLoaded', Sync.init);
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, RendaPessoal, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, RendaPessoal, Config, HistoricoTiny, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
 })();
