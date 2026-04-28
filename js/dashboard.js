@@ -103,6 +103,26 @@ const Dashboard = {
     document.getElementById('statTotalInad').textContent = Utils.moeda(totalInad) + ' em atraso';
     const elClientesInad = document.getElementById('statClientesInad');
     if (elClientesInad) elClientesInad.textContent = clientesInad > 0 ? 'Ver Financeiro →' : '';
+
+    // Comparativo mesmo mês ano anterior (via histórico Tiny)
+    const elVarAno = document.getElementById('statVarAno');
+    if (elVarAno && DB.HistoricoTiny.importado()) {
+      const anoAnterior = (parseInt(mesAtual.substring(0, 4)) - 1) + mesAtual.substring(4);
+      const tiny = DB.HistoricoTiny.listar();
+      const totalTiny = tiny
+        .filter(r => (r.data || '').startsWith(anoAnterior))
+        .reduce((s, r) => s + (parseFloat(r.valorTotal) || 0), 0);
+      if (totalTiny > 0) {
+        const pct = Math.round(((totalMes - totalTiny) / totalTiny) * 100);
+        const cor = pct >= 0 ? 'var(--success)' : 'var(--danger)';
+        const seta = pct >= 0 ? '▲' : '▼';
+        const [ano, mes] = anoAnterior.split('-');
+        const nomeMes = new Date(ano, parseInt(mes)-1).toLocaleDateString('pt-BR', { month: 'long' });
+        elVarAno.innerHTML = `<span style="color:${cor};font-weight:700">${seta} ${Math.abs(pct)}% vs ${nomeMes}/${ano} (Tiny)</span>`;
+      } else {
+        elVarAno.textContent = '';
+      }
+    }
   },
 
   renderGrafico6Meses: () => {

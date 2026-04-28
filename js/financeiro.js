@@ -3384,6 +3384,63 @@ const Fin = {
       crescHtml = `<div style="font-size:13px;color:${cor};font-weight:600">${cresc >= 0 ? '+' : ''}${cresc}% vs mês ant.</div>`;
     }
 
+    // Sazonalidade: próximos 3 meses com base no mesmo período do ano anterior
+    const _hoje3 = Utils.hoje().substring(0, 7);
+    const sazonalidadeHtml = [1, 2, 3].map(i => {
+      const d = new Date(_hoje3 + '-01');
+      d.setMonth(d.getMonth() + i);
+      const mesProx = d.toISOString().substring(0, 7);
+      const mesAnoAnt = (parseInt(mesProx.substring(0, 4)) - 1) + mesProx.substring(4);
+      const hist = mensal[mesAnoAnt];
+      const nomeProx = nomeMes(mesProx);
+      const nomeAnt = nomeMes(mesAnoAnt);
+      const isMesGrande = ['12', '11'].includes(mesProx.substring(5));
+      const alertaTexto = mesProx.endsWith('-12') ? '🎄 Alta temporada — prepare o estoque com antecedência!'
+                        : mesProx.endsWith('-11') ? '🛍️ Pré-natal — aumento de movimento esperado'
+                        : mesProx.endsWith('-05') ? '🤱 Dia das Mães — pico de vendas'
+                        : '';
+      if (!hist) return `
+        <div style="padding:14px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600;font-size:15px">${nomeProx}</div>
+            <div style="font-size:12px;color:var(--text-muted)">Sem histórico do ano anterior para este mês</div>
+          </div>
+        </div>`;
+      const ticket = hist.qtd > 0 ? hist.total / hist.qtd : 0;
+      const corMes = isMesGrande ? 'var(--warning)' : 'var(--primary)';
+      return `
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:15px">${nomeProx}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:3px">
+                Em ${nomeAnt} (Tiny): <strong>${Utils.moeda(hist.total)}</strong> · ${hist.qtd} pedidos · ticket médio <strong>${Utils.moeda(ticket)}</strong>
+              </div>
+              ${alertaTexto ? `<div style="font-size:12px;color:${corMes};font-weight:600;margin-top:5px">${alertaTexto}</div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:20px;font-weight:700;color:${corMes}">${Utils.moeda(hist.total)}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${hist.qtd} pedidos</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Ticket médio por mês
+    const maxTicket = Math.max(...mesesOrdenados.map(m => mensal[m].qtd > 0 ? mensal[m].total / mensal[m].qtd : 0), 1);
+    const ticketBarras = mesesOrdenados.map(m => {
+      const ticket = mensal[m].qtd > 0 ? mensal[m].total / mensal[m].qtd : 0;
+      const pct = (ticket / maxTicket * 100).toFixed(1);
+      return `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:50px">
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600">${Utils.moeda(ticket).replace('R$ ','').replace('R$ ','')}</div>
+          <div style="width:100%;background:var(--border);border-radius:4px;overflow:hidden;height:60px;display:flex;align-items:flex-end">
+            <div style="width:100%;height:${pct}%;background:#6366f1;border-radius:4px 4px 0 0;transition:height .3s" title="${nomeMes(m)}: ${Utils.moeda(ticket)}/pedido"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted)">${nomeMes(m)}</div>
+        </div>`;
+    }).join('');
+
     cont.innerHTML = `
       <!-- Cards resumo -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
@@ -3427,6 +3484,26 @@ const Fin = {
           <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;margin-right:4px"></span>Realizado (Tiny)</span>
           <span><span style="display:inline-block;width:10px;height:10px;background:rgba(251,191,36,.4);border:2px dashed var(--warning);border-radius:2px;margin-right:4px"></span>Projeção (baseada no mesmo período do ano anterior)</span>
         </div>
+      </div>
+
+      <!-- Ticket médio por mês -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">Ticket Médio por Mês</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Valor médio por pedido — quanto maior, melhor o mix de produtos vendidos</div>
+        <div style="display:flex;gap:6px;align-items:flex-end;overflow-x:auto;padding-bottom:4px">
+          ${ticketBarras}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-muted)">
+          Maior ticket: <strong>${Utils.moeda(Math.max(...mesesOrdenados.map(m => mensal[m].qtd > 0 ? mensal[m].total/mensal[m].qtd : 0)))}</strong> em ${nomeMes(mesesOrdenados.reduce((b, m) => (mensal[m].qtd > 0 ? mensal[m].total/mensal[m].qtd : 0) > (mensal[b].qtd > 0 ? mensal[b].total/mensal[b].qtd : 0) ? m : b, mesesOrdenados[0]))} &nbsp;·&nbsp;
+          Média geral: <strong>${Utils.moeda(totalGeral / dados.length)}</strong>
+        </div>
+      </div>
+
+      <!-- Sazonalidade -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">Sazonalidade — O que esperar dos próximos meses</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Baseado no mesmo período do seu histórico Tiny (ano anterior)</div>
+        ${sazonalidadeHtml}
       </div>
 
       <!-- Formas de pagamento -->
