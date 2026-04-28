@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -135,6 +135,52 @@
           </div>
           <div id="taxaCrediarioInfo" style="display:none;margin-top:4px;font-size:13px;color:var(--success);font-weight:600"></div>
         </div>
+      </div>
+
+      <!-- GRADES DE REPOSIÇÃO -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">📦 Grades de Reposição</div>
+        <p class="text-muted fs-sm" style="margin-bottom:16px">
+          Cadastre as grades que seus fornecedores vendem. Uma grade é o conjunto fixo de tamanhos vendido por embalagem.
+          Ex: <strong>Feminino Padrão</strong> = 34, 35, 36, 37, 38, 39 (1 par cada = 6 pares).
+        </p>
+
+        <!-- Formulário nova grade -->
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">➕ Nova Grade</div>
+
+          <div class="form-group">
+            <label class="form-label">Nome da Grade *</label>
+            <input type="text" id="gradeNome" class="form-control" placeholder="Ex: Feminino Padrão, Masculino Adulto, Infantil...">
+          </div>
+
+          <!-- Atalhos de preenchimento -->
+          <div style="margin-bottom:12px">
+            <div class="text-muted fs-sm" style="margin-bottom:6px">Padrões rápidos:</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn btn-outline btn-sm" onclick="Config.preencherGradePadrao('feminino')">👟 Feminino 34-39</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="Config.preencherGradePadrao('masculino')">👞 Masculino 38-43</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="Config.preencherGradePadrao('infantil')">🥿 Infantil 28-33</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="Config.adicionarLinhaGrade()">+ Tamanho manual</button>
+            </div>
+          </div>
+
+          <!-- Tabela de tamanhos × pares -->
+          <div style="margin-bottom:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;font-size:12px;font-weight:700;color:var(--text-muted);padding:0 4px;margin-bottom:4px">
+              <span>Tamanho</span><span>Pares</span><span></span>
+            </div>
+            <div id="gradeLinhas" style="display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+
+          <!-- Preview total -->
+          <div id="gradePreview" style="padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;margin-bottom:12px;display:none"></div>
+
+          <button class="btn btn-primary" onclick="Config.salvarGrade()">💾 Adicionar Grade</button>
+        </div>
+
+        <!-- Lista de grades cadastradas -->
+        <div id="listaGrades"></div>
       </div>
 
       <!-- BACKUP -->
@@ -309,6 +355,7 @@
         Config.carregarTaxas();
         Config.carregarFrete();
         Config.carregarDadosLoja();
+        Config.renderGrades();
       },
 
       renderStats: () => {
@@ -518,6 +565,111 @@
         info.style.display = '';
         info.textContent = `Meta atual: ${Utils.moeda(val)} / mês`;
         Utils.toast('Meta salva com sucesso!', 'success');
+      },
+
+      // ---- GRADES ----
+      _PADROES_GRADE: {
+        feminino:  [['34',1],['35',2],['36',3],['37',3],['38',2],['39',1]],
+        masculino: [['38',1],['39',2],['40',3],['41',3],['42',2],['43',1]],
+        infantil:  [['28',1],['29',1],['30',2],['31',2],['32',1],['33',1]],
+      },
+
+      preencherGradePadrao: (tipo) => {
+        const cont = document.getElementById('gradeLinhas');
+        if (!cont) return;
+        cont.innerHTML = '';
+        const padrao = Config._PADROES_GRADE[tipo] || [];
+        padrao.forEach(([tam, qtd]) => Config.adicionarLinhaGrade(tam, qtd));
+        if (!document.getElementById('gradeNome').value.trim()) {
+          const labels = { feminino: 'Feminino Padrão', masculino: 'Masculino Padrão', infantil: 'Infantil Padrão' };
+          document.getElementById('gradeNome').value = labels[tipo] || '';
+        }
+        Config.previewGrade();
+      },
+
+      adicionarLinhaGrade: (tam = '', qtd = 1) => {
+        const cont = document.getElementById('gradeLinhas');
+        if (!cont) return;
+        const div = document.createElement('div');
+        div.className = 'grade-linha';
+        div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center';
+        div.innerHTML = `
+          <input type="text" class="form-control grade-tam" value="${tam}" placeholder="Ex: 36" oninput="Config.previewGrade()">
+          <input type="number" class="form-control grade-qtd" value="${qtd}" min="1" max="20" oninput="Config.previewGrade()">
+          <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.closest('.grade-linha').remove();Config.previewGrade()" title="Remover">✕</button>`;
+        cont.appendChild(div);
+        if (!tam) div.querySelector('.grade-tam').focus();
+      },
+
+      previewGrade: () => {
+        const prev = document.getElementById('gradePreview');
+        const linhas = document.querySelectorAll('#gradeLinhas .grade-linha');
+        const tamanhos = [];
+        linhas.forEach(l => {
+          const t = l.querySelector('.grade-tam').value.trim();
+          const q = parseInt(l.querySelector('.grade-qtd').value) || 1;
+          if (t) tamanhos.push({ tam: t, qtd: q });
+        });
+        if (!tamanhos.length) { prev.style.display = 'none'; return; }
+        const total = tamanhos.reduce((s, t) => s + t.qtd, 0);
+        prev.style.display = '';
+        const chipsHtml = tamanhos.map(t =>
+          `<span style="background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:4px;font-size:12px;white-space:nowrap">${t.tam}${t.qtd > 1 ? ' <strong>×' + t.qtd + '</strong>' : ''}</span>`
+        ).join(' ');
+        prev.innerHTML = `<strong>${total} pares</strong> por grade &nbsp;·&nbsp; ${chipsHtml}`;
+      },
+
+      _coletarLinhasGrade: () => {
+        const tamanhos = [];
+        document.querySelectorAll('#gradeLinhas .grade-linha').forEach(l => {
+          const t = l.querySelector('.grade-tam').value.trim();
+          const q = parseInt(l.querySelector('.grade-qtd').value) || 1;
+          if (t) tamanhos.push({ tam: t, qtd: q });
+        });
+        return tamanhos;
+      },
+
+      salvarGrade: () => {
+        const nome = document.getElementById('gradeNome').value.trim();
+        const tamanhos = Config._coletarLinhasGrade();
+        if (!nome) { Utils.toast('Informe o nome da grade.', 'error'); return; }
+        if (!tamanhos.length) { Utils.toast('Adicione ao menos um tamanho.', 'error'); return; }
+        DB.Grades.salvar({ nome, tamanhos });
+        document.getElementById('gradeNome').value = '';
+        document.getElementById('gradeLinhas').innerHTML = '';
+        document.getElementById('gradePreview').style.display = 'none';
+        Config.renderGrades();
+        Utils.toast(`Grade "${nome}" salva!`, 'success');
+      },
+
+      excluirGrade: (id) => {
+        if (!Utils.confirmar('Excluir esta grade? Os produtos vinculados a ela perderão a referência.')) return;
+        DB.Grades.excluir(id);
+        Config.renderGrades();
+        Utils.toast('Grade excluída');
+      },
+
+      renderGrades: () => {
+        const cont = document.getElementById('listaGrades');
+        if (!cont) return;
+        const grades = DB.Grades.listar();
+        if (!grades.length) {
+          cont.innerHTML = `<div class="text-muted fs-sm" style="padding:8px 0">Nenhuma grade cadastrada ainda. Use os atalhos acima ou monte manualmente.</div>`;
+          return;
+        }
+        cont.innerHTML = grades.map(g => {
+          const tamsHtml = (g.tamanhos || []).map(t =>
+            `<span style="background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:4px;font-size:12px">${t.tam}${t.qtd > 1 ? ' <strong>×' + t.qtd + '</strong>' : ''}</span>`
+          ).join(' ');
+          return `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;background:var(--card)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:14px;margin-bottom:6px">${g.nome} <span style="font-size:12px;color:var(--text-muted);font-weight:400">${g.totalPares} pares/grade</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px">${tamsHtml}</div>
+              </div>
+              <button class="btn btn-danger btn-sm" onclick="Config.excluirGrade('${g.id}')">🗑</button>
+            </div>`;
+        }).join('');
       },
 
       salvarTaxaCrediario: () => {

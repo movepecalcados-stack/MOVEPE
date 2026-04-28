@@ -238,6 +238,7 @@ const WA = {
 
     if (filtro === 'inadimplentes') {
       DB.Crediario.listar().forEach(cred => {
+        if (!cred.parcelas) return;
         cred.parcelas.forEach((p, idx) => {
           if (p.status !== 'pago' && p.vencimento < hoje) {
             const cli = DB.Clientes.buscar(cred.clienteId);
@@ -257,6 +258,7 @@ const WA = {
 
     } else if (filtro === 'vencendo') {
       DB.Crediario.listar().forEach(cred => {
+        if (!cred.parcelas) return;
         cred.parcelas.forEach(p => {
           if (p.status !== 'pago' && p.vencimento >= hoje && p.vencimento <= ate3dias) {
             const cli = DB.Clientes.buscar(cred.clienteId);

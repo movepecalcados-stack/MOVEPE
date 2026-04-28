@@ -7,6 +7,7 @@ let _filtroTipo = '';
 let _filtroTamanho = '';
 let _busca = '';
 let _filtroParado = false;
+let _filtroZeradas = false;
 let _fotosGaleria = [];      // até 7 fotos; índice 0 = principal
 let _fotosVariacoes = {};   // { "rosa": "base64..." } — foto atribuída a cada cor
 
@@ -68,7 +69,8 @@ const Estoque = {
       totalPecas += total;
       valorVenda += total * (parseFloat(p.precoVenda) || 0);
       valorCusto += total * (parseFloat(p.precoCusto) || 0);
-      if (total <= (p.estoqueMinimo || 5)) estoqueBaixo++;
+      const minProd = p.estoqueMinimo != null ? p.estoqueMinimo : 3;
+      if (minProd > 0 && total <= minProd) estoqueBaixo++;
     });
     document.getElementById('statPecas').textContent = totalPecas;
     document.getElementById('statValorVenda').textContent = Utils.moeda(valorVenda);
@@ -78,8 +80,21 @@ const Estoque = {
 
   toggleFiltroParado: () => {
     _filtroParado = !_filtroParado;
+    if (_filtroParado) _filtroZeradas = false;
     const btn = document.getElementById('btnFiltroParado');
     if (btn) btn.classList.toggle('active', _filtroParado);
+    const btnZ = document.getElementById('btnFiltroZeradas');
+    if (btnZ) btnZ.classList.toggle('active', false);
+    Estoque.renderProdutos();
+  },
+
+  toggleFiltroZeradas: () => {
+    _filtroZeradas = !_filtroZeradas;
+    if (_filtroZeradas) _filtroParado = false;
+    const btn = document.getElementById('btnFiltroZeradas');
+    if (btn) btn.classList.toggle('active', _filtroZeradas);
+    const btnP = document.getElementById('btnFiltroParado');
+    if (btnP) btnP.classList.toggle('active', false);
     Estoque.renderProdutos();
   },
 
@@ -90,6 +105,8 @@ const Estoque = {
       const parados = DB.Produtos.listarParados(60);
       const idsParados = new Set(parados.map(p => p.id));
       prods = parados; // já tem diasSemVenda e capitalPreso
+    } else if (_filtroZeradas) {
+      prods = prods.filter(p => p.variacoes && Object.values(p.variacoes).some(q => q == 0));
     } else {
       if (_busca.trim()) prods = DB.Produtos.buscarPorTexto(_busca);
       if (_filtroTipo)   prods = prods.filter(p => p.tipo === _filtroTipo);
@@ -106,6 +123,51 @@ const Estoque = {
       return;
     }
 
+    // Modo especial: lista de tamanhos zerados
+    if (_filtroZeradas) {
+      const totalZerados = prods.reduce((s, p) => s + Object.values(p.variacoes || {}).filter(q => q == 0).length, 0);
+      let html = `<div style="grid-column:1/-1">
+        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+          🔴 <span>${prods.length} produto${prods.length !== 1 ? 's' : ''} com tamanhos zerados · <strong>${totalZerados} variação${totalZerados !== 1 ? 'ões' : ''} com estoque 0</strong></span>
+          <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="Estoque.toggleFiltroZeradas()">✕ Limpar filtro</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="border-bottom:2px solid var(--border);text-align:left">
+            <th style="padding:8px 10px;color:var(--text-muted);font-weight:600">Produto</th>
+            <th style="padding:8px 10px;color:var(--text-muted);font-weight:600">Tamanhos zerados</th>
+            <th style="padding:8px 10px;color:var(--text-muted);font-weight:600;text-align:right">Total em estoque</th>
+            <th style="padding:8px 10px"></th>
+          </tr></thead><tbody>`;
+      prods.forEach(p => {
+        const variacoes = p.variacoes || {};
+        const zeradas = Object.entries(variacoes)
+          .filter(([, q]) => q == 0)
+          .sort(([a], [b]) => {
+            const na = parseFloat(a.split('||')[0]), nb = parseFloat(b.split('||')[0]);
+            return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b);
+          });
+        const total = DB.Produtos.estoqueTotal(p);
+        const chips = zeradas.map(([key]) => {
+          const [tam, cor] = key.split('||');
+          return `<span style="display:inline-block;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:1px 7px;font-size:12px;color:var(--danger);margin:2px">${tam}${cor ? ' / ' + cor : ''}</span>`;
+        }).join('');
+        html += `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px 10px">
+            <div style="font-weight:600">${p.nome}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${p.marca || ''}</div>
+          </td>
+          <td style="padding:8px 10px">${chips}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:600">${total}</td>
+          <td style="padding:8px 10px;text-align:right">
+            <button class="btn btn-outline btn-sm" onclick="Estoque.abrirForm('${p.id}')">✏️ Editar</button>
+          </td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+      grid.innerHTML = html;
+      return;
+    }
+
     // Banner de filtro ativo
     const bannerParado = _filtroParado ? `
       <div style="grid-column:1/-1;background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.4);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:4px">
@@ -116,7 +178,8 @@ const Estoque = {
 
     grid.innerHTML = bannerParado + prods.map(p => {
       const total = DB.Produtos.estoqueTotal(p);
-      const baixo = total <= (p.estoqueMinimo || 5);
+      const minProd2 = p.estoqueMinimo != null ? p.estoqueMinimo : 3;
+      const baixo = minProd2 > 0 && total <= minProd2;
       const diasParado = p.diasSemVenda || null;
       const badgeParado = diasParado
         ? `<span style="font-size:10px;font-weight:700;color:${diasParado >= 120 ? 'var(--danger)' : 'var(--warning)'};background:${diasParado >= 120 ? 'rgba(239,68,68,.1)' : 'rgba(234,179,8,.1)'};padding:2px 6px;border-radius:4px;white-space:nowrap">${diasParado >= 999 ? 'Nunca vendido' : diasParado + 'd parado'}</span>`
@@ -191,7 +254,9 @@ const Estoque = {
     f.tipo.value = _produtoEditando ? (_produtoEditando.tipo || 'calcado_adulto') : 'calcado_adulto';
     f.precoVenda.value = _produtoEditando ? _produtoEditando.precoVenda : '';
     f.precoCusto.value = _produtoEditando ? (_produtoEditando.precoCusto || '') : '';
-    f.estoqueMinimo.value = _produtoEditando ? (_produtoEditando.estoqueMinimo || 5) : 5;
+    f.estoqueMinimo.value = _produtoEditando
+      ? (_produtoEditando.estoqueMinimo != null ? _produtoEditando.estoqueMinimo : 3)
+      : 3;
     f.descricao.value = _produtoEditando ? (_produtoEditando.descricao || '') : '';
 
     // Fotos de variação por cor
@@ -211,6 +276,27 @@ const Estoque = {
     }
     document.getElementById('inputFotoGaleria').value = '';
     Estoque.renderGaleria();
+
+    // Grades de reposição
+    const selGrade = document.getElementById('selGradeProduto');
+    const gradeInfo = document.getElementById('gradeInfoProduto');
+    if (selGrade) {
+      const grades = (typeof DB !== 'undefined' && DB.Grades) ? DB.Grades.listar() : [];
+      selGrade.innerHTML = '<option value="">— Sem grade cadastrada —</option>' +
+        grades.map(g => `<option value="${g.id}">${g.nome} (${g.totalPares} pares)</option>`).join('');
+      selGrade.value = _produtoEditando ? (_produtoEditando.gradeId || '') : '';
+      const atualizarInfoGrade = () => {
+        const gid = selGrade.value;
+        if (!gid || !gradeInfo) { if (gradeInfo) gradeInfo.textContent = ''; return; }
+        const g = grades.find(x => x.id === gid);
+        if (g && gradeInfo) {
+          const tams = (g.tamanhos || []).map(t => `${t.tam}×${t.qtd}`).join(', ');
+          gradeInfo.textContent = `${g.totalPares} pares: ${tams}`;
+        }
+      };
+      atualizarInfoGrade();
+      selGrade.onchange = atualizarInfoGrade;
+    }
 
     // Renderizar variacoes
     const variacoes = _produtoEditando ? (_produtoEditando.variacoes || {}) : {};
@@ -477,8 +563,9 @@ const Estoque = {
       tipo: f.tipo.value,
       precoVenda: parseFloat(f.precoVenda.value) || 0,
       precoCusto: parseFloat(f.precoCusto.value) || 0,
-      estoqueMinimo: parseInt(f.estoqueMinimo.value) || 5,
+      estoqueMinimo: f.estoqueMinimo.value !== '' ? (parseInt(f.estoqueMinimo.value) || 0) : 3,
       descricao: f.descricao.value.trim(),
+      gradeId: (document.getElementById('selGradeProduto')?.value) || null,
       foto: _fotosGaleria[0] || null,
       fotos: [..._fotosGaleria],
       fotosVariacoes: Estoque.coletarFotosVariacoes(),
@@ -488,6 +575,25 @@ const Estoque = {
 
     if (!prod.nome) { Utils.toast('Nome é obrigatório', 'error'); return; }
     if (!prod.precoVenda) { Utils.toast('Preço de venda é obrigatório', 'error'); return; }
+
+    // Alerta se estiver aumentando estoque de produto parado
+    if (_produtoEditando) {
+      const parados = DB.Produtos.listarParados(60);
+      const isParado = parados.find(p => p.id === _produtoEditando.id);
+      if (isParado) {
+        const estoqueAntes = DB.Produtos.estoqueTotal(_produtoEditando);
+        const estoqueDepois = Object.values(variacoes).reduce((s, q) => s + (parseInt(q) || 0), 0);
+        if (estoqueDepois > estoqueAntes) {
+          const diasMsg = isParado.diasSemVenda >= 999
+            ? 'nunca foi vendido'
+            : `está parado há ${isParado.diasSemVenda} dias sem vender`;
+          const ok = Utils.confirmar(
+            `⚠ ATENÇÃO: Este produto ${diasMsg}!\n\nVocê está adicionando +${estoqueDepois - estoqueAntes} peça(s) de algo que não está girando. Isso vai prender mais capital.\n\nDeseja continuar mesmo assim?`
+          );
+          if (!ok) return;
+        }
+      }
+    }
 
     DB.Produtos.salvar(prod);
     Utils.fecharModal('modalProduto');

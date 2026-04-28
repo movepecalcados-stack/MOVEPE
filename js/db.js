@@ -26,7 +26,7 @@ const DB = (() => {
   let _collectionsLoaded = {};
   let _unsubscribers = []; // guarda funções de cancelamento dos listeners do Firestore
 
-  const COLS = ['produtos', 'clientes', 'vendas', 'crediario', 'caixa', 'fluxo', 'despesas'];
+  const COLS = ['produtos', 'clientes', 'vendas', 'crediario', 'caixa', 'fluxo', 'despesas', 'retiradas', 'grades', 'trafego'];
 
   const Sync = {
 
@@ -419,8 +419,13 @@ const DB = (() => {
     },
 
     excluir: (id) => {
+      const temCredAberto = _get('crediario').some(c =>
+        c.clienteId === id && c.parcelas && c.parcelas.some(p => p.status !== 'pago')
+      );
+      if (temCredAberto) return false;
       _set('clientes', _get('clientes').filter(c => c.id !== id));
       Sync.delete('clientes', id);
+      return true;
     },
 
     totalGasto: (clienteId) => {
@@ -514,6 +519,7 @@ const DB = (() => {
       const clientes = _get('clientes');
       const result = [];
       _get('crediario').forEach(cred => {
+        if (!cred.parcelas) return;
         cred.parcelas.forEach((p, idx) => {
           if (p.status !== 'pago' && p.vencimento < hoje) {
             const cli = clientes.find(c => c.id === cred.clienteId);
@@ -533,6 +539,7 @@ const DB = (() => {
     totalPendente: () => {
       let total = 0;
       _get('crediario').forEach(cred => {
+        if (!cred.parcelas) return;
         cred.parcelas.forEach(p => {
           if (p.status !== 'pago') total += parseFloat(p.valor) || 0;
         });
@@ -693,11 +700,14 @@ const DB = (() => {
         lista.push(grade);
       }
       _set('grades', lista);
-      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      const salvo = idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      Sync.save('grades', salvo);
+      return salvo;
     },
 
     excluir: (id) => {
       _set('grades', _get('grades').filter(g => g.id !== id));
+      Sync.delete('grades', id);
     }
   };
 
@@ -722,11 +732,14 @@ const DB = (() => {
         lista.push(ret);
       }
       _set('retiradas', lista);
-      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      const salvo = idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      Sync.save('retiradas', salvo);
+      return salvo;
     },
 
     excluir: (id) => {
       _set('retiradas', _get('retiradas').filter(r => r.id !== id));
+      Sync.delete('retiradas', id);
     }
   };
 
@@ -752,17 +765,49 @@ const DB = (() => {
         lista.push(item);
       }
       _set('trafego', lista);
-      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      const salvo = idx >= 0 ? lista[idx] : lista[lista.length - 1];
+      Sync.save('trafego', salvo);
+      return salvo;
     },
 
-    excluir: (id) => { _set('trafego', _get('trafego').filter(t => t.id !== id)); }
+    excluir: (id) => {
+      _set('trafego', _get('trafego').filter(t => t.id !== id));
+      Sync.delete('trafego', id);
+    }
+  };
+
+  // ---- RENDA PESSOAL ----
+  const RendaPessoal = {
+    listar: () => {
+      try { return JSON.parse(localStorage.getItem(P + 'renda_pessoal') || '[]'); }
+      catch(e) { return []; }
+    },
+    salvar: (item) => {
+      const lista = RendaPessoal.listar();
+      const idx = lista.findIndex(r => r.id === item.id);
+      if (idx >= 0) {
+        lista[idx] = { ...lista[idx], ...item };
+      } else {
+        item.id = genId();
+        item.criadoEm = new Date().toISOString();
+        lista.push(item);
+      }
+      localStorage.setItem(P + 'renda_pessoal', JSON.stringify(lista));
+      return idx >= 0 ? lista[idx] : lista[lista.length - 1];
+    },
+    excluir: (id) => {
+      localStorage.setItem(P + 'renda_pessoal', JSON.stringify(
+        RendaPessoal.listar().filter(r => r.id !== id)
+      ));
+    },
+    totalMensal: () => RendaPessoal.listar().reduce((s, r) => s + (parseFloat(r.valor)||0), 0)
   };
 
   // ---- BACKUP ----
   const exportar = () => {
     const agora = new Date();
     const dados = {
-      versao: '2.0',
+      versao: '3.0',
       exportadoEm: agora.toISOString(),
       produtos: _get('produtos'),
       clientes: _get('clientes'),
@@ -770,6 +815,11 @@ const DB = (() => {
       crediario: _get('crediario'),
       caixa: _get('caixa'),
       fluxo: _get('fluxo'),
+      despesas: _get('despesas'),
+      retiradas: _get('retiradas'),
+      grades: _get('grades'),
+      trafego: _get('trafego'),
+      renda_pessoal: RendaPessoal.listar(),
       config: JSON.parse(localStorage.getItem(P + 'config') || '{}')
     };
     const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
@@ -809,6 +859,11 @@ const DB = (() => {
           if (dados.crediario) _set('crediario', dados.crediario);
           if (dados.caixa) _set('caixa', dados.caixa);
           if (dados.fluxo) _set('fluxo', dados.fluxo);
+          if (dados.despesas) _set('despesas', dados.despesas);
+          if (dados.retiradas) _set('retiradas', dados.retiradas);
+          if (dados.grades) _set('grades', dados.grades);
+          if (dados.trafego) _set('trafego', dados.trafego);
+          if (dados.renda_pessoal) localStorage.setItem(P + 'renda_pessoal', JSON.stringify(dados.renda_pessoal));
           if (dados.config) localStorage.setItem(P + 'config', JSON.stringify(dados.config));
           Sync.syncAll();
           resolve(dados);
@@ -826,5 +881,5 @@ const DB = (() => {
   // Inicializa Firebase ao carregar a página
   document.addEventListener('DOMContentLoaded', Sync.init);
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, RendaPessoal, Config, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
 })();

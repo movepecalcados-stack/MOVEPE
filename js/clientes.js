@@ -422,6 +422,8 @@ const ClientesModule = {
     set('inputNascimento', c ? c.dataNascimento : '');
     set('inputProfissao', c ? c.profissao : '');
     set('inputLimiteCredito', c ? c.limiteCredito : '');
+    const origemEl = document.getElementById('inputOrigem');
+    if (origemEl) origemEl.value = c ? (c.origem || '') : '';
 
     const end = c && c.endereco ? c.endereco : {};
     set('inputCep', end.cep || '');
@@ -458,6 +460,7 @@ const ClientesModule = {
       dataNascimento: get('inputNascimento'),
       profissao: get('inputProfissao'),
       limiteCredito: parseFloat(get('inputLimiteCredito')) || 0,
+      origem: document.getElementById('inputOrigem')?.value || '',
       endereco: {
         cep: get('inputCep'),
         rua: get('inputRua'),
@@ -653,7 +656,11 @@ const ClientesModule = {
   excluir: (id, e) => {
     if (e) e.stopPropagation();
     if (!Utils.confirmar('Excluir este cliente?')) return;
-    DB.Clientes.excluir(id);
+    const ok = DB.Clientes.excluir(id);
+    if (ok === false) {
+      Utils.toast('Este cliente tem parcelas em aberto no crediário e não pode ser excluído.', 'error');
+      return;
+    }
     ClientesModule.renderLista();
     Utils.toast('Cliente excluído');
   }

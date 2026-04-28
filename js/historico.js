@@ -54,7 +54,8 @@ const Historico = {
         const idMatch = (v.id || '').toLowerCase().includes(t);
         const clienteMatch = (v.clienteNome || '').toLowerCase().includes(t);
         const itemMatch = (v.itens || []).some(i => (i.nome || '').toLowerCase().includes(t));
-        return idMatch || clienteMatch || itemMatch;
+        const obsMatch = (v.observacao || '').toLowerCase().includes(t);
+        return idMatch || clienteMatch || itemMatch || obsMatch;
       });
     }
 
@@ -105,6 +106,7 @@ const Historico = {
             <div class="historico-total">${Utils.moeda(v.total)}</div>
           </div>
           <div class="historico-itens">${itensDesc || 'Sem itens'}</div>
+          ${v.observacao ? `<div style="font-size:12px;color:var(--text-muted);padding:4px 0 2px;border-top:1px dashed var(--border);margin-top:4px">📝 ${v.observacao}</div>` : ''}
           <div class="historico-footer">
             <span>${Utils.dataHora(v.criadoEm)}</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">

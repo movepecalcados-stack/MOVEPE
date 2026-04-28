@@ -8,6 +8,7 @@ let _mensalExpandido = false;
 let _pagamentoAtual = null; // { credId, parcelaIdx, valorOriginal, jurosCalc }
 let _pagarTudoAtual = null; // { credId, parcelas: [{idx, numero, vencimento, valor, juros, status}], totalSemJuros, totalJuros }
 let _renegociacaoAtual = null; // { credId }
+let _selecionarParcAtual = null; // { clienteNome, entries, selectedKeys, formaPagamento }
 
 const calcularJuros = (vencimento, valor) => {
   if (!vencimento) return { diasAtraso: 0, diasComJuros: 0, juros: 0 };
@@ -56,6 +57,7 @@ const CrediarioModule = {
     const hoje = new Date();
 
     credList.forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         if (!p.vencimento || p.status === 'pago') return;
         const [ano, mes] = p.vencimento.split('-');
@@ -115,13 +117,20 @@ const CrediarioModule = {
   renderStats: () => {
     const credList = DB.Crediario.listar();
     const hoje = Utils.hoje();
-    let totalPendente = 0, totalAtrasado = 0, qtdInadimplentes = 0, totalPago = 0;
+    const agora = new Date(); agora.setHours(0,0,0,0);
+    let totalPendente = 0, totalAtrasado = 0, totalPago = 0;
+    const clientesSPC = new Set();
 
     credList.forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         const s = Utils.statusParcela(p.vencimento, p.status);
         if (s === 'pendente' || s === 'atrasado') totalPendente += parseFloat(p.valor) || 0;
-        if (s === 'atrasado') { totalAtrasado += parseFloat(p.valor) || 0; }
+        if (s === 'atrasado') {
+          totalAtrasado += parseFloat(p.valor) || 0;
+          const diasAtraso = Math.floor((agora - new Date(p.vencimento + 'T00:00:00')) / 86400000);
+          if (diasAtraso >= 60) clientesSPC.add(cred.clienteId || cred.clienteNome);
+        }
         if (s === 'pago') totalPago += parseFloat(p.valor) || 0;
       });
     });
@@ -133,6 +142,18 @@ const CrediarioModule = {
     document.getElementById('statAtrasado').textContent = Utils.moeda(totalAtrasado);
     document.getElementById('statInadimplentes').textContent = clientesUnicos.length;
     document.getElementById('statPago').textContent = Utils.moeda(totalPago);
+
+    const spcBanner = document.getElementById('spcBanner');
+    if (spcBanner) {
+      if (clientesSPC.size > 0) {
+        spcBanner.style.display = '';
+        document.getElementById('spcBannerCount').textContent = clientesSPC.size;
+        document.getElementById('spcBannerInfo').textContent =
+          `${clientesSPC.size} cliente(s) com 60+ dias de atraso — candidatos ao SPC/Serasa`;
+      } else {
+        spcBanner.style.display = 'none';
+      }
+    }
   },
 
   renderLista: () => {
@@ -178,6 +199,14 @@ const CrediarioModule = {
       return new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0);
     });
 
+    // Saldo total em aberto por cliente (para barra de crédito)
+    const _saldoPorCliente = {};
+    DB.Crediario.listar().forEach(c => {
+      if (!c.clienteId) return;
+      const ab = (c.parcelas || []).filter(p => p.status !== 'pago').reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      _saldoPorCliente[c.clienteId] = (_saldoPorCliente[c.clienteId] || 0) + ab;
+    });
+
     cont.innerHTML = lista.map(cred => {
       const pendentes = cred.parcelas.filter(p => p.status !== 'pago');
       const quitado = pendentes.length === 0;
@@ -196,6 +225,21 @@ const CrediarioModule = {
         } else {
           totalEmAberto += valor;
         }
+      });
+
+      // Score de pontualidade do cliente
+      const clienteObj = cred.clienteId ? DB.Clientes.buscar(cred.clienteId) : null;
+      const scorePont = clienteObj ? (parseInt(clienteObj.pontuacaoPagamento) || 0) : 0;
+      const limiteAtual = clienteObj ? (parseFloat(clienteObj.limiteCredito) || 0) : 0;
+      const saldoClienteTotal = (limiteAtual > 0 && cred.clienteId) ? (_saldoPorCliente[cred.clienteId] || 0) : 0;
+      const pctCreditoUsado = limiteAtual > 0 ? Math.min(100, (saldoClienteTotal / limiteAtual) * 100) : 0;
+      const corCredito = pctCreditoUsado >= 100 ? 'var(--danger)' : pctCreditoUsado >= 75 ? 'var(--warning)' : 'var(--success)';
+
+      // SPC: qualquer parcela com 60+ dias de atraso
+      const agora = new Date(); agora.setHours(0,0,0,0);
+      const temSPC = !quitado && pendentes.some(p => {
+        if (!p.vencimento || p.vencimento >= hoje) return false;
+        return Math.floor((agora - new Date(p.vencimento + 'T00:00:00')) / 86400000) >= 60;
       });
 
       const parcelasHtml = cred.parcelas.map((p, idx) => {
@@ -228,7 +272,18 @@ const CrediarioModule = {
               <div class="crediario-cliente">${cred.clienteNome || 'Cliente'}</div>
               <div class="crediario-info">
                 ${Utils.data(cred.criadoEm)} · ${cred.parcelas.length} parcela(s)
+                ${scorePont > 0 ? `<span title="${scorePont}/3 pagamento(s) em dia — ao atingir 3 o crédito sobe" style="margin-left:6px">` + '⭐'.repeat(Math.min(scorePont, 3)) + `</span>` : ''}
+                ${limiteAtual > 0 ? `<span style="margin-left:6px;font-size:10px;color:var(--text-muted)">Lim: ${Utils.moeda(limiteAtual)}</span>` : ''}
               </div>
+              ${limiteAtual > 0 ? `<div style="margin-top:5px">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:2px">
+                  <span>Usado: ${Utils.moeda(saldoClienteTotal)} / ${Utils.moeda(limiteAtual)}</span>
+                  <span style="color:${corCredito};font-weight:600">Disponível: ${Utils.moeda(Math.max(0, limiteAtual - saldoClienteTotal))}</span>
+                </div>
+                <div style="background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+                  <div style="height:100%;width:${pctCreditoUsado.toFixed(0)}%;background:${corCredito};border-radius:3px"></div>
+                </div>
+              </div>` : ''}
             </div>
             <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
               <div style="font-size:11px;color:var(--text-muted)">Total da compra: ${Utils.moeda(cred.total)}</div>
@@ -238,13 +293,15 @@ const CrediarioModule = {
                 </div>
                 ${totalJuros > 0 ? `<div style="font-size:11px;color:var(--danger)">⚠️ inclui ${Utils.moeda(totalJuros)} de juros</div>` : ''}
               ` : `<div style="font-size:15px;font-weight:700;color:var(--success)">✅ Quitado</div>`}
-              <div style="display:flex;gap:6px;align-items:center">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                 <span class="badge ${quitado ? 'badge-success' : temAtrasado ? 'badge-danger' : 'badge-warning'}">
                   ${quitado ? 'Quitado' : temAtrasado ? 'Com atraso' : pendentes.length + ' pendente(s)'}
                 </span>
+                ${temSPC ? `<span class="badge badge-danger" title="60+ dias de atraso — candidato ao SPC/Serasa">🚨 SPC</span>` : ''}
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.verDetalhes('${cred.id}')">🧾 Detalhes</button>
                 <button class="btn btn-outline btn-sm" onclick="CrediarioModule.imprimirContrato('${cred.id}')" title="Imprimir contrato de crediário">📄 Contrato</button>
                 ${!quitado ? `<button class="btn btn-success btn-sm" onclick="CrediarioModule.pagarTudo('${cred.id}')" title="Pagar toda a dívida de uma vez">💰 Pagar Tudo</button>` : ''}
+                ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.selecionarParcelas('${cred.id}')" title="Selecionar parcelas específicas para pagar">☑️ Selecionar</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.renegociar('${cred.id}')" title="Renegociar dívida">🔄 Reneg.</button>` : ''}
                 ${!quitado ? `<button class="btn btn-outline btn-sm" onclick="CrediarioModule.enviarWhatsApp('${cred.id}')" title="Enviar cobrança por WhatsApp" style="color:#25D366;border-color:#25D366">📱 WhatsApp</button>` : ''}
               </div>
@@ -287,6 +344,7 @@ const CrediarioModule = {
     const totalModal = valorOriginal + juros;
     document.getElementById('pagTotal').textContent = Utils.moeda(totalModal);
     document.getElementById('pagRecebido').value = totalModal.toFixed(2);
+    document.getElementById('pagDesconto').value = '0';
     document.getElementById('pagTrocoBloco').style.display = 'none';
     // Limpa forma de pagamento
     document.querySelectorAll('#pagFormasBtns .forma-btn').forEach(b => b.classList.remove('ativo'));
@@ -297,8 +355,9 @@ const CrediarioModule = {
 
   atualizarTotal: () => {
     if (!_pagamentoAtual) return;
-    const juros = parseFloat(document.getElementById('pagJurosInput').value) || 0;
-    const total = _pagamentoAtual.valorOriginal + juros;
+    const juros = parseFloat(document.getElementById('pagJurosInput')?.value) || 0;
+    const desconto = parseFloat(document.getElementById('pagDesconto').value) || 0;
+    const total = Math.max(0, _pagamentoAtual.valorOriginal + juros - desconto);
     document.getElementById('pagTotal').textContent = Utils.moeda(total);
     document.getElementById('pagRecebido').value = total.toFixed(2);
     CrediarioModule.atualizarRecebido();
@@ -307,7 +366,8 @@ const CrediarioModule = {
   atualizarRecebido: () => {
     if (!_pagamentoAtual) return;
     const juros = parseFloat(document.getElementById('pagJurosInput')?.value) || 0;
-    const total = _pagamentoAtual.valorOriginal + juros;
+    const desconto = parseFloat(document.getElementById('pagDesconto').value) || 0;
+    const total = Math.max(0, _pagamentoAtual.valorOriginal + juros - desconto);
     const recebido = parseFloat(document.getElementById('pagRecebido').value) || 0;
     const bloco = document.getElementById('pagTrocoBloco');
     const label = document.getElementById('pagTrocoLabel');
@@ -342,6 +402,7 @@ const CrediarioModule = {
     // Salva no estado correto
     if (prefixo === 'pag' && _pagamentoAtual) _pagamentoAtual.formaPagamento = forma;
     if (prefixo === 'ptd' && _pagarTudoAtual) _pagarTudoAtual.formaPagamento = forma;
+    if (prefixo === 'selParcl' && _selecionarParcAtual) _selecionarParcAtual.formaPagamento = forma;
   },
 
   confirmarPagamento: () => {
@@ -349,7 +410,8 @@ const CrediarioModule = {
     const { credId, parcelaIdx, valorOriginal } = _pagamentoAtual;
     const forma = _pagamentoAtual.formaPagamento || '';
     const juros = parseFloat(document.getElementById('pagJurosInput')?.value) || 0;
-    const totalDevido = valorOriginal + juros;
+    const desconto = parseFloat(document.getElementById('pagDesconto').value) || 0;
+    const totalDevido = Math.max(0, valorOriginal + juros - desconto);
     const recebido = parseFloat(document.getElementById('pagRecebido').value) || 0;
 
     if (!forma) { Utils.toast('Selecione a forma de pagamento!', 'warning'); return; }
@@ -367,7 +429,7 @@ const CrediarioModule = {
       DB.Crediario.pagarParcela(credId, parcelaIdx);
       DB.FluxoCaixa.salvar({
         tipo: 'entrada',
-        descricao: `Crediário - ${cred.clienteNome} - Parcela ${parcelaNum}/${totalParcelas}${juros > 0 ? ' + juros' : ''} (${formaLabel})`,
+        descricao: `Crediário - ${cred.clienteNome} - Parcela ${parcelaNum}/${totalParcelas}${juros > 0 ? ' + juros' : ''}${desconto > 0 ? ' - desc. ' + Utils.moeda(desconto) : ''} (${formaLabel})`,
         valor: totalDevido,
         categoria: 'crediario',
         formaPagamento: forma
@@ -375,6 +437,7 @@ const CrediarioModule = {
       const troco = recebido - totalDevido;
       Utils.fecharModal('modalPagamento');
       CrediarioModule.imprimirParcela(credId, parcelaIdx, forma);
+      if (cred.clienteId) CrediarioModule._avaliarCredito(cred.clienteId, [parcela.vencimento]);
       CrediarioModule.renderStats();
       CrediarioModule.renderMensal();
       CrediarioModule.renderLista();
@@ -427,6 +490,7 @@ const CrediarioModule = {
     const entries = [];
 
     todasAsCompras.forEach(c => {
+      if (!c.parcelas) return;
       c.parcelas.forEach((p, idx) => {
         if (p.status === 'pago') return;
         const valor = parseFloat(p.valor) || 0;
@@ -440,7 +504,7 @@ const CrediarioModule = {
 
     if (entries.length === 0) { Utils.toast('Nenhuma parcela pendente', 'warning'); return; }
 
-    _pagarTudoAtual = { clienteNome, entries, totalSemJuros, totalJuros };
+    _pagarTudoAtual = { clienteNome, clienteId: credRef.clienteId || null, entries, totalSemJuros, totalJuros };
 
     document.getElementById('ptdCliente').textContent = clienteNome || 'Cliente';
     document.getElementById('ptdQtdParcelas').textContent = `${entries.length} parcela(s) pendente(s) em ${todasAsCompras.filter(c => c.parcelas.some(p => p.status !== 'pago')).length} compra(s)`;
@@ -529,7 +593,7 @@ const CrediarioModule = {
 
   confirmarPagarTudo: () => {
     if (!_pagarTudoAtual) return;
-    const { clienteNome, entries, totalSemJuros } = _pagarTudoAtual;
+    const { clienteNome, clienteId: clienteIdPTD, entries, totalSemJuros } = _pagarTudoAtual;
     const forma = _pagarTudoAtual.formaPagamento || '';
 
     const incluirJuros = document.getElementById('ptdIncluirJuros').checked;
@@ -574,6 +638,7 @@ const CrediarioModule = {
 
     const troco = recebido - totalDevido;
     Utils.fecharModal('modalPagarTudo');
+    if (clienteIdPTD) CrediarioModule._avaliarCredito(clienteIdPTD, entries.map(e => e.vencimento));
     CrediarioModule.renderStats();
     CrediarioModule.renderMensal();
     CrediarioModule.renderLista();
@@ -901,6 +966,7 @@ const CrediarioModule = {
     const map = {};
 
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         if (p.status === 'pago' || !p.vencimento || p.vencimento >= hoje) return;
         const diasAtraso = Math.floor((agora - new Date(p.vencimento + 'T00:00:00')) / 86400000);
@@ -1337,6 +1403,283 @@ Queremos muito evitar isso e resolver de forma tranquila! Entre em contato *hoje
     const numero = foneNumeros.length === 11 ? `55${foneNumeros}` : foneNumeros.startsWith('55') ? foneNumeros : `55${foneNumeros}`;
     const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
     window.open(url, '_blank');
+  },
+
+  selecionarParcelas: (credId) => {
+    const credRef = DB.Crediario.buscar(credId);
+    if (!credRef) return;
+
+    const clienteNome = credRef.clienteNome || '';
+    const clienteId   = credRef.clienteId || null;
+
+    const todasAsCompras = DB.Crediario.listar().filter(c => {
+      if (clienteId) return c.clienteId === clienteId;
+      return (c.clienteNome || '') === clienteNome;
+    });
+
+    const entries = [];
+    todasAsCompras.forEach(c => {
+      if (!c.parcelas) return;
+      c.parcelas.forEach((p, idx) => {
+        if (p.status === 'pago') return;
+        const valor = parseFloat(p.valor) || 0;
+        const st = Utils.statusParcela(p.vencimento, p.status);
+        const { juros, diasAtraso } = st === 'atrasado' ? calcularJuros(p.vencimento, valor) : { juros: 0, diasAtraso: 0 };
+        entries.push({
+          credId: c.id, credData: c.criadoEm, credTotal: c.total,
+          idx, numero: p.numero || (idx + 1), totalParcelas: c.parcelas.length,
+          vencimento: p.vencimento, valor, juros, diasAtraso, status: st,
+          key: `${c.id}_${idx}`
+        });
+      });
+    });
+
+    if (entries.length === 0) { Utils.toast('Nenhuma parcela pendente', 'warning'); return; }
+
+    _selecionarParcAtual = { clienteNome, clienteId: credRef.clienteId || null, entries, selectedKeys: new Set(), formaPagamento: '' };
+
+    document.getElementById('selParclCliente').textContent = clienteNome;
+    document.getElementById('selParclDesconto').value = '0';
+    document.getElementById('selParclRecebido').value = '';
+    document.getElementById('selParclTrocoBloco').style.display = 'none';
+    document.querySelectorAll('#selParclFormasBtns .forma-btn').forEach(b => b.classList.remove('ativo'));
+
+    const comprasComPendentes = todasAsCompras.filter(c => c.parcelas.some(p => p.status !== 'pago'));
+    document.getElementById('selParclLista').innerHTML = comprasComPendentes.map(c => {
+      const pendDessaCompra = entries.filter(e => e.credId === c.id);
+      return `
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:4px 0;border-bottom:2px solid var(--border);margin-bottom:4px">
+            Compra de ${Utils.data(c.criadoEm)} · ${Utils.moeda(c.total)}
+          </div>
+          ${pendDessaCompra.map(p => `
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px">
+              <input type="checkbox" data-key="${p.key}" onchange="CrediarioModule.toggleParcelaSelecionada('${p.key}')" style="width:18px;height:18px;flex-shrink:0;cursor:pointer">
+              <span style="flex:1">
+                ${p.numero}/${p.totalParcelas} · ${Utils.data(p.vencimento)}
+                <span class="badge ${p.status === 'atrasado' ? 'badge-danger' : 'badge-warning'}" style="font-size:10px;margin-left:4px">${p.status === 'atrasado' ? 'Atrasada' : 'Pendente'}</span>
+              </span>
+              <span style="font-weight:600;white-space:nowrap">
+                ${Utils.moeda(p.valor)}${p.juros > 0 ? `<span style="color:var(--danger);font-size:11px"> +${Utils.moeda(p.juros)} j</span>` : ''}
+              </span>
+            </label>`).join('')}
+        </div>`;
+    }).join('');
+
+    CrediarioModule.atualizarTotalSelecionadas();
+    Utils.abrirModal('modalSelecionarParcelas');
+  },
+
+  toggleParcelaSelecionada: (key) => {
+    if (!_selecionarParcAtual) return;
+    if (_selecionarParcAtual.selectedKeys.has(key)) {
+      _selecionarParcAtual.selectedKeys.delete(key);
+    } else {
+      _selecionarParcAtual.selectedKeys.add(key);
+    }
+    CrediarioModule.atualizarTotalSelecionadas();
+  },
+
+  atualizarTotalSelecionadas: () => {
+    if (!_selecionarParcAtual) return;
+    const { entries, selectedKeys } = _selecionarParcAtual;
+    const selecionadas = entries.filter(e => selectedKeys.has(e.key));
+    const subtotal = selecionadas.reduce((s, e) => s + e.valor + e.juros, 0);
+    const desconto = parseFloat(document.getElementById('selParclDesconto').value) || 0;
+    const total = Math.max(0, subtotal - desconto);
+    document.getElementById('selParclSubtotal').textContent = Utils.moeda(subtotal);
+    document.getElementById('selParclTotal').textContent = Utils.moeda(total);
+    document.getElementById('selParclRecebido').value = total > 0 ? total.toFixed(2) : '';
+    document.getElementById('selParclTrocoBloco').style.display = 'none';
+  },
+
+  atualizarTrocoSelecionadas: () => {
+    if (!_selecionarParcAtual) return;
+    const { entries, selectedKeys } = _selecionarParcAtual;
+    const selecionadas = entries.filter(e => selectedKeys.has(e.key));
+    const subtotal = selecionadas.reduce((s, e) => s + e.valor + e.juros, 0);
+    const desconto = parseFloat(document.getElementById('selParclDesconto').value) || 0;
+    const total = Math.max(0, subtotal - desconto);
+    const recebido = parseFloat(document.getElementById('selParclRecebido').value) || 0;
+    const bloco = document.getElementById('selParclTrocoBloco');
+    const label = document.getElementById('selParclTrocoLabel');
+    const diff = recebido - total;
+
+    if (recebido <= 0 || total <= 0) { bloco.style.display = 'none'; return; }
+    bloco.style.display = '';
+
+    if (diff > 0.009) {
+      bloco.style.background = 'rgba(59,130,246,0.1)';
+      bloco.style.border = '1px solid var(--primary)';
+      label.style.color = 'var(--primary)';
+      label.textContent = `Troco: ${Utils.moeda(diff)}`;
+    } else if (diff < -0.009) {
+      bloco.style.background = 'rgba(239,68,68,0.08)';
+      bloco.style.border = '1px solid var(--danger)';
+      label.style.color = 'var(--danger)';
+      label.textContent = `Valor insuficiente — faltam ${Utils.moeda(Math.abs(diff))}`;
+    } else {
+      bloco.style.background = 'rgba(34,197,94,0.1)';
+      bloco.style.border = '1px solid var(--success)';
+      label.style.color = 'var(--success)';
+      label.textContent = 'Pagamento exato ✓';
+    }
+  },
+
+  confirmarSelecionadas: () => {
+    if (!_selecionarParcAtual) return;
+    const { clienteNome, entries, selectedKeys } = _selecionarParcAtual;
+    const forma = _selecionarParcAtual.formaPagamento || '';
+    const selecionadas = entries.filter(e => selectedKeys.has(e.key));
+
+    if (selecionadas.length === 0) { Utils.toast('Selecione pelo menos uma parcela', 'warning'); return; }
+    if (!forma) { Utils.toast('Selecione a forma de pagamento!', 'warning'); return; }
+
+    const subtotal = selecionadas.reduce((s, e) => s + e.valor + e.juros, 0);
+    const desconto = parseFloat(document.getElementById('selParclDesconto').value) || 0;
+    const totalDevido = Math.max(0, subtotal - desconto);
+    const recebido = parseFloat(document.getElementById('selParclRecebido').value) || 0;
+
+    if (recebido <= 0) { Utils.toast('Informe o valor recebido', 'error'); return; }
+    if (recebido < totalDevido - 0.009) { Utils.toast('Valor insuficiente para as parcelas selecionadas', 'error'); return; }
+
+    const formaLabel = Utils.labelFormaPagamento(forma);
+    const lista = DB.Crediario.listar();
+    const hoje = Utils.hoje();
+
+    const porCred = {};
+    selecionadas.forEach(e => {
+      if (!porCred[e.credId]) porCred[e.credId] = [];
+      porCred[e.credId].push(e.idx);
+    });
+
+    Object.entries(porCred).forEach(([cId, idxs]) => {
+      const credObj = lista.find(c => c.id === cId);
+      if (!credObj) return;
+      idxs.forEach(idx => {
+        credObj.parcelas[idx].status = 'pago';
+        credObj.parcelas[idx].dataPagamento = hoje;
+      });
+      DB.Crediario.salvar(credObj);
+    });
+
+    const temJuros = selecionadas.some(e => e.juros > 0);
+    DB.FluxoCaixa.salvar({
+      tipo: 'entrada',
+      descricao: `Crediário - ${clienteNome} - ${selecionadas.length} parcela(s) selecionada(s)${temJuros ? ' + juros' : ''}${desconto > 0 ? ' - desc. ' + Utils.moeda(desconto) : ''} (${formaLabel})`,
+      valor: totalDevido,
+      categoria: 'crediario',
+      formaPagamento: forma
+    });
+
+    const troco = recebido - totalDevido;
+    Utils.fecharModal('modalSelecionarParcelas');
+    if (_selecionarParcAtual?.clienteId) CrediarioModule._avaliarCredito(_selecionarParcAtual.clienteId, selecionadas.map(e => e.vencimento));
+    CrediarioModule.renderStats();
+    CrediarioModule.renderMensal();
+    CrediarioModule.renderLista();
+    Utils.toast(troco > 0.01
+      ? `${selecionadas.length} parcela(s) paga(s)! Troco: ${Utils.moeda(troco)}`
+      : `${selecionadas.length} parcela(s) paga(s)!`, 'success');
+    _selecionarParcAtual = null;
+  },
+
+  _avaliarCredito: (clienteId, vencimentos) => {
+    if (!clienteId || !vencimentos?.length) return;
+    const cliente = DB.Clientes.buscar(clienteId);
+    if (!cliente || !(parseFloat(cliente.limiteCredito) > 0)) return;
+
+    const carencia = DB.Config.get('carenciaDias', 5);
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+    // Verifica se todos os vencimentos passados foram pagos dentro da carência
+    const todasEmDia = vencimentos.every(v => {
+      if (!v) return true;
+      const vencDate = new Date(v + 'T00:00:00');
+      const limiteEmDia = new Date(vencDate);
+      limiteEmDia.setDate(limiteEmDia.getDate() + carencia);
+      return hoje <= limiteEmDia;
+    });
+
+    const scorePrev = parseInt(cliente.pontuacaoPagamento) || 0;
+    let novoScore = todasEmDia ? scorePrev + 1 : Math.max(0, scorePrev - 1);
+    let novoLimite = parseFloat(cliente.limiteCredito);
+    let aumentou = false;
+
+    if (novoScore >= 3) {
+      const aumento = Math.max(50, Math.round(novoLimite * 0.10));
+      novoLimite = Math.round((novoLimite + aumento) * 100) / 100;
+      novoScore = 0;
+      aumentou = true;
+    }
+
+    DB.Clientes.salvar({ ...cliente, limiteCredito: novoLimite, pontuacaoPagamento: novoScore });
+
+    if (aumentou) {
+      const primeiroNome = (cliente.nome || '').split(' ')[0];
+      Utils.toast(`⭐ Crédito de ${primeiroNome} aumentou para ${Utils.moeda(novoLimite)}!`, 'success');
+    }
+  },
+
+  abrirSPCAlert: () => {
+    const agora = new Date(); agora.setHours(0,0,0,0);
+    const clientesSPC = new Map();
+
+    DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
+      cred.parcelas.forEach(p => {
+        if (p.status === 'pago' || !p.vencimento) return;
+        const vencDate = new Date(p.vencimento + 'T00:00:00');
+        if (vencDate >= agora) return;
+        const diasAtraso = Math.floor((agora - vencDate) / 86400000);
+        if (diasAtraso < 60) return;
+        const key = cred.clienteId || cred.clienteNome;
+        if (!clientesSPC.has(key)) {
+          clientesSPC.set(key, { nome: cred.clienteNome, maiorAtraso: 0, total: 0, parcelas: 0 });
+        }
+        const r = clientesSPC.get(key);
+        if (diasAtraso > r.maiorAtraso) r.maiorAtraso = diasAtraso;
+        r.total += parseFloat(p.valor) || 0;
+        r.parcelas++;
+      });
+    });
+
+    if (clientesSPC.size === 0) {
+      Utils.toast('Nenhum cliente com 60+ dias de atraso', 'success');
+      return;
+    }
+
+    const dados = [...clientesSPC.values()].sort((a, b) => b.maiorAtraso - a.maiorAtraso);
+    const cont = document.getElementById('inadimplenciaConteudo');
+
+    const linhas = dados.map(r => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 0"><div style="font-weight:600">${r.nome}</div></td>
+        <td style="padding:8px;text-align:center">${r.parcelas}</td>
+        <td style="padding:8px;text-align:center;color:var(--danger);font-weight:700">${r.maiorAtraso}d</td>
+        <td style="padding:8px 0;text-align:right;font-weight:700;color:var(--danger)">${Utils.moeda(r.total)}</td>
+      </tr>`).join('');
+
+    cont.innerHTML = `
+      <div style="background:rgba(239,68,68,0.1);border:1px solid var(--danger);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-weight:700;color:var(--danger);font-size:15px;margin-bottom:4px">🚨 ${dados.length} cliente(s) para SPC/Serasa</div>
+        <div class="text-muted fs-sm">Com 60+ dias de atraso (2+ meses) — confirme o contato antes de incluir no SPC/Serasa</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);color:var(--text-muted)">
+              <th style="text-align:left;padding:8px 0">Cliente</th>
+              <th style="text-align:center;padding:8px">Parcelas</th>
+              <th style="text-align:center;padding:8px">Maior Atraso</th>
+              <th style="text-align:right;padding:8px 0">Valor em Aberto</th>
+            </tr>
+          </thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>`;
+
+    Utils.abrirModal('modalInadimplencia');
   }
 };
 

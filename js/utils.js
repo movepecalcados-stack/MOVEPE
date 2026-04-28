@@ -169,6 +169,7 @@ const Utils = {
       ['estoque.html', '📦', 'Estoque'],
       ['financeiro.html', '💵', 'Financeiro'],
       ['relatorios.html', '📊', 'Relatórios'],
+      ['trafego.html', '📈', 'Tráfego'],
       ['whatsapp.html', '💬', 'WhatsApp Auto'],
       ['etiquetas.html', '🏷️', 'Etiquetas'],
       ['frete.html', '🚚', 'Frete & Envio'],
@@ -240,6 +241,7 @@ const Utils = {
 
     let count = 0;
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         if (p.status !== 'pago' && p.vencimento >= hoje && p.vencimento <= ate3dias) count++;
       });
@@ -281,6 +283,7 @@ const Utils = {
     const atrasadas = [], hoje_ = [], proximas = [];
 
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach((p, idx) => {
         if (p.status === 'pago') return;
         const item = {
@@ -346,7 +349,7 @@ const Utils = {
 
   atualizarBadgeEstoque: () => {
     const prods = DB.Produtos.listarAtivos();
-    const count = prods.filter(p => DB.Produtos.estoqueTotal(p) <= (p.estoqueMinimo || 5)).length;
+    const count = prods.filter(p => { const mn = p.estoqueMinimo != null ? p.estoqueMinimo : 3; return mn > 0 && DB.Produtos.estoqueTotal(p) <= mn; }).length;
     const link = document.querySelector('a[href="estoque.html"]');
     if (!link) return;
     const badge = link.querySelector('.nav-badge-estoque');
@@ -449,14 +452,27 @@ const Utils = {
     const linhaL = '-'.repeat(40);
     const now = new Date(venda.criadoEm || new Date());
     const dataStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS').toUpperCase();
+
+    const ehCrediario = venda.formaPagamento === 'crediario' ||
+      (venda.formasPagamento || []).some(f => f.forma === 'crediario');
+
+    // Fator de acréscimo para ajustar preços dos itens no crediário
+    const fatorCrediario = venda.acrescimoCrediario
+      ? (1 + (venda.acrescimoCrediario.pct || 0) / 100)
+      : 1;
 
     let itens = '';
     (venda.itens || []).forEach(item => {
       const nome = (item.nome || '').substring(0, 22).padEnd(22);
-      const tamParts = item.tamanhoLabel ? [item.tamanhoLabel, item.cor].filter(Boolean) : (item.tamanho ? [item.tamanho.split('||')[0], item.tamanho.split('||')[1]].filter(Boolean) : []);
+      const tamParts = item.tamanhoLabel
+        ? [item.tamanhoLabel, item.cor].filter(Boolean)
+        : (item.tamanho ? [item.tamanho.split('||')[0], item.tamanho.split('||')[1]].filter(Boolean) : []);
       const tam = tamParts.length ? `Tam ${tamParts.join(' ')}` : '';
       const qty = `${item.quantidade || 1}x`;
-      const val = Utils.moeda(item.total || item.precoVenda * item.quantidade);
+      // No crediário: exibe apenas o preço crediário (à vista × fator)
+      const totalItem = (item.total != null ? item.total : (item.precoUnitario || item.precoVenda || 0) * (item.quantidade || 1));
+      const val = Utils.moeda(ehCrediario ? Math.round(totalItem * fatorCrediario * 100) / 100 : totalItem);
       itens += `${nome} ${tam}\n`;
       itens += `  ${qty.padEnd(10)} ${val.padStart(14)}\n`;
     });
@@ -468,31 +484,81 @@ const Utils = {
       ? `Desconto: ${venda.desconto.tipo === 'pct' ? venda.desconto.valor + '%' : ''} - ${Utils.moeda(venda.desconto.calculado).padStart(16)}\n`
       : '';
 
-    return `
-${linhaH}
-          MOVE PÉ CALÇADOS
-${linhaH}
-Data: ${dataStr}
-ID: ${(venda.id || '').toUpperCase().substring(0, 8)}
-${operador ? `Operador: ${operador}` : ''}
-${linhaL}
-ITEM                       QTD        VALOR
-${linhaL}
-${itens}${linhaL}
-${descontoLinha}                   TOTAL: ${Utils.moeda(venda.total).padStart(12)}
-${linhaL}
-${venda.formasPagamento && venda.formasPagamento.length > 0
-  ? venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma, f.parcelas).padEnd(20)} ${Utils.moeda(f.valor).padStart(12)}`).join('\n')
-  : `Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento, venda.parcelasCartao)}`}
-${venda.valorPago && venda.formaPagamento === 'dinheiro' ? `Pago:  ${Utils.moeda(venda.valorPago).padStart(21)}` : ''}
-${venda.troco > 0 ? `Troco: ${Utils.moeda(venda.troco).padStart(21)}` : ''}
-${linhaL}
-${cliente ? `Cliente: ${cliente.nome}` : ''}
-${linhaH}
-    Obrigado pela preferência!
-       Volte sempre! MOVE PÉ
-${linhaH}
-`.trim();
+    // Parcelas do crediário (buscar do registro de crediário)
+    let parcelasLinha = '';
+    if (ehCrediario) {
+      const cred = venda.id
+        ? DB.Crediario.listar().find(c => c.vendaId === venda.id)
+        : null;
+      if (cred && cred.parcelas && cred.parcelas.length > 0) {
+        const numParcelas = cred.parcelas.length;
+        const pagas       = cred.parcelas.filter(p => p.status === 'pago').length;
+        const saldo       = cred.parcelas.filter(p => p.status !== 'pago').reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+        parcelasLinha = `${linhaL}\n`;
+        parcelasLinha += `CREDIÁRIO: ${numParcelas}x de ${Utils.moeda(cred.parcelas[0].valor)}\n`;
+        parcelasLinha += `Pagas: ${pagas} de ${numParcelas}`;
+        if (saldo > 0) parcelasLinha += `  |  Saldo: ${Utils.moeda(saldo)}`;
+        parcelasLinha += `\n${linhaL}\n`;
+        cred.parcelas.forEach(p => {
+          const stMap = { pago: 'PAGO', atrasado: 'ATRASADO', pendente: 'PENDENTE' };
+          const st  = stMap[Utils.statusParcela(p.vencimento, p.status)] || '';
+          const num = String(p.numero || '').padStart(2);
+          const dataPag = p.dataPagamento
+            ? `  pg:${new Date(p.dataPagamento).toLocaleDateString('pt-BR')}`
+            : '';
+          parcelasLinha += `  ${num}ª  ${Utils.data(p.vencimento)}  ${Utils.moeda(p.valor)}  [${st}]${dataPag}\n`;
+        });
+      } else {
+        parcelasLinha = `${linhaL}\nCREDIÁRIO\n`;
+      }
+    }
+
+    // Montar linhas de pagamento (excluindo crediário que já está em parcelasLinha)
+    const pagamentoLinhas = [];
+    if (!ehCrediario) {
+      if (venda.formasPagamento && venda.formasPagamento.length > 0) {
+        venda.formasPagamento.forEach(f =>
+          pagamentoLinhas.push(`${Utils.labelFormaPagamento(f.forma, f.parcelas).padEnd(20)} ${Utils.moeda(f.valor).padStart(12)}`)
+        );
+      } else {
+        pagamentoLinhas.push(`Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento, venda.parcelasCartao)}`);
+      }
+      if (venda.valorPago && venda.formaPagamento === 'dinheiro')
+        pagamentoLinhas.push(`Pago:  ${Utils.moeda(venda.valorPago).padStart(21)}`);
+      if (venda.troco > 0)
+        pagamentoLinhas.push(`Troco: ${Utils.moeda(venda.troco).padStart(21)}`);
+    } else if (venda.formasPagamento && venda.formasPagamento.some(f => f.forma !== 'crediario')) {
+      // Pagamento misto: mostrar as partes não-crediário
+      venda.formasPagamento.filter(f => f.forma !== 'crediario').forEach(f =>
+        pagamentoLinhas.push(`${Utils.labelFormaPagamento(f.forma, f.parcelas).padEnd(20)} ${Utils.moeda(f.valor).padStart(12)}`)
+      );
+    }
+
+    const blocoCliente = cliente ? `Cliente: ${cliente.nome}\n` : '';
+
+    return [
+      linhaH,
+      `     ${nomeLoja}`,
+      linhaH,
+      `Data: ${dataStr}`,
+      `ID: ${(venda.id || '').toUpperCase().substring(0, 8)}`,
+      ...(operador ? [`Operador: ${operador}`] : []),
+      linhaL,
+      'ITEM                       QTD        VALOR',
+      linhaL,
+      itens.trimEnd(),
+      linhaL,
+      ...(descontoLinha ? [descontoLinha.trimEnd()] : []),
+      `                   TOTAL: ${Utils.moeda(venda.total).padStart(12)}`,
+      ...(parcelasLinha ? [parcelasLinha.trimEnd()] : [linhaL]),
+      ...(pagamentoLinhas.length ? pagamentoLinhas : []),
+      linhaL,
+      ...(blocoCliente ? [blocoCliente.trimEnd()] : []),
+      linhaH,
+      '    Obrigado pela preferência!',
+      '       Volte sempre! MOVE PÉ',
+      linhaH,
+    ].join('\n');
   },
 
   gerarTextoWhatsApp: (venda) => {
@@ -500,8 +566,15 @@ ${linhaH}
     const now = new Date(venda.criadoEm || new Date());
     const dataStr = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const id = (venda.id || '').toUpperCase().substring(0, 8);
+    const nomeLoja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS');
 
-    let msg = `✅ *MOVE PÉ CALÇADOS*\n`;
+    const ehCrediario = venda.formaPagamento === 'crediario' ||
+      (venda.formasPagamento || []).some(f => f.forma === 'crediario');
+    const fatorCrediario = venda.acrescimoCrediario
+      ? (1 + (venda.acrescimoCrediario.pct || 0) / 100)
+      : 1;
+
+    let msg = `✅ *${nomeLoja}*\n`;
     if (cliente) msg += `Olá, *${cliente.nome.split(' ')[0]}*! Obrigado pela compra! 😊\n`;
     else msg += `Obrigado pela sua compra! 😊\n`;
     msg += `\n📋 *Comprovante #${id}*\n`;
@@ -512,14 +585,25 @@ ${linhaH}
       const tamParts2 = item.tamanhoLabel ? [item.tamanhoLabel, item.cor].filter(Boolean) : (item.tamanho ? [item.tamanho.split('||')[0], item.tamanho.split('||')[1]].filter(Boolean) : []);
       const tam = tamParts2.length ? ` · Tam ${tamParts2.join(' ')}` : '';
       const qtd = item.quantidade || 1;
-      const val = Utils.moeda((item.precoUnitario || item.preco || 0) * qtd);
+      const totalItem = (item.total != null ? item.total : (item.precoUnitario || item.preco || 0) * qtd);
+      const val = Utils.moeda(ehCrediario ? Math.round(totalItem * fatorCrediario * 100) / 100 : totalItem);
       msg += `• ${nome}${tam} (${qtd}x) — ${val}\n`;
     });
     if (venda.desconto && venda.desconto.calculado > 0) {
       msg += `\n🏷️ Desconto: -${Utils.moeda(venda.desconto.calculado)}\n`;
     }
     msg += `\n💰 *Total: ${Utils.moeda(venda.total)}*\n`;
-    if (venda.formasPagamento && venda.formasPagamento.length > 0) {
+    if (ehCrediario) {
+      const cred = venda.id
+        ? DB.Crediario.listar().find(c => c.vendaId === venda.id)
+        : null;
+      if (cred && cred.parcelas && cred.parcelas.length > 0) {
+        msg += `📋 Crediário: ${cred.parcelas.length}x de ${Utils.moeda(cred.parcelas[0].valor)}\n`;
+        msg += `1º vencimento: ${Utils.data(cred.parcelas[0].vencimento)}\n`;
+      } else {
+        msg += `Pagamento: Crediário\n`;
+      }
+    } else if (venda.formasPagamento && venda.formasPagamento.length > 0) {
       msg += venda.formasPagamento.map(f => `${Utils.labelFormaPagamento(f.forma, f.parcelas)}: ${Utils.moeda(f.valor)}`).join('\n') + '\n';
     } else {
       msg += `Pagamento: ${Utils.labelFormaPagamento(venda.formaPagamento, venda.parcelasCartao)}\n`;
@@ -529,34 +613,77 @@ ${linhaH}
     return msg;
   },
 
-  gerarComprovanteParcela: (installment) => {
-    const linhaH = '='.repeat(40);
-    const linhaL = '-'.repeat(40);
+  gerarComprovanteParcela: (inst) => {
+    const H = '='.repeat(40);
+    const L = '-'.repeat(40);
     const now = new Date();
-    const dataStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dataEmissao = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    const formaLinha = installment.formaPagamento
-      ? `Pagamento: ${Utils.labelFormaPagamento(installment.formaPagamento)}\n`
+    // Data de pagamento real vs vencimento
+    let dataPagStr = '';
+    if (inst.dataPagamento) {
+      const dp = new Date(inst.dataPagamento);
+      dataPagStr = dp.toLocaleDateString('pt-BR');
+    } else {
+      dataPagStr = Utils.data(inst.vencimento);
+    }
+
+    // Forma de pagamento
+    const formaStr = inst.formaPagamento
+      ? `Forma:    ${Utils.labelFormaPagamento(inst.formaPagamento)}\n`
       : '';
 
+    // Progresso de parcelas
+    const totalP = inst.totalParcelas || '';
+    const pagas  = inst.parcelasPagas != null ? inst.parcelasPagas : '';
+    const progressoStr = totalP
+      ? `Pagas:    ${pagas} de ${totalP} parcela${totalP !== 1 ? 's' : ''}\n`
+      : '';
+
+    // Saldo restante
+    const saldoStr = inst.saldoRestante != null && inst.saldoRestante > 0
+      ? `Saldo:    ${Utils.moeda(inst.saldoRestante)} restante\n`
+      : inst.saldoRestante === 0
+        ? `Saldo:    QUITADO ✓\n`
+        : '';
+
+    // Produtos
+    let produtosStr = '';
+    if (inst.itens && inst.itens.length > 0) {
+      produtosStr = L + '\nPRODUTOS:\n';
+      inst.itens.forEach(item => {
+        const nome = (item.nomeSnapshot || item.nome || 'Produto').substring(0, 26);
+        const qtd  = item.quantidade || 1;
+        const tamRaw = item.tamanho || '';
+        const tamLabel = item.tamanhoLabel || tamRaw.split('||')[0] || '';
+        const corLabel = item.cor || tamRaw.split('||')[1] || '';
+        const tam = tamLabel ? ` T:${tamLabel}` : '';
+        const cor = corLabel ? ` ${corLabel}` : '';
+        produtosStr += `  ${qtd}x ${nome}${tam}${cor}\n`;
+      });
+    }
+
+    const nomeLoja = (typeof DB !== 'undefined' ? DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS') : 'MOVE PÉ CALÇADOS').toUpperCase();
+
     return `
-${linhaH}
+${H}
      COMPROVANTE DE PAGAMENTO
-          MOVE PÉ CALÇADOS
-${linhaH}
-Data: ${dataStr}
-${linhaL}
-Cliente:  ${installment.clienteNome || ''}
-Parcela:  ${installment.numero || ''}
-Vencto:   ${Utils.data(installment.vencimento)}
-${linhaL}
-VALOR PAGO:    ${Utils.moeda(installment.valor).padStart(18)}
-${formaLinha}${linhaL}
-Crediário ID: ${(installment.credId || '').substring(0, 8).toUpperCase()}
-${linhaH}
-    Obrigado pelo pagamento!
-         MOVE PÉ CALÇADOS
-${linhaH}
+        ${nomeLoja}
+${H}
+Emitido:  ${dataEmissao}
+${L}
+Cliente:  ${inst.clienteNome || ''}
+Parcela:  ${inst.numero}/${totalP || '?'}
+${progressoStr}Vencto:   ${Utils.data(inst.vencimento)}
+Pagto:    ${dataPagStr}
+${formaStr}${L}
+VALOR PAGO:   ${Utils.moeda(inst.valor).padStart(19)}
+${saldoStr}${produtosStr}${L}
+Crediário: ${(inst.credId || '').substring(0, 8).toUpperCase()}
+${H}
+   Obrigado pelo pagamento!
+      ${nomeLoja}
+${H}
 `.trim();
   },
 

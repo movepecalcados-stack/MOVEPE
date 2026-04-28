@@ -83,6 +83,7 @@ const PDV = {
   initScanner: () => {
     let buffer = '';
     let ultimaTecla = 0;
+    let escanerRapido = false; // true se as últimas teclas vieram rápido (scanner)
 
     document.addEventListener('keydown', (e) => {
       // Ignora se estiver digitando em modal aberto ou campo de texto (exceto buscaInput)
@@ -96,28 +97,45 @@ const PDV = {
       const intervalo = agora - ultimaTecla;
       ultimaTecla = agora;
 
-      if (e.key === 'Enter' && buffer.length >= 4) {
-        // Possível leitura de scanner — tenta encontrar produto
-        const codigo = buffer.trim();
+      // Se o intervalo for maior que 80ms, é digitação humana — limpa o buffer
+      if (e.key.length === 1 && intervalo > 80 && buffer.length > 0) {
         buffer = '';
-        document.getElementById('scannerIndicator').style.display = 'none';
-        PDV.processarCodigoBarras(codigo);
-        e.preventDefault();
+        escanerRapido = false;
+      }
+
+      if (e.key === 'Enter') {
+        // Só processa como scanner se buffer tem ≥4 chars E veio rápido (scanner)
+        if (buffer.length >= 4 && escanerRapido) {
+          const codigo = buffer.trim();
+          buffer = '';
+          escanerRapido = false;
+          document.getElementById('scannerIndicator').style.display = 'none';
+          PDV.processarCodigoBarras(codigo);
+          e.preventDefault();
+        } else {
+          buffer = '';
+          escanerRapido = false;
+        }
         return;
       }
 
-      // Tecla normal — acumula; se parar por 400ms sem Enter, tenta processar como scanner
+      // Tecla normal — acumula
       if (e.key.length === 1) {
+        // Marca como escaner rápido se tecla chegou em <80ms
+        if (intervalo < 80 || buffer.length === 0) {
+          if (intervalo < 80) escanerRapido = true;
+        }
         buffer += e.key;
-        document.getElementById('scannerIndicator').style.display = 'inline';
+        if (escanerRapido) document.getElementById('scannerIndicator').style.display = 'inline';
         clearTimeout(PDV._scannerTimeout);
         PDV._scannerTimeout = setTimeout(() => {
           const cod = buffer.trim();
           buffer = '';
           document.getElementById('scannerIndicator').style.display = 'none';
-          // Scanners sem sufixo Enter: processa se tiver >= 6 chars chegados rápido
-          if (cod.length >= 6) PDV.processarCodigoBarras(cod);
-        }, 400);
+          // Scanners sem sufixo Enter: processa se tiver >= 6 chars e eram rápidos
+          if (cod.length >= 6 && escanerRapido) PDV.processarCodigoBarras(cod);
+          escanerRapido = false;
+        }, 300);
       }
     });
   },
@@ -127,13 +145,32 @@ const PDV = {
   processarCodigoBarras: (codigo) => {
     if (!codigo) return;
 
+    console.log('[Scanner] Código recebido:', JSON.stringify(codigo), 'len:', codigo.length);
+
+    // Normaliza o código: remove espaços, converte para maiúsculas
+    const norm = s => (s == null ? '' : String(s)).replace(/\s+/g, '').toUpperCase();
+    const codigoNorm = norm(codigo);
+
     // Busca produto pelo codigoBarras ou pelo código gerado de variação
     const produtos = DB.Produtos.listarAtivos();
     let produtoEncontrado = null;
     let variacaoEncontrada = null;
 
-    // 1. Tenta match exato no campo codigoBarras do produto
-    produtoEncontrado = produtos.find(p => p.codigoBarras === codigo);
+    // 0. Verifica índice de barcodes vinculados manualmente
+    const barcodeIndex = DB.Config.get('barcodeIndex', {});
+    const vinculo = barcodeIndex[codigoNorm];
+    if (vinculo) {
+      produtoEncontrado = produtos.find(p => p.id === vinculo.produtoId);
+      variacaoEncontrada = vinculo.variacaoChave || null;
+    }
+
+    // 1. Tenta match normalizado no campo codigoBarras ou SKU do produto
+    if (!produtoEncontrado) {
+      produtoEncontrado = produtos.find(p =>
+        (p.codigoBarras && norm(p.codigoBarras) === codigoNorm) ||
+        (p.sku && norm(p.sku) === codigoNorm)
+      );
+    }
 
     // 2. Busca pelo código gerado — tenta formato novo (hash 2 chars) depois formatos antigos
     if (!produtoEncontrado) {
@@ -176,7 +213,7 @@ const PDV = {
       for (const gerarCod of tentativas) {
         for (const p of produtos) {
           for (const chave of Object.keys(p.variacoes || {})) {
-            if (gerarCod(p, chave) === codigo) {
+            if (norm(gerarCod(p, chave)) === codigoNorm) {
               produtoEncontrado = p;
               variacaoEncontrada = chave;
               break;
@@ -186,10 +223,22 @@ const PDV = {
         }
         if (produtoEncontrado) break;
       }
+
+      // Log dos primeiros códigos gerados para diagnóstico
+      if (!produtoEncontrado && produtos.length > 0) {
+        const exemplos = [];
+        for (const p of produtos.slice(0, 3)) {
+          for (const chave of Object.keys(p.variacoes || {}).slice(0, 1)) {
+            exemplos.push(gerarNovo(p, chave) + ' (' + p.nome?.substring(0, 15) + ')');
+          }
+        }
+        console.log('[Scanner] Exemplos de códigos gerados no sistema:', exemplos);
+      }
     }
 
     if (!produtoEncontrado) {
-      Utils.toast(`Código "${codigo}" não encontrado`, 'error');
+      console.warn('[Scanner] Produto não encontrado para código:', codigoNorm);
+      PDV.abrirVincularBarcode(codigo);
       return;
     }
 
@@ -234,7 +283,8 @@ const PDV = {
     const zerados = prods.filter(p => DB.Produtos.estoqueTotal(p) === 0).length;
     const baixos = prods.filter(p => {
       const t = DB.Produtos.estoqueTotal(p);
-      return t > 0 && t <= (p.estoqueMinimo || 5);
+      const mn = p.estoqueMinimo != null ? p.estoqueMinimo : 3;
+      return mn > 0 && t > 0 && t <= mn;
     }).length;
     if (zerados > 0) {
       Utils.toast(`⚠️ ${zerados} produto(s) com estoque zerado!`, 'error');
@@ -475,7 +525,10 @@ const PDV = {
     delete _tamSelecionado[prodId];
 
     PDV.renderCarrinho();
-    PDV.renderProdutos(document.getElementById('buscaInput').value);
+    // Limpa busca após adicionar ao carrinho
+    document.getElementById('buscaInput').value = '';
+    PDV.renderProdutos('');
+    document.getElementById('buscaInput').focus();
     const desc = tamLabel ? ` (Tam ${tamLabel}${corLabel ? ' · ' + corLabel : ''})` : '';
     Utils.toast(`${prod.nome}${desc} adicionado!`, 'success');
   },
@@ -510,19 +563,33 @@ const PDV = {
     const acrescimo     = ehCrediario ? Math.round(totalBase * (taxaCrediario / 100) * 100) / 100 : 0;
     const total         = totalBase + acrescimo;
 
-    lista.innerHTML = _carrinho.map((item, idx) => `
+    lista.innerHTML = _carrinho.map((item, idx) => {
+      const temDesconto = item._precoOriginal && item.precoUnitario < item._precoOriginal;
+      const pctDesc = temDesconto
+        ? Math.round((1 - item.precoUnitario / item._precoOriginal) * 100)
+        : 0;
+      return `
       <div class="carrinho-item">
         <div class="carrinho-item-info">
           <div class="carrinho-item-nome">${item.nome}</div>
-          <div class="carrinho-item-det">${item.tamanhoLabel ? 'Tam ' + item.tamanhoLabel + (item.cor ? ' · ' + item.cor : '') + ' · ' : ''}${Utils.moeda(item.precoUnitario)} un</div>
-          <div class="carrinho-item-preco">${Utils.moeda(item.total)}</div>
+          <div class="carrinho-item-det">
+            ${item.tamanhoLabel ? 'Tam ' + item.tamanhoLabel + (item.cor ? ' · ' + item.cor : '') + ' · ' : ''}
+            ${Utils.moeda(item.precoUnitario)} un
+            ${temDesconto ? `<span style="color:var(--danger);font-size:10px;font-weight:700;margin-left:2px">−${pctDesc}%</span>` : ''}
+          </div>
+          <div id="precoArea_${idx}" style="display:flex;align-items:center;gap:6px">
+            <div class="carrinho-item-preco">${Utils.moeda(item.total)}</div>
+            <button onclick="PDV.editarPrecoItem(${idx})" title="Editar preço / desconto"
+              style="background:none;border:1px solid var(--border);border-radius:5px;padding:1px 5px;cursor:pointer;font-size:11px;color:var(--text-muted);line-height:1.4">✏️</button>
+          </div>
         </div>
         <div class="carrinho-qtd">
           <button onclick="PDV.alterarQtd(${idx}, -1)">−</button>
           <span>${item.quantidade}</span>
           <button onclick="PDV.alterarQtd(${idx}, 1)">+</button>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     document.getElementById('carrinhoSubtotal').textContent = Utils.moeda(subtotal);
     if (descontoVal > 0) {
@@ -596,6 +663,71 @@ const PDV = {
     PDV.renderCarrinho();
   },
 
+  editarPrecoItem: (idx) => {
+    const item = _carrinho[idx];
+    if (!item) return;
+    const areaEl = document.getElementById('precoArea_' + idx);
+    if (!areaEl) return;
+    const precoOriginal = item._precoOriginal || item.precoUnitario;
+    areaEl.innerHTML = `
+      <div style="display:flex;gap:4px;align-items:center;margin-top:2px;flex-wrap:wrap">
+        <div style="font-size:10px;color:var(--text-muted);width:100%;margin-bottom:2px">
+          Preço original: ${Utils.moeda(precoOriginal)}
+        </div>
+        <input type="number" id="inputPrecoItem_${idx}"
+          value="${item.precoUnitario.toFixed(2)}" step="0.01" min="0"
+          style="width:90px;font-size:14px;font-weight:700;padding:4px 6px;border:2px solid var(--primary);border-radius:6px;text-align:center;outline:none"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();PDV.confirmarPrecoItem(${idx});}if(event.key==='Escape')PDV.renderCarrinho();">
+        <button onclick="PDV.confirmarPrecoItem(${idx})"
+          style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 9px;cursor:pointer;font-size:13px;font-weight:700">✓</button>
+        <button onclick="PDV.renderCarrinho()"
+          style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 9px;cursor:pointer;font-size:13px">✗</button>
+        ${item._precoOriginal && item._precoOriginal !== item.precoUnitario ? `
+        <button onclick="PDV.restaurarPrecoItem(${idx})"
+          style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;color:var(--text-muted)">↺ original</button>` : ''}
+      </div>`;
+    setTimeout(() => {
+      const inp = document.getElementById('inputPrecoItem_' + idx);
+      if (inp) { inp.focus(); inp.select(); }
+    }, 30);
+  },
+
+  confirmarPrecoItem: (idx) => {
+    const item = _carrinho[idx];
+    if (!item) return;
+    const inp = document.getElementById('inputPrecoItem_' + idx);
+    if (!inp) return;
+    const novoPreco = parseFloat(inp.value);
+    if (isNaN(novoPreco) || novoPreco < 0) { Utils.toast('Preço inválido', 'error'); return; }
+    if (!item._precoOriginal) item._precoOriginal = item.precoUnitario;
+    item.precoUnitario = Math.round(novoPreco * 100) / 100;
+    item.total = Math.round(item.precoUnitario * item.quantidade * 100) / 100;
+    PDV.renderCarrinho();
+    const pctDesc = item._precoOriginal > item.precoUnitario
+      ? Math.round((1 - item.precoUnitario / item._precoOriginal) * 100)
+      : 0;
+    Utils.toast(pctDesc > 0 ? `Desconto de ${pctDesc}% aplicado!` : 'Preço atualizado!', 'success');
+    // Alerta de margem mínima
+    const custo = parseFloat(item.precoCusto) || 0;
+    if (custo > 0 && item.precoUnitario > 0) {
+      const margemMinima = DB.Config.get('margemMinima', 25);
+      const margemAtual = ((item.precoUnitario - custo) / item.precoUnitario) * 100;
+      if (margemAtual < margemMinima) {
+        setTimeout(() => Utils.toast(`⚠ Margem de ${margemAtual.toFixed(1)}% está abaixo do mínimo de ${margemMinima}%`, 'warning'), 1500);
+      }
+    }
+  },
+
+  restaurarPrecoItem: (idx) => {
+    const item = _carrinho[idx];
+    if (!item || !item._precoOriginal) return;
+    item.precoUnitario = item._precoOriginal;
+    item.total = Math.round(item.precoUnitario * item.quantidade * 100) / 100;
+    delete item._precoOriginal;
+    PDV.renderCarrinho();
+    Utils.toast('Preço original restaurado', 'success');
+  },
+
   abrirBuscaCliente: () => {
     document.getElementById('buscaClienteInput').value = '';
     document.getElementById('resultadoClientes').innerHTML = '';
@@ -662,7 +794,8 @@ const PDV = {
     if (!nome) { Utils.toast('Digite o nome do cliente!', 'warning'); document.getElementById('ncNome').focus(); return; }
     const telefone = document.getElementById('ncTelefone').value.trim();
     const cpf = document.getElementById('ncCpf').value.trim();
-    const cli = DB.Clientes.salvar({ nome, telefone, cpf });
+    const limiteDefault = parseFloat(DB.Config.get('limiteDefaultCliente', 200)) || 200;
+    const cli = DB.Clientes.salvar({ nome, telefone, cpf, limiteCredito: limiteDefault });
     _clienteSelecionado = cli;
     PDV.atualizarClienteDisplay();
     PDV._atualizarClientePagamento();
@@ -707,6 +840,78 @@ const PDV = {
 
   // === FOTO DO PRODUTO (PDV) ===
   // ---- CADASTRO RÁPIDO DE PRODUTO ----
+  // ─── VINCULAR BARCODE ────────────────────────────────
+  _vbCodigo: '',
+  _vbProdutoId: null,
+
+  abrirVincularBarcode: (codigo) => {
+    PDV._vbCodigo = codigo;
+    PDV._vbProdutoId = null;
+    document.getElementById('vbCodigoDisplay').textContent = codigo;
+    document.getElementById('vbBusca').value = '';
+    document.getElementById('vbVariacoes').style.display = 'none';
+    document.getElementById('vbVariacaoSel').innerHTML = '';
+    PDV.vbFiltrar();
+    Utils.abrirModal('modalVincularBarcode');
+    setTimeout(() => document.getElementById('vbBusca')?.focus(), 100);
+  },
+
+  vbFiltrar: () => {
+    const termo = (document.getElementById('vbBusca')?.value || '').toLowerCase();
+    const produtos = DB.Produtos.listarAtivos();
+    const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const lista = termo ? produtos.filter(p =>
+      norm(p.nome).includes(norm(termo)) ||
+      norm(p.marca || '').includes(norm(termo)) ||
+      (p.sku || '').toLowerCase().includes(termo)
+    ) : produtos.slice(0, 30);
+
+    const cont = document.getElementById('vbListaProdutos');
+    if (!lista.length) {
+      cont.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px">Nenhum produto encontrado</div>';
+      return;
+    }
+    cont.innerHTML = lista.map(p => {
+      const ativo = PDV._vbProdutoId === p.id;
+      return `<div onclick="PDV.vbSelecionarProduto('${p.id}')"
+        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;${ativo ? 'background:var(--primary);color:#fff;' : ''}display:flex;justify-content:space-between;align-items:center">
+        <span>${p.nome}${p.marca ? ' · <span style="opacity:.7">' + p.marca + '</span>' : ''}</span>
+        <span style="font-size:11px;opacity:.7">${Object.keys(p.variacoes||{}).length} var.</span>
+      </div>`;
+    }).join('');
+  },
+
+  vbSelecionarProduto: (id) => {
+    PDV._vbProdutoId = id;
+    PDV.vbFiltrar();
+    const prod = DB.Produtos.buscar(id);
+    if (!prod) return;
+    const vars = Object.keys(prod.variacoes || {});
+    const sel = document.getElementById('vbVariacaoSel');
+    sel.innerHTML = vars.map(chave => {
+      const [tam, cor] = chave.split('||');
+      const label = cor && cor !== 'undefined' ? `Tam. ${tam} — ${cor}` : `Tam. ${tam}`;
+      return `<option value="${chave}">${label}</option>`;
+    }).join('');
+    document.getElementById('vbVariacoes').style.display = vars.length > 0 ? 'block' : 'none';
+  },
+
+  salvarVincularBarcode: () => {
+    if (!PDV._vbProdutoId) { Utils.toast('Selecione um produto', 'error'); return; }
+    const variacaoChave = document.getElementById('vbVariacaoSel')?.value || null;
+    const norm = s => (s == null ? '' : String(s)).replace(/\s+/g, '').toUpperCase();
+    const codigoNorm = norm(PDV._vbCodigo);
+
+    const barcodeIndex = DB.Config.get('barcodeIndex', {});
+    barcodeIndex[codigoNorm] = { produtoId: PDV._vbProdutoId, variacaoChave };
+    DB.Config.set('barcodeIndex', barcodeIndex);
+
+    Utils.fecharModal('modalVincularBarcode');
+    Utils.toast('Código vinculado com sucesso!', 'success');
+    // Adiciona imediatamente ao carrinho
+    PDV.processarCodigoBarras(PDV._vbCodigo);
+  },
+
   abrirCadastroRapido: () => {
     const busca = document.getElementById('buscaInput').value.trim();
     document.getElementById('rpNome').value = busca;
@@ -857,6 +1062,8 @@ const PDV = {
     document.getElementById('inputValorParcelaCartao').value = '';
     document.getElementById('crediarioResumo').style.display = 'none';
     document.getElementById('crediarioResumo').textContent = '';
+    const inputObs = document.getElementById('inputObservacaoVenda');
+    if (inputObs) inputObs.value = '';
 
     // Data padrão do 1º vencimento: próximo mês, mesmo dia de hoje
     const nextMonth = new Date();
@@ -1025,6 +1232,42 @@ const PDV = {
       </div>`;
   },
 
+  _renderTermometroCrediarioPDV: () => {
+    const el = document.getElementById('crediarioTermometro');
+    if (!el) return;
+
+    const mes = Utils.hoje().substring(0, 7);
+    const limite = parseFloat(DB.Config.get('limiteCrediario', 25)) || 25;
+    const vendasMes = DB.Vendas.listarPorPeriodo(mes + '-01', mes + '-31');
+    const faturamentoMes = vendasMes.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    const totalCrediarioMes = vendasMes
+      .filter(v => v.formaPagamento === 'crediario')
+      .reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    const pct = faturamentoMes > 0 ? (totalCrediarioMes / faturamentoMes) * 100 : 0;
+    const espacoRestante = Math.max(0, faturamentoMes * (limite / 100) - totalCrediarioMes);
+
+    let bg, border, icone, msg, sub;
+    if (pct >= limite) {
+      bg = 'rgba(239,68,68,.1)'; border = 'rgba(239,68,68,.4)';
+      icone = '🚨'; msg = `Limite de crediário atingido (${pct.toFixed(1)}% / ${limite}%)`;
+      sub = 'Considere recusar ou convencer o cliente a pagar à vista / PIX.';
+    } else if (pct >= limite * 0.75) {
+      bg = 'rgba(234,179,8,.1)'; border = 'rgba(234,179,8,.4)';
+      icone = '⚠'; msg = `Crediário em ${pct.toFixed(1)}% do mês — limite é ${limite}%`;
+      sub = `Você ainda pode vender ${Utils.moeda(espacoRestante)} no crediário este mês.`;
+    } else {
+      bg = 'rgba(34,197,94,.1)'; border = 'rgba(34,197,94,.3)';
+      icone = '✅'; msg = `Crediário em ${pct.toFixed(1)}% do mês — dentro do limite (${limite}%)`;
+      sub = `Espaço restante: ${Utils.moeda(espacoRestante)}.`;
+    }
+
+    el.style.display = 'block';
+    el.innerHTML = `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;font-size:12px">
+      <div style="font-weight:700;margin-bottom:2px">${icone} ${msg}</div>
+      <div style="color:var(--text-muted)">${sub}</div>
+    </div>`;
+  },
+
   selecionarForma: (forma) => {
     _formaPagamento = forma;
     document.querySelectorAll('.forma-btn').forEach(b => {
@@ -1033,11 +1276,34 @@ const PDV = {
     document.getElementById('secaoCrediario').style.display = forma === 'crediario' ? '' : 'none';
     document.getElementById('secaoCartaoCredito').style.display = forma === 'cartao_credito' ? '' : 'none';
     document.getElementById('secaoTroco').style.display = forma === 'dinheiro' ? '' : 'none';
-    if (forma === 'crediario') PDV.atualizarParcelas();
-    else document.getElementById('creditoInfo').style.display = 'none';
+    if (forma === 'crediario') {
+      PDV.atualizarParcelas();
+      PDV._renderTermometroCrediarioPDV();
+    } else {
+      document.getElementById('creditoInfo').style.display = 'none';
+      const t = document.getElementById('crediarioTermometro');
+      if (t) t.style.display = 'none';
+      PDV._atualizarPagTotal();
+    }
     if (forma === 'cartao_credito') PDV.atualizarParcelasCartao();
     PDV.atualizarTaxaInfo();
     PDV.renderCarrinho(); // atualiza total com/sem acréscimo crediário
+  },
+
+  _atualizarPagTotal: () => {
+    const subtotal = _carrinho.reduce((s, i) => s + i.total, 0);
+    const descontoVal = _desconto.tipo === 'pct'
+      ? Math.round(subtotal * (_desconto.valor / 100) * 100) / 100
+      : Math.min(_desconto.valor, subtotal);
+    const totalBase = Math.max(0, subtotal - descontoVal);
+    const taxaCrediario = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const acrescimo = _formaPagamento === 'crediario'
+      ? Math.round(totalBase * (taxaCrediario / 100) * 100) / 100 : 0;
+    const total = totalBase + acrescimo;
+    const elTotal = document.getElementById('pagTotal');
+    if (elTotal) elTotal.textContent = Utils.moeda(total);
+    const inputPago = document.getElementById('inputValorPago');
+    if (inputPago) inputPago.value = total.toFixed(2);
   },
 
   atualizarParcelas: () => {
@@ -1048,36 +1314,63 @@ const PDV = {
     const num = parseInt(document.getElementById('inputNumeroParcelas').value) || 1;
     const valorParcela = total / num;
     const venc = document.getElementById('inputVencimento1').value;
+    // Atualiza o total exibido no cabeçalho do modal com o acréscimo
+    const elTotal = document.getElementById('pagTotal');
+    if (elTotal) elTotal.textContent = Utils.moeda(total);
+    const inputPago = document.getElementById('inputValorPago');
+    if (inputPago) inputPago.value = total.toFixed(2);
+
     const resumo = document.getElementById('crediarioResumo');
     let texto = `${num}x de ${Utils.moeda(valorParcela)} (total ${Utils.moeda(total)} c/ ${taxaCrediario}% acréscimo)`;
     if (venc) texto += `  ·  1º vencimento: ${Utils.data(venc)}`;
     resumo.textContent = texto;
     resumo.style.display = '';
 
-    // Exibir status do limite de crédito
+    // Exibir status de inadimplência + limite de crédito
     const info = document.getElementById('creditoInfo');
     if (_clienteSelecionado) {
+      const hoje = Utils.hoje();
+      const parcAtrasadas = DB.Crediario.listar()
+        .filter(c => c.clienteId === _clienteSelecionado.id)
+        .flatMap(c => (c.parcelas || []).filter(p => p.status !== 'pago' && p.vencimento < hoje));
+      const totalAtrasado = parcAtrasadas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
       const lc = PDV._limiteCredito(_clienteSelecionado.id, total);
-      if (lc.limite > 0) {
-        const excede = lc.disponivel < 0;
-        const cor = excede ? 'var(--danger)' : lc.disponivel < total ? 'var(--warning)' : 'var(--success)';
+
+      const temInad  = parcAtrasadas.length > 0;
+      const temLimite = lc.limite > 0;
+
+      if (temInad || temLimite) {
         info.style.display = '';
-        info.innerHTML = `
-          <div style="font-size:12px;padding:8px 10px;border-radius:8px;border:1px solid ${cor};background:${excede ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.04)'}">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="color:var(--text-muted)">Limite de crédito</span>
-              <span style="font-weight:600">${Utils.moeda(lc.limite)}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="color:var(--text-muted)">Já utilizado</span>
-              <span style="color:var(--warning);font-weight:600">${Utils.moeda(lc.usado)}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding-top:4px;border-top:1px solid var(--border)">
-              <span style="font-weight:600">Disponível após compra</span>
-              <span style="font-weight:700;color:${cor}">${Utils.moeda(lc.disponivel)}</span>
-            </div>
-            ${excede ? `<div style="color:var(--danger);font-size:11px;margin-top:4px;font-weight:600">⚠️ Limite excedido em ${Utils.moeda(-lc.disponivel)}</div>` : ''}
-          </div>`;
+        const inadHTML = temInad ? `
+          <div style="background:rgba(239,68,68,0.1);border:1px solid var(--danger);border-radius:8px;padding:8px 10px;margin-bottom:${temLimite ? '8px' : '0'}">
+            <div style="font-weight:700;color:var(--danger);margin-bottom:4px">🚨 Cliente inadimplente!</div>
+            <div style="font-size:12px;color:var(--text-muted)">${parcAtrasadas.length} parcela(s) em atraso</div>
+            <div style="font-size:13px;font-weight:700;color:var(--danger)">Total em atraso: ${Utils.moeda(totalAtrasado)}</div>
+            <div style="font-size:11px;color:var(--danger);margin-top:2px">Regularize antes de liberar novo crediário</div>
+          </div>` : '';
+
+        let limiteHTML = '';
+        if (temLimite) {
+          const excede = lc.disponivel < 0;
+          const cor = excede ? 'var(--danger)' : lc.disponivel < total ? 'var(--warning)' : 'var(--success)';
+          limiteHTML = `
+            <div style="font-size:12px;padding:8px 10px;border-radius:8px;border:1px solid ${cor};background:${excede ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.04)'}">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:var(--text-muted)">Limite de crédito</span>
+                <span style="font-weight:600">${Utils.moeda(lc.limite)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:var(--text-muted)">Já utilizado</span>
+                <span style="color:var(--warning);font-weight:600">${Utils.moeda(lc.usado)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding-top:4px;border-top:1px solid var(--border)">
+                <span style="font-weight:600">Disponível após compra</span>
+                <span style="font-weight:700;color:${cor}">${Utils.moeda(lc.disponivel)}</span>
+              </div>
+              ${excede ? `<div style="color:var(--danger);font-size:11px;margin-top:4px;font-weight:600">⚠️ Limite excedido em ${Utils.moeda(-lc.disponivel)}</div>` : ''}
+            </div>`;
+        }
+        info.innerHTML = inadHTML + limiteHTML;
       } else {
         info.style.display = 'none';
       }
@@ -1156,6 +1449,23 @@ const PDV = {
     }
 
     if (_formaPagamento === 'crediario' && _clienteSelecionado) {
+      // Verificar inadimplência
+      const hoje = Utils.hoje();
+      const parcAtrasadas = DB.Crediario.listar()
+        .filter(c => c.clienteId === _clienteSelecionado.id)
+        .flatMap(c => (c.parcelas || []).filter(p => p.status !== 'pago' && p.vencimento < hoje));
+      if (parcAtrasadas.length > 0) {
+        const totalAtrasado = parcAtrasadas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+        const ok = confirm(
+          `🚨 CLIENTE INADIMPLENTE!\n\n` +
+          `${_clienteSelecionado.nome} possui ${parcAtrasadas.length} parcela(s) em atraso.\n` +
+          `Total em atraso: ${Utils.moeda(totalAtrasado)}\n\n` +
+          `Recomendamos regularizar antes de liberar novo crediário.\n\n` +
+          `Deseja autorizar mesmo assim?`
+        );
+        if (!ok) return;
+      }
+      // Verificar limite de crédito
       const lc = PDV._limiteCredito(_clienteSelecionado.id, total);
       if (lc.limite > 0 && lc.disponivel < 0) {
         const ok = confirm(
@@ -1177,9 +1487,28 @@ const PDV = {
     const { taxaPct: _taxaPct, valorTaxa: _valorTaxa, valorLiquido: _valorLiquido } =
       Utils.infoTaxa(total, _formaPagamento, _parcSimples);
 
-    // Montar venda
+    const observacao = (document.getElementById('inputObservacaoVenda')?.value || '').trim();
+
+    // Montar venda — distribui desconto global proporcionalmente nos itens
+    const itensComDesconto = descontoVal <= 0
+      ? _carrinho.map(i => ({ ...i }))
+      : _carrinho.map(i => {
+          const proporcao = subtotal > 0 ? (i.total / subtotal) : (1 / _carrinho.length);
+          const descontoItem = Math.round(descontoVal * proporcao * 100) / 100;
+          const totalFinal   = Math.round((i.total - descontoItem) * 100) / 100;
+          const precoFinal   = i.quantidade > 0
+            ? Math.round((totalFinal / i.quantidade) * 100) / 100
+            : i.precoUnitario;
+          return {
+            ...i,
+            precoUnitario: precoFinal,
+            total: totalFinal,
+            _precoOriginal: i._precoOriginal || i.precoUnitario
+          };
+        });
+
     const venda = {
-      itens: _carrinho.map(i => ({ ...i })),
+      itens: itensComDesconto,
       subtotal,
       desconto: descontoVal > 0 ? { tipo: _desconto.tipo, valor: _desconto.valor, calculado: descontoVal } : null,
       acrescimoCrediario: acrescimoCrediario > 0 ? { pct: taxaCrediario, valor: acrescimoCrediario } : null,
@@ -1203,6 +1532,7 @@ const PDV = {
         const opt = sel.options[sel.selectedIndex];
         return parseFloat(opt.dataset.comissao) || null;
       })(),
+      observacao: observacao || null,
     };
 
     // Salvar venda PRIMEIRO (se der erro, estoque não é alterado)
@@ -1301,8 +1631,27 @@ const PDV = {
     });
     const _totalTaxaSplit = _formasSplitComTaxa.reduce((s, f) => s + (f.valorTaxa || 0), 0);
 
+    const observacaoSplit = (document.getElementById('inputObservacaoVenda')?.value || '').trim();
+
+    const itensSplit = descontoVal <= 0
+      ? _carrinho.map(i => ({ ...i }))
+      : _carrinho.map(i => {
+          const proporcao = subtotal > 0 ? (i.total / subtotal) : (1 / _carrinho.length);
+          const descontoItem = Math.round(descontoVal * proporcao * 100) / 100;
+          const totalFinal   = Math.round((i.total - descontoItem) * 100) / 100;
+          const precoFinal   = i.quantidade > 0
+            ? Math.round((totalFinal / i.quantidade) * 100) / 100
+            : i.precoUnitario;
+          return {
+            ...i,
+            precoUnitario: precoFinal,
+            total: totalFinal,
+            _precoOriginal: i._precoOriginal || i.precoUnitario
+          };
+        });
+
     const venda = {
-      itens: _carrinho.map(i => ({ ...i })),
+      itens: itensSplit,
       subtotal,
       desconto: descontoVal > 0 ? { tipo: _desconto.tipo, valor: _desconto.valor, calculado: descontoVal } : null,
       total,
@@ -1314,6 +1663,7 @@ const PDV = {
       clienteNome: _clienteSelecionado ? _clienteSelecionado.nome : null,
       vendedorNome,
       vendedorComissao,
+      observacao: observacaoSplit || null,
     };
 
     // Salvar venda PRIMEIRO
@@ -1462,6 +1812,7 @@ PDV.rcSelecionarCliente = (clienteId) => {
   // Coleta parcelas pendentes de todos os crediários
   const parcelas = [];
   todos.forEach(cred => {
+    if (!cred.parcelas) return;
     cred.parcelas.forEach((p, idx) => {
       if (p.status === 'pago') return;
       const { diasAtraso, diasJuros, juros } = rcCalcJuros(p.vencimento, p.valor);

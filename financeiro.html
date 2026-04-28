@@ -31,6 +31,7 @@
         <button class="tab-btn" onclick="Fin.setTab('contas',this)">📅 Contas</button>
         <button class="tab-btn" onclick="Fin.setTab('metas',this)">🎯 Metas</button>
         <button class="tab-btn" onclick="Fin.setTab('diagnostico',this)">🩺 Diagnóstico</button>
+        <button class="tab-btn" onclick="Fin.setTab('trafego',this)">📢 Tráfego</button>
       </div>
 
       <!-- ===== ABA RESUMO ===== -->
@@ -46,6 +47,7 @@
             <div class="chart-bars" id="grafico6Meses"></div>
           </div>
         </div>
+        <div class="card" style="margin-top:20px" id="cardPrevisaoCrediario"></div>
         <div class="section-header" style="margin-top:20px">
           <span class="section-title">Movimentações do Mês</span>
         </div>
@@ -164,6 +166,8 @@
             <button class="btn btn-outline btn-sm tab-btn-sub active" onclick="Fin.setSubContas('pagar',this)">📤 A Pagar</button>
             <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('receber',this)">📥 A Receber</button>
             <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('retiradas',this)">💸 Retiradas do Dono</button>
+            <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('prioridades',this)" style="border-color:var(--primary);color:var(--primary)">🧠 Prioridades</button>
+            <button class="btn btn-outline btn-sm tab-btn-sub" onclick="Fin.setSubContas('emprestimo',this)" style="border-color:#8b5cf6;color:#8b5cf6">💳 Empréstimo</button>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap" id="btnNovaDespesa">
             <button class="btn btn-outline btn-sm" onclick="Fin.abrirFormCompraParcelada()">📦 Compra Parcelada</button>
@@ -172,6 +176,13 @@
           </div>
         </div>
         <div id="contasPagar">
+          <div id="filtroOrigemBar" style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+            <span style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap">Filtrar por:</span>
+            <button class="btn btn-sm btn-outline filtro-origem-btn active" onclick="Fin._setFiltroOrigem('todas',this)">Todas</button>
+            <button class="btn btn-sm btn-outline filtro-origem-btn" onclick="Fin._setFiltroOrigem('loja',this)">🏪 Loja</button>
+            <button class="btn btn-sm btn-outline filtro-origem-btn" onclick="Fin._setFiltroOrigem('pessoal',this)">🏠 Pessoal</button>
+          </div>
+          <div id="totalGeralDividas" style="margin-bottom:16px"></div>
           <div class="card" style="padding:0" id="listaDespesas"></div>
         </div>
         <div id="contasReceber" style="display:none">
@@ -179,6 +190,12 @@
         </div>
         <div id="contasRetiradas" style="display:none">
           <div class="card" style="padding:0" id="listaRetiradas"></div>
+        </div>
+        <div id="contasPrioridades" style="display:none">
+          <div id="painelPrioridades"></div>
+        </div>
+        <div id="contasEmprestimo" style="display:none">
+          <div id="painelEmprestimo"></div>
         </div>
       </div>
 
@@ -208,6 +225,32 @@
           </div>
           <div id="metasResultado"></div>
         </div>
+      </div>
+
+      <!-- ===== ABA TRÁFEGO PAGO ===== -->
+      <div id="tab-trafego" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">📢 Orçamento Semanal de Tráfego Pago</div>
+          <p class="text-muted fs-sm" style="margin-bottom:16px">
+            Define quanto da sua receita semanal pode ser reinvestido em anúncios (Meta, Google, TikTok...) sem comprometer o caixa.
+            Comece pequeno e aumente conforme a loja cresce.
+          </p>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="margin:0;min-width:220px;flex:1">
+              <label class="form-label">% do faturamento semanal para tráfego: <strong id="trafegoPctLabel">5%</strong></label>
+              <input type="range" id="trafegoPct" min="1" max="20" value="5" step="1"
+                style="width:100%;accent-color:var(--primary)"
+                oninput="document.getElementById('trafegoPctLabel').textContent=this.value+'%';DB.Config.set('trafegoPct',this.value);Fin.renderTrafego()">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:2px">
+                <span>1% conservador</span><span>10% moderado</span><span>20% agressivo</span>
+              </div>
+            </div>
+            <div>
+              <button class="btn btn-primary" onclick="Fin.abrirFormTrafego()">+ Registrar investimento</button>
+            </div>
+          </div>
+        </div>
+        <div id="trafegoConteudo"></div>
       </div>
 
     </div>
@@ -252,6 +295,39 @@
     </div>
   </div>
 
+  <!-- MODAL RENDA PESSOAL -->
+  <div class="modal-overlay" id="modalRendaPessoal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modalRendaTitulo">Nova Fonte de Renda</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalRendaPessoal')">✕</button>
+      </div>
+      <form id="formRendaPessoal" onsubmit="Fin._salvarRendaPessoal(event)">
+        <input type="hidden" id="rendaId">
+        <div class="form-group">
+          <label class="form-label">Tipo de renda</label>
+          <select id="rendaTipo" class="form-control" onchange="Fin._onRendaTipoChange()">
+            <option value="prolabore">💼 Pró-labore (minha retirada da loja)</option>
+            <option value="salario_conjuge">👩 Salário / Renda do cônjuge</option>
+            <option value="outro">💰 Outra renda</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="rendaDescricao" class="form-control" required placeholder="Ex: Pró-labore, Salário esposa...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor mensal (R$)</label>
+          <input type="number" id="rendaValor" class="form-control" step="0.01" min="0" required placeholder="0,00" style="font-size:18px;font-weight:700;text-align:center">
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+          <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalRendaPessoal')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL DESPESA -->
   <div class="modal-overlay" id="modalDespesa" style="display:none">
     <div class="modal">
@@ -290,6 +366,14 @@
               Repete todo mês
             </label>
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pertence a</label>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="btnOrigemLoja" onclick="Fin._setOrigemModal('loja')" class="btn btn-outline btn-sm" style="flex:1;font-size:13px">🏪 Loja</button>
+            <button type="button" id="btnOrigemPessoal" onclick="Fin._setOrigemModal('pessoal')" class="btn btn-outline btn-sm" style="flex:1;font-size:13px">🏠 Pessoal / Casa</button>
+          </div>
+          <input type="hidden" name="origem" id="hiddenOrigem" value="loja">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalDespesa')">Cancelar</button>
@@ -340,6 +424,7 @@
     </div>
   </div>
 
+
   <!-- Modal Retirada do Dono -->
   <div class="modal-overlay" id="modalRetirada" style="display:none">
     <div class="modal" style="max-width:380px">
@@ -364,6 +449,45 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalRetirada')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">💾 Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Tráfego Pago -->
+  <div class="modal-overlay" id="modalTrafego" style="display:none">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <span class="modal-title">📢 Registrar Investimento em Tráfego</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalTrafego')">✕</button>
+      </div>
+      <form id="formTrafego" onsubmit="Fin.salvarTrafego(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Data *</label>
+            <input type="date" name="data" id="trafegoData" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Plataforma *</label>
+            <select name="plataforma" class="form-control" required>
+              <option value="meta">Meta / Instagram / Facebook</option>
+              <option value="google">Google Ads</option>
+              <option value="tiktok">TikTok Ads</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor investido (R$) *</label>
+            <input type="number" name="valor" class="form-control" step="0.01" min="0.01" placeholder="0,00" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Observação</label>
+            <input type="text" name="obs" class="form-control" placeholder="Ex: campanha de tênis masculino">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="Utils.fecharModal('modalTrafego')">Cancelar</button>
           <button type="submit" class="btn btn-primary">💾 Salvar</button>
         </div>
       </form>

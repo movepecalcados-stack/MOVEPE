@@ -53,6 +53,7 @@
         </select>
         <input type="text" id="filtroTamanho" class="form-control" placeholder="Filtrar tamanho..." style="width:140px">
         <button id="btnFiltroParado" class="btn btn-outline" onclick="Estoque.toggleFiltroParado()" title="Mostrar produtos sem venda há +60 dias">📦 Parado +60d</button>
+        <button id="btnFiltroZeradas" class="btn btn-outline" onclick="Estoque.toggleFiltroZeradas()" title="Mostrar tamanhos com estoque zerado">🔴 Tamanhos zerados</button>
       </div>
 
       <!-- GRID DE PRODUTOS -->
@@ -240,6 +241,15 @@
                 <label class="form-label">Estoque Mínimo</label>
                 <input type="number" name="estoqueMinimo" class="form-control" min="0" value="5">
               </div>
+            </div>
+            <div class="form-group" style="margin-top:10px;margin-bottom:0">
+              <label class="form-label">Grade de Reposição
+                <span style="font-size:11px;color:var(--text-muted);font-weight:400"> — selecione a grade que o fornecedor usa para este produto</span>
+              </label>
+              <select name="gradeId" id="selGradeProduto" class="form-control">
+                <option value="">— Sem grade cadastrada —</option>
+              </select>
+              <div id="gradeInfoProduto" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
             </div>
           </div>
 

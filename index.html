@@ -207,6 +207,7 @@
             </div>
             <div id="crediarioResumo" style="font-size:13px;color:var(--primary);font-weight:600;margin-top:4px;padding:6px 8px;background:var(--primary-dim);border-radius:6px;display:none"></div>
             <div id="creditoInfo" style="margin-top:8px;display:none"></div>
+            <div id="crediarioTermometro" style="margin-top:10px;display:none"></div>
           </div>
 
           <!-- Taxa cartão -->
@@ -251,6 +252,12 @@
             <button class="btn btn-outline btn-sm" style="margin-bottom:1px" onclick="PDV.adicionarSplit()">+ Adicionar</button>
           </div>
           <div id="splitResumo" style="margin-top:10px;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;font-size:13px"></div>
+        </div>
+
+        <!-- Observação da venda -->
+        <div class="form-group" style="margin-top:14px;margin-bottom:0">
+          <label class="form-label" style="font-size:12px">📝 Observação (opcional)</label>
+          <textarea id="inputObservacaoVenda" class="form-control" rows="2" placeholder="Ex: trocar se não servir, produto reservado, pedido especial..." style="resize:none;font-size:13px"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -497,6 +504,37 @@
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="Utils.fecharModal('modalProdutoRapido')">Cancelar</button>
         <button class="btn btn-primary" onclick="PDV.salvarProdutoRapido()">💾 Salvar e Adicionar ao Carrinho</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VINCULAR BARCODE -->
+  <div class="modal-overlay" id="modalVincularBarcode" style="display:none">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header">
+        <span class="modal-title">🔗 Vincular Código de Barras</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalVincularBarcode')">✕</button>
+      </div>
+      <div style="padding:4px 0 14px">
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-family:monospace;font-size:14px;font-weight:700;color:var(--primary)" id="vbCodigoDisplay"></div>
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px">Este código não está cadastrado. Selecione o produto e o tamanho para vincular — na próxima vez, o leitor vai reconhecer automaticamente.</p>
+
+        <div class="form-group">
+          <label class="form-label">Buscar produto</label>
+          <input type="text" id="vbBusca" class="form-control" placeholder="Nome, marca ou SKU..." oninput="PDV.vbFiltrar()">
+        </div>
+        <div id="vbListaProdutos" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:12px"></div>
+
+        <div id="vbVariacoes" style="display:none">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Tamanho / Variação</label>
+            <select id="vbVariacaoSel" class="form-control"></select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalVincularBarcode')">Cancelar</button>
+        <button class="btn btn-primary" onclick="PDV.salvarVincularBarcode()">🔗 Vincular e Adicionar ao Carrinho</button>
       </div>
     </div>
   </div>

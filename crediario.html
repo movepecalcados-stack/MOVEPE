@@ -39,6 +39,17 @@
         </div>
       </div>
 
+      <!-- SPC/SERASA BANNER -->
+      <div id="spcBanner" style="display:none;margin-top:12px;padding:12px 16px;background:rgba(239,68,68,0.1);border:2px solid var(--danger);border-radius:10px;cursor:pointer" onclick="CrediarioModule.abrirSPCAlert()">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-weight:700;color:var(--danger);font-size:15px">🚨 Clientes para SPC/Serasa</div>
+            <div class="text-muted fs-sm" id="spcBannerInfo">Clientes com 2+ meses de atraso</div>
+          </div>
+          <span class="badge badge-danger" style="font-size:16px;padding:6px 12px" id="spcBannerCount">0</span>
+        </div>
+      </div>
+
       <!-- PREVISÃO MENSAL -->
       <div class="card" style="margin-top:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -123,6 +134,12 @@
               <input type="number" id="pagJurosInput" class="form-control" min="0" step="0.01" oninput="CrediarioModule.atualizarTotal()">
             </div>
           </div>
+        </div>
+        <!-- Desconto -->
+        <div class="form-group" style="margin-bottom:12px">
+          <label class="form-label">Desconto (R$) — opcional</label>
+          <input type="number" id="pagDesconto" class="form-control" min="0" step="0.01" value="0"
+            oninput="CrediarioModule.atualizarTotal()" placeholder="0,00" style="text-align:center">
         </div>
         <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--primary);margin-bottom:14px">
           <span style="font-weight:600">Total a receber</span>
@@ -280,6 +297,71 @@
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="Utils.fecharModal('modalRenegociacao')">Cancelar</button>
         <button class="btn btn-primary btn-lg" onclick="CrediarioModule.renegociarConfirmar()">✅ Confirmar Renegociação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECIONAR PARCELAS -->
+  <div class="modal-overlay" id="modalSelecionarParcelas" style="display:none">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span class="modal-title">☑️ Selecionar Parcelas para Pagar</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalSelecionarParcelas')">✕</button>
+      </div>
+      <div style="padding:16px 0">
+        <div style="margin-bottom:14px">
+          <div style="font-weight:700;font-size:17px" id="selParclCliente"></div>
+          <div class="text-muted fs-sm">Selecione as parcelas que deseja pagar agora</div>
+        </div>
+
+        <!-- Lista de parcelas com checkboxes -->
+        <div id="selParclLista" style="margin-bottom:14px;max-height:220px;overflow-y:auto;padding-right:4px"></div>
+
+        <!-- Subtotal -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span class="text-muted fs-sm">Subtotal selecionado</span>
+          <span id="selParclSubtotal" style="font-weight:500">R$ 0,00</span>
+        </div>
+
+        <!-- Desconto -->
+        <div class="form-group" style="margin-bottom:12px">
+          <label class="form-label">Desconto (R$) — opcional</label>
+          <input type="number" id="selParclDesconto" class="form-control" min="0" step="0.01" value="0"
+            oninput="CrediarioModule.atualizarTotalSelecionadas()" placeholder="0,00" style="text-align:center">
+        </div>
+
+        <!-- Total a receber -->
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--primary);margin-bottom:14px">
+          <span style="font-weight:600">Total a receber</span>
+          <span id="selParclTotal" style="font-weight:700;font-size:20px;color:var(--primary)">R$ 0,00</span>
+        </div>
+
+        <!-- Forma de pagamento -->
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label" style="font-weight:600">Forma de Pagamento</label>
+          <div class="pagamento-formas" id="selParclFormasBtns">
+            <button class="forma-btn" data-forma="dinheiro"       onclick="CrediarioModule.selecionarFormaModal('selParcl','dinheiro')">💵 Dinheiro</button>
+            <button class="forma-btn" data-forma="pix"            onclick="CrediarioModule.selecionarFormaModal('selParcl','pix')">📱 PIX</button>
+            <button class="forma-btn" data-forma="cartao_credito" onclick="CrediarioModule.selecionarFormaModal('selParcl','cartao_credito')">💳 Crédito</button>
+            <button class="forma-btn" data-forma="cartao_debito"  onclick="CrediarioModule.selecionarFormaModal('selParcl','cartao_debito')">💳 Débito</button>
+          </div>
+        </div>
+
+        <!-- Valor recebido -->
+        <div>
+          <label class="form-label" style="font-weight:600">Valor recebido (R$)</label>
+          <input type="number" id="selParclRecebido" class="form-control" min="0" step="0.01"
+            oninput="CrediarioModule.atualizarTrocoSelecionadas()"
+            style="font-size:20px;font-weight:700;text-align:center;color:var(--primary)">
+        </div>
+
+        <div id="selParclTrocoBloco" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;text-align:center">
+          <span id="selParclTrocoLabel" style="font-weight:700;font-size:15px"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalSelecionarParcelas')">Cancelar</button>
+        <button class="btn btn-success btn-lg" onclick="CrediarioModule.confirmarSelecionadas()">✅ Confirmar Pagamento</button>
       </div>
     </div>
   </div>

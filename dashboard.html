@@ -45,6 +45,7 @@
           <div class="stat-label">Faturamento do Mês</div>
           <div class="stat-value success" id="statFaturamentoMes">R$ 0,00</div>
           <div class="stat-sub" id="statQtdMes">0 venda(s)</div>
+          <div id="statVarMes" style="font-size:11px;margin-top:2px"></div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Estoque Baixo</div>
@@ -127,8 +128,30 @@
         </div>
       </div>
 
+      <!-- TERMÔMETRO DE CREDIÁRIO -->
+      <div id="cardTermometroCrediario" style="margin-bottom:20px"></div>
+
+      <!-- SAÚDE FINANCEIRA DO MÊS -->
+      <div id="cardSaudeFinanceira" style="margin-bottom:20px"></div>
+
+      <!-- FLUXO DE CAIXA 30 DIAS -->
+      <div id="cardFluxo30Dias" style="margin-bottom:20px"></div>
+
       <!-- ESTOQUE PARADO -->
       <div id="cardEstoqueParado" style="margin-bottom:20px"></div>
+
+      <!-- TENDÊNCIA 6 MESES -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div class="card-title" style="margin:0">📈 Tendência de Vendas — Últimos 6 Meses</div>
+          <div id="variacaoMes6" style="font-size:13px"></div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-bars" id="grafico6Meses">
+            <div class="loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
 
       <!-- GRID PRINCIPAL -->
       <div class="dashboard-grid">

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tráfego — MOVE PÉ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .tf-setup{background:var(--card-bg);border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;margin-bottom:20px}
+    .tf-step{display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
+    .tf-step-num{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .tf-link-row{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
+    .tf-link-label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;width:80px;flex-shrink:0}
+    .tf-link-url{font-size:12px;font-family:monospace;color:var(--primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tf-bar-wrap{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+    .tf-bar-row{display:flex;align-items:center;gap:8px;font-size:11px}
+    .tf-bar-label{width:32px;text-align:right;color:var(--text-muted);flex-shrink:0}
+    .tf-bar-track{flex:1;background:var(--border);border-radius:4px;height:18px;overflow:hidden}
+    .tf-bar-fill{height:100%;border-radius:4px;background:var(--primary);transition:width .4s ease;min-width:2px;display:flex;align-items:center;padding-left:6px}
+    .tf-bar-val{font-size:10px;color:#fff;font-weight:700}
+    .tf-origem-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+    .roas-box{padding:16px;border-radius:10px;background:var(--card-bg);border:1px solid var(--border);margin-bottom:12px}
+    .roas-valor{font-size:32px;font-weight:900;color:var(--primary)}
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">📊 Tráfego & Conversões</div>
+      <div class="topbar-info">
+        <select id="filtroPeriodo" class="form-control" style="width:140px;font-size:13px" onchange="TrafegoModule.carregarDados()">
+          <option value="7">Últimos 7 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- SEMÁFORO DE INVESTIMENTO -->
+      <div id="cardSemaforo" style="margin-bottom:16px"></div>
+
+      <!-- ORÇAMENTO SEMANAL -->
+      <div id="cardOrcamento" style="margin-bottom:16px"></div>
+
+      <!-- SETUP -->
+      <div id="setupSection"></div>
+
+      <!-- LINKS DE RASTREAMENTO -->
+      <div class="card" id="linksCard" style="margin-bottom:16px;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin:0">🔗 Links de Rastreamento</div>
+          <button class="btn btn-outline btn-sm" onclick="TrafegoModule.abrirConfig()">⚙️ Config</button>
+        </div>
+        <div id="linksContainer"></div>
+        <div class="text-muted fs-sm" style="margin-top:8px">Use estes links no Instagram. Cada clique é registrado automaticamente.</div>
+      </div>
+
+      <!-- CARDS DE MÉTRICAS -->
+      <div class="stats-grid" id="metricsCards" style="display:none">
+        <div class="stat-card">
+          <div class="stat-label">Cliques no Período</div>
+          <div class="stat-value" id="statCliques">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Média por Dia</div>
+          <div class="stat-value" id="statMedia">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Novos Clientes (Instagram)</div>
+          <div class="stat-value success" id="statClientes">—</div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" title="Receita Instagram ÷ Gasto com anúncios">
+          <div class="stat-label">ROAS</div>
+          <div class="stat-value" id="statRoas" style="color:var(--primary)">—</div>
+        </div>
+      </div>
+
+      <!-- CORPO PRINCIPAL -->
+      <div id="mainContent" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+
+          <!-- GRÁFICO DE CLIQUES -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:4px">📈 Cliques por Dia</div>
+            <div class="text-muted fs-sm" style="margin-bottom:12px" id="graficoSub"></div>
+            <div id="graficoBarras"></div>
+          </div>
+
+          <!-- ORIGENS -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:12px">🎯 Por Origem</div>
+            <div id="origensLista"></div>
+            <div style="margin-top:16px">
+              <div class="card-title" style="margin-bottom:8px;font-size:13px">📱 Por Horário (pico)</div>
+              <div id="horarioBarras"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROAS -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="margin-bottom:16px">💰 ROAS — Retorno sobre Anúncios</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start">
+
+            <div class="roas-box">
+              <div class="stat-label" style="margin-bottom:8px">Gasto com Anúncios (R$)</div>
+              <input type="number" id="inputGasto" class="form-control" min="0" step="0.01" placeholder="0,00"
+                style="font-size:18px;font-weight:700;text-align:center"
+                oninput="TrafegoModule.calcularRoas()" value="">
+              <div class="text-muted fs-sm" style="margin-top:6px">Digite o valor gasto no Meta Ads no período</div>
+            </div>
+
+            <div class="roas-box">
+              <div class="stat-label" style="margin-bottom:8px">Receita (clientes Instagram)</div>
+              <div class="roas-valor" id="roasReceita">R$ 0,00</div>
+              <div class="text-muted fs-sm" style="margin-top:6px">Calculado a partir de clientes com origem Instagram</div>
+            </div>
+
+            <div class="roas-box" style="border-color:var(--primary)">
+              <div class="stat-label" style="margin-bottom:8px">ROAS</div>
+              <div class="roas-valor" id="roasValor">—</div>
+              <div class="text-muted fs-sm" style="margin-top:6px" id="roasDesc">Receita ÷ Gasto com anúncios</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text-muted)">REFERÊNCIA DE ROAS</div>
+            <div style="display:flex;gap:16px;font-size:12px;flex-wrap:wrap">
+              <span style="color:var(--danger)">▪ Abaixo de 2x — prejuízo</span>
+              <span style="color:var(--warning)">▪ 2x a 3x — razoável</span>
+              <span style="color:var(--success)">▪ 3x a 5x — bom</span>
+              <span style="color:var(--primary)">▪ Acima de 5x — excelente</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DISPOSITIVOS -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title" style="margin-bottom:12px">📱 Dispositivos & Acesso</div>
+          <div id="dispositivosInfo" style="display:flex;gap:24px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+
+      <!-- LOADING / EMPTY -->
+      <div id="statusMsg" style="display:none;text-align:center;padding:40px;color:var(--text-muted)"></div>
+
+    </div>
+  </div>
+
+  <!-- MODAL CONFIG -->
+  <div class="modal-overlay" id="modalTrafegoConfig" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">⚙️ Configurar Rastreamento</span>
+        <button class="modal-close" onclick="Utils.fecharModal('modalTrafegoConfig')">✕</button>
+      </div>
+      <div style="padding:16px 0">
+        <div class="form-group">
+          <label class="form-label">URL da sua página de rastreamento</label>
+          <input type="text" id="inputTrackingUrl" class="form-control" placeholder="https://movepecalcados.vercel.app">
+          <div class="text-muted fs-sm" style="margin-top:4px">URL que você recebeu ao publicar no Vercel</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mensagem padrão no WhatsApp</label>
+          <input type="text" id="inputWaMsg" class="form-control" placeholder="Oi! Vim pelo Instagram e quero ver os calçados 👟">
+        </div>
+        <hr style="border-color:var(--border);margin:16px 0">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px">Baixar página de rastreamento</div>
+        <p class="text-muted fs-sm" style="margin-bottom:12px">Gera o arquivo HTML pronto para publicar no Vercel (já com sua configuração do Firebase embutida).</p>
+        <button class="btn btn-primary" onclick="TrafegoModule.gerarPaginaRastreamento()">⬇️ Baixar página de rastreamento</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="Utils.fecharModal('modalTrafegoConfig')">Cancelar</button>
+        <button class="btn btn-success" onclick="TrafegoModule.salvarConfig()">✅ Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/trafego.js"></script>
+</body>
+</html>

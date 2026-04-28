@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Move Pé Calçados</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#faf8f5;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px}
+    .logo{font-size:28px;font-weight:900;color:#1a1a1a;letter-spacing:-1px}
+    .sub{font-size:13px;color:#888;letter-spacing:2px;text-transform:uppercase}
+    .spinner{width:36px;height:36px;border:3px solid #eee;border-top-color:#25D366;border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .msg{font-size:13px;color:#999}
+  </style>
+</head>
+<body>
+  <div class="logo">MOVE PÉ</div>
+  <div class="sub">Calçados</div>
+  <div class="spinner"></div>
+  <div class="msg">Abrindo WhatsApp...</div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script>
+    // ═══════════════════════════════════════════════
+    //  CONFIG — gerada automaticamente pelo PDV
+    //  Não edite manualmente
+    // ═══════════════════════════════════════════════
+    const FIREBASE_CONFIG = PLACEHOLDER_FIREBASE_CONFIG;
+    const WHATSAPP        = '5541988423452';
+    const WHATSAPP_MSG    = encodeURIComponent('Oi! Vim pelo Instagram e quero ver os calçados 👟');
+
+    // Lê parâmetros da URL
+    // ?o=bio  ?o=story  ?o=anuncio&c=nome-da-campanha
+    const p       = new URLSearchParams(location.search);
+    const origem  = p.get('o') || p.get('origem') || 'direto';
+    const campanha = p.get('c') || p.get('campanha') || '';
+
+    // Registra o clique no Firebase
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      const db  = firebase.firestore();
+      const now = new Date();
+      db.collection('movePe_trafego').add({
+        origem,
+        campanha,
+        ts:          firebase.firestore.FieldValue.serverTimestamp(),
+        data:        now.toISOString().slice(0, 10),
+        hora:        now.getHours(),
+        via:         /instagram/i.test(navigator.userAgent) ? 'app_instagram' : 'browser',
+        dispositivo: /mobile|android|iphone|ipad/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
+      }).catch(() => {});
+    } catch(e) {}
+
+    // Redireciona para o WhatsApp após breve pausa
+    setTimeout(() => {
+      location.href = 'https://wa.me/' + WHATSAPP + '?text=' + WHATSAPP_MSG;
+    }, 700);
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@
 let _tabAtual = 'resumo';
 let _subContasAtual = 'pagar';
 let _despesaEditando = null;
+let _filtroOrigem = 'todas';
 
 const Fin = {
 
@@ -26,7 +27,7 @@ const Fin = {
     _tabAtual = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    ['resumo','dre','fluxo30','ranking','reposicao','precificacao','contas','metas','diagnostico'].forEach(t => {
+    ['resumo','dre','fluxo30','ranking','reposicao','precificacao','contas','metas','diagnostico','trafego'].forEach(t => {
       const el = document.getElementById('tab-' + t);
       if (el) el.style.display = t === tab ? '' : 'none';
     });
@@ -37,12 +38,47 @@ const Fin = {
     _subContasAtual = sub;
     document.querySelectorAll('.tab-btn-sub').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    document.getElementById('contasPagar').style.display    = sub === 'pagar'     ? '' : 'none';
-    document.getElementById('contasReceber').style.display  = sub === 'receber'   ? '' : 'none';
-    document.getElementById('contasRetiradas').style.display = sub === 'retiradas' ? '' : 'none';
+    document.getElementById('contasPagar').style.display       = sub === 'pagar'       ? '' : 'none';
+    document.getElementById('contasReceber').style.display     = sub === 'receber'     ? '' : 'none';
+    document.getElementById('contasRetiradas').style.display   = sub === 'retiradas'   ? '' : 'none';
+    document.getElementById('contasPrioridades').style.display = sub === 'prioridades' ? '' : 'none';
+    document.getElementById('contasEmprestimo').style.display  = sub === 'emprestimo'  ? '' : 'none';
     const btnNova = document.getElementById('btnNovaDespesa');
-    if (btnNova) btnNova.style.display = sub === 'receber' ? 'none' : 'flex';
+    if (btnNova) btnNova.style.display = (sub === 'receber' || sub === 'prioridades' || sub === 'emprestimo') ? 'none' : 'flex';
     Fin.renderContas();
+  },
+
+  _setFiltroOrigem: (origem, btn) => {
+    _filtroOrigem = origem;
+    document.querySelectorAll('.filtro-origem-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    Fin._renderDespesas();
+  },
+
+  _setOrigemModal: (origem) => {
+    document.getElementById('hiddenOrigem').value = origem;
+    document.getElementById('btnOrigemLoja').style.background    = origem === 'loja'     ? 'var(--primary)' : '';
+    document.getElementById('btnOrigemLoja').style.color         = origem === 'loja'     ? '#fff' : '';
+    document.getElementById('btnOrigemPessoal').style.background = origem === 'pessoal'  ? '#8b5cf6' : '';
+    document.getElementById('btnOrigemPessoal').style.color      = origem === 'pessoal'  ? '#fff' : '';
+    const sel = document.querySelector('#formDespesa select[name="categoria"]');
+    if (!sel) return;
+    if (origem === 'pessoal') {
+      sel.innerHTML = `
+        <option value="moradia">🏠 Moradia (aluguel, condomínio...)</option>
+        <option value="alimentacao">🍽️ Alimentação</option>
+        <option value="transporte">🚗 Transporte</option>
+        <option value="saude">❤️ Saúde / Remédio</option>
+        <option value="educacao">📚 Educação</option>
+        <option value="lazer">🎭 Lazer</option>
+        <option value="outros">Outros</option>`;
+    } else {
+      sel.innerHTML = `
+        <option value="fixo">Fixo (aluguel, salário...)</option>
+        <option value="variavel">Variável (fornecedor, frete...)</option>
+        <option value="imposto">Imposto / Taxa</option>
+        <option value="outros">Outros</option>`;
+    }
   },
 
   render: () => {
@@ -55,6 +91,7 @@ const Fin = {
     if (_tabAtual === 'contas')       Fin.renderContas();
     if (_tabAtual === 'metas')        Fin.renderMetas();
     if (_tabAtual === 'diagnostico')  Fin.renderDiagnostico();
+    if (_tabAtual === 'trafego')      Fin.renderTrafego();
   },
 
   // ---- CÁLCULOS BASE ----
@@ -62,41 +99,51 @@ const Fin = {
     const inicio = mes + '-01';
     const fim    = mes + '-31';
 
-    // Receita bruta (vendas pagas no mês)
+    const produtosCache = {};
+    const getCMVVenda = (venda) => {
+      if (!venda || !venda.itens) return 0;
+      let c = 0;
+      venda.itens.forEach(item => {
+        let custo = parseFloat(item.precoCusto) || 0;
+        if (!custo && item.produtoId) {
+          if (!produtosCache[item.produtoId]) produtosCache[item.produtoId] = DB.Produtos.buscar(item.produtoId);
+          const prod = produtosCache[item.produtoId];
+          custo = prod ? (parseFloat(prod.precoCusto) || 0) : 0;
+        }
+        c += custo * (parseInt(item.quantidade) || 1);
+      });
+      return c;
+    };
+
+    // Receita de vendas à vista (exclui crediário — caixa ainda não entrou)
     const vendas = DB.Vendas.listarPorPeriodo(inicio, fim)
       .filter(v => v.formaPagamento !== 'crediario');
-    const receitaBruta = vendas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    const receitaVista = vendas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
 
-    // CMV — custo das mercadorias vendidas
-    // Usa precoCusto salvo no item; se não tiver (vendas antigas), busca do produto atual
-    const produtosCache = {};
-    let cmv = 0;
-    vendas.forEach(v => {
-      if (v.itens && v.itens.length) {
-        v.itens.forEach(item => {
-          let custo = parseFloat(item.precoCusto) || 0;
-          if (!custo && item.produtoId) {
-            if (!produtosCache[item.produtoId]) {
-              produtosCache[item.produtoId] = DB.Produtos.buscar(item.produtoId);
-            }
-            const prod = produtosCache[item.produtoId];
-            custo = prod ? (parseFloat(prod.precoCusto) || 0) : 0;
-          }
-          const qty = parseInt(item.quantidade) || 1;
-          cmv += custo * qty;
-        });
-      }
-    });
+    // CMV das vendas à vista
+    let cmvVista = 0;
+    vendas.forEach(v => { cmvVista += getCMVVenda(v); });
 
-    // Crediário recebido no mês
+    // Crediário recebido no mês + CMV proporcional sobre as parcelas pagas
     let crediarioRecebido = 0;
+    let cmvCrediario = 0;
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
+      const totalCred = parseFloat(cred.total) || 0;
+      const cmvCred = cred.vendaId ? getCMVVenda(DB.Vendas.buscar(cred.vendaId)) : 0;
       cred.parcelas.forEach(p => {
         if (p.status === 'pago' && p.dataPagamento && p.dataPagamento.startsWith(mes)) {
-          crediarioRecebido += parseFloat(p.valor) || 0;
+          const val = parseFloat(p.valor) || 0;
+          crediarioRecebido += val;
+          // Abate CMV proporcional: quanto dessa parcela representa do custo total da venda
+          if (totalCred > 0 && cmvCred > 0) cmvCrediario += (val / totalCred) * cmvCred;
         }
       });
     });
+    cmvCrediario = Math.round(cmvCrediario * 100) / 100;
+
+    const receitaBruta  = receitaVista + crediarioRecebido; // total de caixa no mês
+    const cmv           = Math.round((cmvVista + cmvCrediario) * 100) / 100;
 
     // Taxas de cartão
     const taxasCartao = vendas.reduce((s, v) => s + (parseFloat(v.valorTaxaCartao) || 0), 0);
@@ -125,10 +172,12 @@ const Fin = {
     const margemLiquida = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0;
 
     return {
-      receitaBruta, cmv, lucroBruto, margemBruta,
+      receitaBruta, receitaVista, crediarioRecebido,
+      cmv, cmvVista, cmvCrediario,
+      lucroBruto, margemBruta,
       despFixas, despVariaveis, taxasCartao, totalDespesas,
       totalRetiradas, lucroLiquido, margemLiquida,
-      crediarioRecebido, outrasEntradas,
+      outrasEntradas,
       qtdVendas: vendas.length
     };
   },
@@ -140,9 +189,16 @@ const Fin = {
     const d   = Fin.calcularDRE(mes);
     const aReceber = DB.Crediario.totalPendente();
 
+    const subReceita = d.crediarioRecebido > 0
+      ? `${d.qtdVendas} vendas à vista + ${Utils.moeda(d.crediarioRecebido)} crediário`
+      : `${d.qtdVendas} vendas no mês`;
+    const subCMV = d.cmvCrediario > 0
+      ? `vista: ${Utils.moeda(d.cmvVista)} + crediário: ${Utils.moeda(d.cmvCrediario)}`
+      : 'custo dos produtos vendidos';
+
     const stats = [
-      { label: 'Receita Bruta', valor: d.receitaBruta, cor: 'success', sub: `${d.qtdVendas} vendas` },
-      { label: 'Custo Mercadorias (CMV)', valor: d.cmv, cor: 'danger', sub: 'custo dos produtos vendidos' },
+      { label: 'Receita do Mês', valor: d.receitaBruta, cor: 'success', sub: subReceita },
+      { label: 'Custo Mercadorias (CMV)', valor: d.cmv, cor: 'danger', sub: subCMV },
       { label: 'Lucro Bruto', valor: d.lucroBruto, cor: d.lucroBruto >= 0 ? 'success' : 'danger', sub: `Margem: ${d.margemBruta.toFixed(1)}%` },
       { label: 'Despesas do Mês', valor: d.totalDespesas, cor: 'danger', sub: 'fixas + variáveis + taxas' },
       { label: 'Lucro Líquido', valor: d.lucroLiquido, cor: d.lucroLiquido >= 0 ? 'success' : 'danger', sub: `Margem: ${d.margemLiquida.toFixed(1)}%`, destaque: true },
@@ -169,8 +225,96 @@ const Fin = {
         <span style="width:12px;height:12px;background:var(--info);border-radius:2px;display:inline-block"></span> Saídas
       </span>`;
 
+    // Previsão de recebimento crediário
+    Fin._renderPrevisaoCrediario();
+
     // Movimentações
     Fin._renderMovimentacoes(mes);
+  },
+
+  _renderPrevisaoCrediario: () => {
+    const cont = document.getElementById('cardPrevisaoCrediario');
+    if (!cont) return;
+
+    const hoje = new Date();
+    const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const mesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+
+    // Monta os próximos 3 meses (mês atual + 2)
+    const meses = [0, 1, 2].map(offset => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + offset, 1);
+      const chave = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = `${nomes[d.getMonth()]}/${d.getFullYear()}`;
+      return { chave, label, offset };
+    });
+
+    // Agrupa parcelas pendentes por mês
+    const dados = {};
+    meses.forEach(m => { dados[m.chave] = { total: 0, parcelas: [], label: m.label, offset: m.offset }; });
+
+    const totalGeralPendente = { total: 0, count: 0 };
+    DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
+      cred.parcelas.forEach(p => {
+        if (p.status === 'pago' || !p.vencimento) return;
+        const mes = p.vencimento.substring(0, 7);
+        const val = parseFloat(p.valor) || 0;
+        if (dados[mes]) {
+          dados[mes].total += val;
+          dados[mes].parcelas.push({ cliente: cred.clienteNome || 'Cliente', valor: val, vencimento: p.vencimento });
+        }
+        totalGeralPendente.total += val;
+        totalGeralPendente.count++;
+      });
+    });
+
+    const totalTresMeses = meses.reduce((s, m) => s + dados[m.chave].total, 0);
+
+    const cores = ['var(--warning)', 'var(--primary)', 'var(--success)'];
+    const labels = ['Mês atual', 'Próximo mês', 'Daqui a 2 meses'];
+
+    const blocos = meses.map((m, i) => {
+      const d = dados[m.chave];
+      const pcts = totalTresMeses > 0 ? Math.round((d.total / totalTresMeses) * 100) : 0;
+      const cor = cores[i];
+      const top5 = d.parcelas.sort((a, b) => b.valor - a.valor).slice(0, 4);
+      return `
+        <div style="flex:1;min-width:200px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.04em">${labels[i]}</div>
+              <div style="font-weight:700;font-size:13px;color:var(--text)">${m.label}</div>
+            </div>
+            <div style="font-size:18px;font-weight:800;color:${d.total > 0 ? cor : 'var(--text-muted)'}">${Utils.moeda(d.total)}</div>
+          </div>
+          <div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:8px;overflow:hidden">
+            <div style="height:100%;width:${pcts}%;background:${cor};border-radius:4px;transition:width .4s"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${d.parcelas.length} parcela(s) prevista(s)</div>
+          ${top5.length > 0 ? top5.map(p => `
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border)">
+              <span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">${p.cliente}</span>
+              <span style="font-weight:600;color:var(--text)">${Utils.moeda(p.valor)}</span>
+            </div>`).join('') : '<div style="font-size:11px;color:var(--text-muted)">Nenhuma parcela</div>'}
+          ${d.parcelas.length > 4 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+${d.parcelas.length - 4} outros</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const alertaFuturo = totalGeralPendente.total > totalTresMeses
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0 0">
+          ℹ️ Mais ${Utils.moeda(totalGeralPendente.total - totalTresMeses)} a receber após os próximos 3 meses
+        </div>` : '';
+
+    cont.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin:0">📅 Previsão de Recebimento — Crediário</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary)">
+          3 meses: ${Utils.moeda(totalTresMeses)}
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:4px">/ total pendente: ${Utils.moeda(totalGeralPendente.total)}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">${blocos}</div>
+      ${alertaFuturo}`;
   },
 
   _renderMovimentacoes: (mes) => {
@@ -183,6 +327,7 @@ const Fin = {
       }
     });
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         if (p.status === 'pago' && (p.dataPagamento || '').startsWith(mes)) {
           movs.push({ tipo: 'entrada', descricao: `Crediário — ${cred.clienteNome || ''} Parcela ${p.numero}`, valor: p.valor, data: p.dataPagamento, categoria: 'Crediário' });
@@ -238,10 +383,12 @@ const Fin = {
         <div class="card-title" style="margin:0">📋 DRE — ${nomeMes}</div>
       </div>
       ${separador('Receitas')}
-      ${linha('Receita Bruta de Vendas', d.receitaBruta, 'pos', `${d.qtdVendas} vendas no mês`)}
-      ${d.crediarioRecebido > 0 ? linha('(+) Crediário Recebido', d.crediarioRecebido, 'pos') : ''}
+      ${linha('Vendas à Vista / PIX / Cartão', d.receitaVista, 'pos', `${d.qtdVendas} vendas no mês`)}
+      ${d.crediarioRecebido > 0 ? linha('(+) Crediário Recebido', d.crediarioRecebido, 'pos', 'parcelas pagas no mês') : ''}
+      ${d.crediarioRecebido > 0 ? linha('= Total de Caixa', d.receitaBruta, 'pos') : ''}
       ${separador('Custos')}
-      ${linha('(−) Custo das Mercadorias Vendidas (CMV)', d.cmv, 'neg', 'custo de compra dos produtos vendidos')}
+      ${linha('(−) CMV — Vendas à Vista', d.cmvVista, 'neg', 'custo dos produtos vendidos à vista')}
+      ${d.cmvCrediario > 0 ? linha('(−) CMV — Crediário Recebido', d.cmvCrediario, 'neg', 'custo proporcional das parcelas pagas') : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:2px solid var(--border);border-top:2px solid var(--border);background:rgba(var(--success-rgb),.05);margin:8px -16px;padding:12px 16px">
         <div style="font-weight:700;font-size:15px">= LUCRO BRUTO</div>
         <div style="font-weight:800;font-size:18px;color:${d.lucroBruto >= 0 ? 'var(--success)' : 'var(--danger)'}">${Utils.moeda(d.lucroBruto)} <span style="font-size:12px;font-weight:600">(${d.margemBruta.toFixed(1)}%)</span></div>
@@ -258,7 +405,7 @@ const Fin = {
 
     // Card de alertas e observações
     const obs = [];
-    if (d.cmv === 0) obs.push('⚠️ CMV zerado — cadastre o <strong>Preço de Custo</strong> nos produtos para calcular o lucro real.');
+    if (d.cmv === 0 && d.receitaBruta > 0) obs.push('⚠️ CMV zerado — cadastre o <strong>Preço de Custo</strong> nos produtos para calcular o lucro real.');
     if (d.despFixas === 0 && d.despVariaveis === 0) obs.push('⚠️ Nenhuma despesa cadastrada — vá em <strong>Contas</strong> e registre seus gastos fixos para ver o lucro real.');
     if (d.margemLiquida < 10 && d.receitaBruta > 0) obs.push('🔴 Margem líquida baixa (menos de 10%) — revise preços e despesas.');
     if (d.margemBruta > 0 && d.margemBruta < 30) obs.push('🟡 Margem bruta abaixo de 30% — considere revisar os preços de compra ou venda.');
@@ -302,7 +449,7 @@ const Fin = {
     const precos = [
       { label: 'Preço mínimo (sem lucro)', valor: precoMinimo, cor: 'var(--danger)' },
       { label: `Preço ideal (${pLucro}% lucro)`, valor: precoIdeal, cor: 'var(--success)', destaque: true },
-      { label: '+5% margem extra', valor: custo / (divisor - 0.05), cor: 'var(--primary)' },
+      ...(divisor - 0.05 > 0 ? [{ label: '+5% margem extra', valor: custo / (divisor - 0.05), cor: 'var(--primary)' }] : []),
     ];
 
     res.innerHTML = `
@@ -326,6 +473,8 @@ const Fin = {
       return;
     }
 
+    const margemMinima = DB.Config.get('margemMinima', 25);
+
     const linhas = produtos
       .filter(p => p.precoVenda && p.precoCusto)
       .map(p => {
@@ -342,7 +491,21 @@ const Fin = {
       return;
     }
 
+    const abaixoMinima = linhas.filter(l => l.margem < margemMinima).length;
+
     cont.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <label style="font-weight:600;white-space:nowrap">Margem mínima aceitável:</label>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="number" id="inputMargemMinima" value="${margemMinima}" min="0" max="100" step="1"
+              style="width:68px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center">
+            <span style="font-weight:600">%</span>
+            <button onclick="Fin._salvarMargemMinima()" class="btn btn-primary btn-sm" style="margin-left:4px">Salvar</button>
+          </div>
+        </div>
+        ${abaixoMinima > 0 ? `<span style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:3px 10px;font-size:12px;color:var(--danger);font-weight:600">⚠ ${abaixoMinima} produto${abaixoMinima !== 1 ? 's' : ''} abaixo de ${margemMinima}%</span>` : `<span style="color:var(--success);font-size:12px;font-weight:600">✓ Todos os produtos acima de ${margemMinima}%</span>`}
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
@@ -354,9 +517,14 @@ const Fin = {
           </tr></thead>
           <tbody>
             ${linhas.map(l => {
-              const corMargem = l.margem < 20 ? 'var(--danger)' : l.margem < 35 ? 'var(--warning)' : 'var(--success)';
-              return `<tr>
-                <td style="padding:9px 8px;font-weight:600;font-size:13px">${l.p.nome}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400">${l.p.marca || ''}</span></td>
+              const abaixo = l.margem < margemMinima;
+              const corMargem = abaixo ? 'var(--danger)' : l.margem < 35 ? 'var(--warning)' : 'var(--success)';
+              const rowStyle = abaixo ? 'background:rgba(239,68,68,.04)' : '';
+              return `<tr style="${rowStyle}">
+                <td style="padding:9px 8px;font-weight:600;font-size:13px">
+                  ${abaixo ? '<span style="color:var(--danger);margin-right:4px">🔴</span>' : ''}${l.p.nome}<br>
+                  <span style="font-size:11px;color:var(--text-muted);font-weight:400">${l.p.marca || ''}</span>
+                </td>
                 <td style="padding:9px 8px;text-align:right;font-size:13px">${Utils.moeda(l.custo)}</td>
                 <td style="padding:9px 8px;text-align:right;font-size:13px">${Utils.moeda(l.venda)}</td>
                 <td style="padding:9px 8px;text-align:right;font-weight:700;font-size:13px">${Utils.moeda(l.lucro)}</td>
@@ -369,28 +537,103 @@ const Fin = {
         </table>
       </div>
       <div class="text-muted fs-sm" style="padding:8px 4px">
-        🔴 &lt; 20% risco | 🟡 20–35% atenção | 🟢 &gt; 35% saudável
+        🔴 Abaixo da margem mínima (${margemMinima}%) | 🟡 25–35% atenção | 🟢 &gt; 35% saudável
       </div>`;
+  },
+
+  _salvarMargemMinima: () => {
+    const val = parseInt(document.getElementById('inputMargemMinima')?.value);
+    if (isNaN(val) || val < 0 || val > 100) { Utils.toast('Valor inválido (0–100)', 'error'); return; }
+    DB.Config.set('margemMinima', val);
+    Fin._renderTabelaMargens();
+    Utils.toast(`Margem mínima definida em ${val}%`, 'success');
   },
 
   // ---- ABA CONTAS ----
   renderContas: () => {
-    if (_subContasAtual === 'pagar')     Fin._renderDespesas();
-    else if (_subContasAtual === 'receber')   Fin._renderReceber();
-    else if (_subContasAtual === 'retiradas') Fin._renderRetiradas();
+    if (_subContasAtual === 'pagar')           Fin._renderDespesas();
+    else if (_subContasAtual === 'receber')    Fin._renderReceber();
+    else if (_subContasAtual === 'retiradas')  Fin._renderRetiradas();
+    else if (_subContasAtual === 'prioridades') Fin._renderPrioridades();
+    else if (_subContasAtual === 'emprestimo')  Fin._renderEmprestimo();
   },
 
   _renderDespesas: () => {
-    const mes      = Fin.getMes();
-    const despesas = DB.Despesas.listar().filter(d =>
-      d.recorrente || (d.vencimento || '').startsWith(mes)
-    ).sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''));
-
+    const mes  = Fin.getMes();
     const hoje = Utils.hoje();
     const cont = document.getElementById('listaDespesas');
 
+    const todasDoMes = DB.Despesas.listar().filter(d =>
+      d.recorrente || (d.vencimento || '').startsWith(mes)
+    ).sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''));
+
+    const despesas = _filtroOrigem === 'todas' ? todasDoMes
+      : todasDoMes.filter(d => (d.origem || 'loja') === _filtroOrigem);
+
     const totalPendente = despesas.filter(d => !d.pago).reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
     const totalPago     = despesas.filter(d => d.pago).reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+
+    // Card de total geral — responde ao filtro ativo
+    const todasNaoPagas = DB.Despesas.listar().filter(d => !d.pago);
+    const totalLojaG    = todasNaoPagas.filter(d => (d.origem || 'loja') === 'loja').reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    const totalPessoalG = todasNaoPagas.filter(d => d.origem === 'pessoal').reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    const totalGeralG   = totalLojaG + totalPessoalG;
+    const filtradas     = _filtroOrigem === 'todas' ? todasNaoPagas : todasNaoPagas.filter(d => (d.origem || 'loja') === _filtroOrigem);
+    const totalFiltrado = filtradas.reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    const totalVencido  = filtradas.filter(d => d.vencimento && d.vencimento < hoje).reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
+    const qtdVencidas   = filtradas.filter(d => d.vencimento && d.vencimento < hoje).length;
+    const cardGeral     = document.getElementById('totalGeralDividas');
+    if (cardGeral) {
+      if (totalGeralG === 0) {
+        cardGeral.innerHTML = '';
+      } else if (_filtroOrigem === 'todas') {
+        cardGeral.innerHTML = `
+          <div style="background:var(--card-bg);border:2px solid var(--danger);border-radius:var(--radius);padding:16px 20px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">💳 Total Geral de Dívidas (todos os meses)</div>
+            <div style="font-size:36px;font-weight:900;color:var(--danger);line-height:1">${Utils.moeda(totalGeralG)}</div>
+            <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap">
+              <div style="border-left:4px solid var(--primary);padding-left:12px">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">🏪 Loja</div>
+                <div style="font-size:18px;font-weight:800;color:var(--primary)">${Utils.moeda(totalLojaG)}</div>
+              </div>
+              <div style="border-left:4px solid #8b5cf6;padding-left:12px">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">🏠 Pessoal</div>
+                <div style="font-size:18px;font-weight:800;color:#8b5cf6">${Utils.moeda(totalPessoalG)}</div>
+              </div>
+              <div style="border-left:4px solid var(--danger);padding-left:12px">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">⚠ Vencidas${qtdVencidas > 0 ? ' (' + qtdVencidas + ')' : ''}</div>
+                <div style="font-size:18px;font-weight:800;color:var(--danger)">${Utils.moeda(totalVencido)}</div>
+              </div>
+            </div>
+          </div>`;
+      } else {
+        const isLoja  = _filtroOrigem === 'loja';
+        const cor     = isLoja ? 'var(--primary)' : '#8b5cf6';
+        const label   = isLoja ? '🏪 Dívidas da Loja' : '🏠 Dívidas Pessoais';
+        const outroCor   = isLoja ? '#8b5cf6' : 'var(--primary)';
+        const outroLabel = isLoja ? '🏠 Pessoal' : '🏪 Loja';
+        const outroValor = isLoja ? totalPessoalG : totalLojaG;
+        cardGeral.innerHTML = `
+          <div style="background:var(--card-bg);border:2px solid ${cor};border-radius:var(--radius);padding:16px 20px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${label} (todos os meses)</div>
+            <div style="font-size:36px;font-weight:900;color:${cor};line-height:1">${Utils.moeda(totalFiltrado)}</div>
+            <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap">
+              <div style="border-left:4px solid var(--danger);padding-left:12px">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">⚠ Vencidas</div>
+                <div style="font-size:18px;font-weight:800;color:var(--danger)">${Utils.moeda(totalVencido)}</div>
+              </div>
+              <div style="border-left:4px solid var(--border);padding-left:12px">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">📅 A Vencer</div>
+                <div style="font-size:18px;font-weight:800;color:var(--text)">${Utils.moeda(totalFiltrado - totalVencido)}</div>
+              </div>
+              <div style="border-left:4px solid ${outroCor};padding-left:12px;opacity:.7">
+                <div style="font-size:11px;color:var(--text-muted);font-weight:600">${outroLabel} (separado)</div>
+                <div style="font-size:18px;font-weight:800;color:${outroCor}">${Utils.moeda(outroValor)}</div>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
 
     if (!despesas.length) {
       cont.innerHTML = `<div class="empty-state" style="padding:40px 20px">
@@ -408,12 +651,17 @@ const Fin = {
         <span style="font-size:13px">Total: <strong>${Utils.moeda(totalPendente + totalPago)}</strong></span>
       </div>
       ${despesas.map(d => {
-        const vencida  = !d.pago && d.vencimento && d.vencimento < hoje;
+        const vencida   = !d.pago && d.vencimento && d.vencimento < hoje;
         const venceHoje = !d.pago && d.vencimento === hoje;
+        const isPessoal = d.origem === 'pessoal';
+        const corBorda  = isPessoal ? '#8b5cf6' : 'var(--primary)';
+        const badge     = isPessoal
+          ? '<span style="font-size:10px;background:rgba(139,92,246,.15);color:#8b5cf6;border-radius:4px;padding:1px 6px;font-weight:700">🏠 Pessoal</span>'
+          : '<span style="font-size:10px;background:var(--primary-dim);color:var(--primary);border-radius:4px;padding:1px 6px;font-weight:700">🏪 Loja</span>';
         return `
-        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);${d.pago ? 'opacity:.55' : ''}">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);border-left:4px solid ${corBorda};${d.pago ? 'opacity:.55' : ''}">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:14px">${d.descricao}</div>
+            <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px">${d.descricao} ${badge}</div>
             <div style="font-size:12px;color:var(--text-muted)">
               ${d.categoria || ''} ${d.recorrente ? '· Recorrente' : ''}
               ${d.vencimento ? '· Vence: ' + Utils.data(d.vencimento) : ''}
@@ -437,6 +685,7 @@ const Fin = {
     const parcelas = [];
 
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach((p, idx) => {
         if (p.status !== 'pago') {
           const cli = DB.Clientes.buscar(cred.clienteId);
@@ -493,8 +742,9 @@ const Fin = {
     f.descricao.value    = src.descricao   || '';
     f.valor.value        = src.valor       || '';
     f.vencimento.value   = src.vencimento  || '';
-    f.categoria.value    = src.categoria   || 'fixo';
     f.recorrente.checked = !!src.recorrente;
+    Fin._setOrigemModal(src.origem || 'loja');
+    f.categoria.value    = src.categoria   || (src.origem === 'pessoal' ? 'moradia' : 'fixo');
     Utils.abrirModal('modalDespesa');
   },
 
@@ -508,6 +758,7 @@ const Fin = {
       vencimento: f.vencimento.value || null,
       categoria: f.categoria.value,
       recorrente: f.recorrente.checked,
+      origem: f.origem.value || 'loja',
       pago: _despesaEditando ? (_despesaEditando.pago || false) : false
     });
     Utils.fecharModal('modalDespesa');
@@ -526,6 +777,49 @@ const Fin = {
     DB.Despesas.excluir(id);
     Fin.renderContas();
     Utils.toast('Despesa excluída');
+  },
+
+  // ---- RENDA PESSOAL ----
+  _abrirFormRendaPessoal: (id) => {
+    const item = id ? DB.RendaPessoal.listar().find(r => r.id === id) : null;
+    document.getElementById('rendaId').value          = id || '';
+    document.getElementById('rendaTipo').value        = item?.tipo        || 'prolabore';
+    document.getElementById('rendaDescricao').value   = item?.descricao   || '';
+    document.getElementById('rendaValor').value       = item?.valor       || '';
+    document.getElementById('modalRendaTitulo').textContent = id ? 'Editar Fonte de Renda' : 'Nova Fonte de Renda';
+    if (!id) Fin._onRendaTipoChange();
+    Utils.abrirModal('modalRendaPessoal');
+  },
+
+  _onRendaTipoChange: () => {
+    const tipo = document.getElementById('rendaTipo')?.value;
+    const desc = document.getElementById('rendaDescricao');
+    if (!desc || desc.value.trim()) return;
+    if (tipo === 'prolabore')       desc.value = 'Pró-labore';
+    else if (tipo === 'salario_conjuge') desc.value = 'Salário esposa';
+    else desc.value = '';
+  },
+
+  _salvarRendaPessoal: (event) => {
+    event.preventDefault();
+    const id   = document.getElementById('rendaId').value;
+    const item = {
+      id:        id || undefined,
+      tipo:      document.getElementById('rendaTipo').value,
+      descricao: document.getElementById('rendaDescricao').value.trim(),
+      valor:     parseFloat(document.getElementById('rendaValor').value) || 0,
+    };
+    if (!item.descricao || !item.valor) { Utils.toast('Preencha todos os campos', 'error'); return; }
+    DB.RendaPessoal.salvar(item);
+    Utils.fecharModal('modalRendaPessoal');
+    Fin._renderPrioridades();
+    Utils.toast(id ? 'Renda atualizada!' : 'Renda cadastrada!', 'success');
+  },
+
+  _excluirRendaPessoal: (id) => {
+    if (!Utils.confirmar('Remover esta fonte de renda?')) return;
+    DB.RendaPessoal.excluir(id);
+    Fin._renderPrioridades();
   },
 
   // ---- ABA DIAGNÓSTICO ----
@@ -825,6 +1119,15 @@ const Fin = {
       });
     });
 
+    // Enriquecer com dados de grade
+    Object.entries(vendidos).forEach(([id, dados]) => {
+      const prod = DB.Produtos.buscar(id);
+      if (prod && prod.gradeId) {
+        const grade = DB.Grades ? DB.Grades.buscar(prod.gradeId) : null;
+        if (grade) dados.grade = grade;
+      }
+    });
+
     const cmvTotal = Object.values(vendidos).reduce((s, v) => s + v.cmv, 0);
 
     // Orçamento sugerido = CMV × (1 + % extra)
@@ -836,6 +1139,7 @@ const Fin = {
     const contasProx  = DB.Despesas.listar().filter(d => !d.pago && d.vencimento && d.vencimento >= hoje && d.vencimento <= em30str)
       .reduce((s, d) => s + (parseFloat(d.valor) || 0), 0);
     const credProx = DB.Crediario.listar().reduce((s, cred) => {
+      if (!cred.parcelas) return s;
       cred.parcelas.forEach(p => {
         if (p.status !== 'pago' && p.vencimento >= hoje && p.vencimento <= em30str)
           s += parseFloat(p.valor) || 0;
@@ -851,11 +1155,25 @@ const Fin = {
     // Lista de produtos para repor (ordenada por CMV consumido)
     const listaRepor = Object.entries(vendidos)
       .map(([id, dados]) => {
-        const prod        = DB.Produtos.buscar(id);
+        const prod         = DB.Produtos.buscar(id);
         const estoqueAtual = prod ? DB.Produtos.estoqueTotal(prod) : 0;
-        const qtdRepor     = Math.ceil(dados.qtd * (1 + pctExtra / 100));
-        const custoEstim   = qtdRepor * dados.precoCusto;
-        return { id, ...dados, estoqueAtual, qtdRepor, custoEstim };
+        const grade        = dados.grade || null;
+
+        let qtdRepor, custoEstim, gradeLabel = null;
+
+        if (grade && grade.totalPares > 0) {
+          // Calcular em grades completas
+          const gradesNecessarias = Math.ceil(dados.qtd * (1 + pctExtra / 100) / grade.totalPares);
+          qtdRepor   = gradesNecessarias * grade.totalPares;
+          custoEstim = qtdRepor * dados.precoCusto;
+          const tamsStr = (grade.tamanhos || []).map(t => t.tam).join(', ');
+          gradeLabel = `${gradesNecessarias} grade${gradesNecessarias !== 1 ? 's' : ''} = ${qtdRepor} pares (${grade.nome}: ${tamsStr})`;
+        } else {
+          qtdRepor   = Math.ceil(dados.qtd * (1 + pctExtra / 100));
+          custoEstim = qtdRepor * dados.precoCusto;
+        }
+
+        return { id, ...dados, estoqueAtual, qtdRepor, custoEstim, gradeLabel };
       })
       .filter(r => r.qtdRepor > 0)
       .sort((a, b) => b.cmv - a.cmv);
@@ -919,7 +1237,7 @@ const Fin = {
           <span>Produto</span>
           <span style="text-align:right">Vendido</span>
           <span style="text-align:right">Estoque atual</span>
-          <span style="text-align:right">Repor (+${pctExtra}%)</span>
+          <span style="text-align:right">Repor (+${pctExtra}%) / Grades</span>
           <span style="text-align:right">Custo estimado</span>
         </div>
         ${listaRepor.map(r => {
@@ -935,7 +1253,12 @@ const Fin = {
             <div style="text-align:right;font-size:13px;font-weight:700;color:${estoqueBaixo ? 'var(--danger)' : estoqueOk ? 'var(--success)' : 'var(--warning)'}">
               ${r.estoqueAtual} un${estoqueBaixo ? ' ⚠️' : ''}
             </div>
-            <div style="text-align:right;font-size:13px;font-weight:700;color:var(--primary)">${r.qtdRepor} un</div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:var(--primary)">
+              ${r.gradeLabel
+                ? `<span title="${r.gradeLabel}" style="cursor:help">${r.gradeLabel.split('=')[0].trim()}</span>
+                   <div style="font-size:11px;color:var(--text-muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px">${r.gradeLabel.split('=').slice(1).join('=').trim()}</div>`
+                : `${r.qtdRepor} un`}
+            </div>
             <div style="text-align:right;font-size:13px;font-weight:700;color:${r.precoCusto > 0 ? 'var(--text)' : 'var(--text-muted)'}">
               ${r.precoCusto > 0 ? Utils.moeda(r.custoEstim) : '— sem custo'}
             </div>
@@ -1058,19 +1381,55 @@ const Fin = {
     const cont = document.getElementById('listaRetiradas');
     const lista = DB.Retiradas.listarPorMes(mes).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
     const total = lista.reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
+    const proLabore = DB.Config.get('proLabore', 0);
+    const limiteRetirada = DB.Config.get('limiteRetirada', 0);
+    const limiteUltrapassado = limiteRetirada > 0 && total > limiteRetirada;
+
+    // Verifica se já existe pró-labore lançado este mês
+    const jaTemProLabore = proLabore > 0 && lista.some(r =>
+      (r.descricao || '').toLowerCase().includes('pró-labore') || (r.descricao || '').toLowerCase().includes('pro-labore')
+    );
+
+    const bannerProLabore = proLabore > 0 && !jaTemProLabore ? `
+      <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:var(--radius-sm);padding:10px 14px;margin:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="font-size:13px">💡 Pró-labore de <strong>${Utils.moeda(proLabore)}</strong> ainda não registrado em ${mes.substring(5, 7)}/${mes.substring(0, 4)}</div>
+        <button class="btn btn-primary btn-sm" onclick="Fin._registrarProLabore()">Registrar agora</button>
+      </div>` : '';
+
+    const bannerLimite = limiteUltrapassado ? `
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:var(--radius-sm);padding:10px 14px;margin:0 16px 12px;font-size:13px;color:var(--danger);font-weight:600">
+        🚨 Limite de retirada mensal ultrapassado! Definido: ${Utils.moeda(limiteRetirada)} · Retirado: ${Utils.moeda(total)}
+      </div>` : '';
+
+    const configRetiradas = `
+      <div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <label style="font-weight:600;white-space:nowrap">Pró-labore/mês:</label>
+          <input type="number" id="inputProLabore" value="${proLabore || ''}" min="0" step="0.01"
+            placeholder="R$ 0,00"
+            style="width:100px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+          <button onclick="Fin._salvarConfigRetiradas()" class="btn btn-outline btn-sm">Salvar</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <label style="font-weight:600;white-space:nowrap">Limite mensal:</label>
+          <input type="number" id="inputLimiteRetirada" value="${limiteRetirada || ''}" min="0" step="0.01"
+            placeholder="Sem limite"
+            style="width:100px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        </div>
+      </div>`;
 
     const acoes = `
       <div style="padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <span style="font-size:13px">Total retirado no mês: <strong style="color:var(--danger)">${Utils.moeda(total)}</strong></span>
+        <span style="font-size:13px">Total retirado no mês: <strong style="color:${limiteUltrapassado ? 'var(--danger)' : 'var(--danger)'}">${Utils.moeda(total)}</strong>${limiteRetirada > 0 ? ` <span style="color:var(--text-muted)">/ limite ${Utils.moeda(limiteRetirada)}</span>` : ''}</span>
         <button class="btn btn-primary btn-sm" onclick="Fin.abrirFormRetirada()">+ Nova Retirada</button>
       </div>`;
 
     if (!lista.length) {
-      cont.innerHTML = acoes + `<div class="empty-state" style="padding:32px"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma retirada em ${mes}</div><div class="empty-sub">Registre suas retiradas pessoais para ter controle financeiro real</div></div>`;
+      cont.innerHTML = configRetiradas + acoes + bannerProLabore + `<div class="empty-state" style="padding:32px"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma retirada em ${mes}</div><div class="empty-sub">Registre suas retiradas pessoais para ter controle financeiro real</div></div>`;
       return;
     }
 
-    cont.innerHTML = acoes + lista.map(r => `
+    cont.innerHTML = configRetiradas + acoes + bannerProLabore + bannerLimite + lista.map(r => `
       <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:14px">${r.descricao || 'Retirada'}</div>
@@ -1082,6 +1441,27 @@ const Fin = {
           <button class="btn btn-danger btn-sm" onclick="Fin.excluirRetirada('${r.id}')">🗑</button>
         </div>
       </div>`).join('');
+  },
+
+  _salvarConfigRetiradas: () => {
+    const pl = parseFloat(document.getElementById('inputProLabore')?.value) || 0;
+    const lm = parseFloat(document.getElementById('inputLimiteRetirada')?.value) || 0;
+    DB.Config.set('proLabore', pl);
+    DB.Config.set('limiteRetirada', lm);
+    Fin._renderRetiradas();
+    Utils.toast('Configuração salva!', 'success');
+  },
+
+  _registrarProLabore: () => {
+    const proLabore = DB.Config.get('proLabore', 0);
+    if (!proLabore) return;
+    DB.Retiradas.salvar({
+      data: Utils.hoje(),
+      valor: proLabore,
+      descricao: 'Pró-labore'
+    });
+    Fin._renderRetiradas();
+    Utils.toast(`Pró-labore de ${Utils.moeda(proLabore)} registrado!`, 'success');
   },
 
   abrirFormRetirada: (id) => {
@@ -1114,6 +1494,862 @@ const Fin = {
     DB.Retiradas.excluir(id);
     Fin._renderRetiradas();
     Utils.toast('Retirada excluída');
+  },
+
+  // ---- PAINEL DE PRIORIDADES (Consultor Financeiro) ----
+  _renderPrioridades: () => {
+    const cont = document.getElementById('painelPrioridades');
+    if (!cont) return;
+
+    const hoje = Utils.hoje();
+    const mes  = Utils.hoje().substring(0, 7);
+    const saldoSalvo = parseFloat(DB.Config.get('fluxoSaldoInicial', 0)) || 0;
+
+    const todas       = DB.Despesas.listar().filter(d => !d.pago);
+    const lojaDesp    = todas.filter(d => (d.origem || 'loja') === 'loja');
+    const pessoalDesp = todas.filter(d => d.origem === 'pessoal');
+    const totalLoja    = lojaDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalPessoal = pessoalDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalGeral   = totalLoja + totalPessoal;
+    const lojaVencidas    = lojaDesp.filter(d => d.vencimento && d.vencimento < hoje);
+    const pessoalVencidas = pessoalDesp.filter(d => d.vencimento && d.vencimento < hoje);
+    const totalLojaVencida    = lojaVencidas.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalPessoalVencida = pessoalVencidas.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+
+    const meses3 = [];
+    for (let m = 0; m < 3; m++) {
+      const dt = new Date(); dt.setMonth(dt.getMonth() - m);
+      meses3.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
+    }
+    const receitaMedia = meses3.reduce((s, m) => s + Fin.calcularDRE(m).receitaBruta, 0) / 3;
+
+    // Render static shell (summary cards + input) — always fresh so paid debts update totals
+    cont.innerHTML = `
+      <!-- SITUAÇÃO GERAL -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px">
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-left:4px solid var(--primary)">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">🏪 Dívidas da Loja</div>
+          <div style="font-size:22px;font-weight:900;color:${totalLojaVencida>0?'var(--danger)':'var(--text)'}">${Utils.moeda(totalLoja)}</div>
+          ${totalLojaVencida>0?`<div style="font-size:12px;color:var(--danger);font-weight:700">${lojaVencidas.length} vencida(s): ${Utils.moeda(totalLojaVencida)}</div>`:'<div style="font-size:12px;color:var(--text-muted)">Nenhuma vencida ✓</div>'}
+        </div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-left:4px solid #8b5cf6">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">🏠 Dívidas Pessoais</div>
+          <div style="font-size:22px;font-weight:900;color:${totalPessoalVencida>0?'var(--danger)':'var(--text)'}">${Utils.moeda(totalPessoal)}</div>
+          ${totalPessoalVencida>0?`<div style="font-size:12px;color:var(--danger);font-weight:700">${pessoalVencidas.length} vencida(s): ${Utils.moeda(totalPessoalVencida)}</div>`:'<div style="font-size:12px;color:var(--text-muted)">Nenhuma vencida ✓</div>'}
+        </div>
+        <div style="background:var(--card-bg);border:2px solid var(--danger);border-radius:var(--radius);padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">💳 Total Geral</div>
+          <div style="font-size:22px;font-weight:900;color:var(--danger)">${Utils.moeda(totalGeral)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${receitaMedia>0?(totalGeral/receitaMedia*100).toFixed(0)+'% do faturamento médio':'registre vendas para ver %'}</div>
+        </div>
+        ${receitaMedia>0?`<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">📈 Receita média</div>
+          <div style="font-size:22px;font-weight:900;color:var(--success)">${Utils.moeda(receitaMedia)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">média últimos 3 meses</div>
+        </div>`:''}
+      </div>
+
+      <!-- SALDO DISPONÍVEL — input rendered once, results updated by _calcPrioridadesResultados -->
+      <div class="card" style="margin-bottom:16px;border-color:var(--primary)">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div class="card-title" style="margin-bottom:4px">💰 Quanto você tem disponível agora?</div>
+            <div style="font-size:13px;color:var(--text-muted)">Informe o saldo em caixa + banco para ver o que consegue pagar.</div>
+          </div>
+          <input type="number" id="inputSaldoPrioridade" class="form-control" placeholder="R$ 0,00" step="0.01"
+            style="max-width:200px;font-size:20px;font-weight:700;text-align:center"
+            value="${saldoSalvo||''}"
+            oninput="DB.Config.set('fluxoSaldoInicial',this.value);Fin._calcPrioridadesResultados()">
+        </div>
+        <div id="priorSaldoFeedback"></div>
+      </div>
+
+      <div id="priorResultados"></div>`;
+
+    Fin._calcPrioridadesResultados();
+  },
+
+  _calcPrioridadesResultados: () => {
+    const feedbackEl = document.getElementById('priorSaldoFeedback');
+    const resultEl   = document.getElementById('priorResultados');
+    if (!feedbackEl || !resultEl) return;
+
+    const saldoSalvo = parseFloat(document.getElementById('inputSaldoPrioridade')?.value || 0) || 0;
+    const hoje = Utils.hoje();
+    const mes  = Utils.hoje().substring(0, 7);
+
+    const todas       = DB.Despesas.listar().filter(d => !d.pago);
+    const lojaDesp    = todas.filter(d => (d.origem || 'loja') === 'loja');
+    const pessoalDesp = todas.filter(d => d.origem === 'pessoal');
+    const totalLoja    = lojaDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalPessoal = pessoalDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalGeral   = totalLoja + totalPessoal;
+
+    const meses3 = [];
+    for (let m = 0; m < 3; m++) {
+      const dt = new Date(); dt.setMonth(dt.getMonth() - m);
+      meses3.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
+    }
+    const receitaMedia = meses3.reduce((s, m) => s + Fin.calcularDRE(m).receitaBruta, 0) / 3;
+    const dreAtual     = Fin.calcularDRE(mes);
+
+    const em30 = (() => { const dt = new Date(hoje); dt.setDate(dt.getDate()+30); return dt.toISOString().split('T')[0]; })();
+    const crediarioReceber = DB.Crediario.listar().reduce((s, c) => {
+      if (!c.parcelas) return s;
+      c.parcelas.forEach(p => { if (p.status !== 'pago' && p.vencimento >= hoje && p.vencimento <= em30) s += parseFloat(p.valor)||0; });
+      return s;
+    }, 0);
+    const crediarioVencido = DB.Crediario.listar().reduce((s, c) => {
+      if (!c.parcelas) return s;
+      c.parcelas.forEach(p => { if (p.status !== 'pago' && p.vencimento && p.vencimento < hoje) s += parseFloat(p.valor)||0; });
+      return s;
+    }, 0);
+
+    const getPriorityReason = (d, dias) => {
+      const desc = (d.descricao || '').toLowerCase();
+      if (dias < 0) {
+        const n = Math.abs(dias);
+        if (desc.includes('aluguel')) return `Atrasada há ${n} dia(s) — risco de rescisão contratual`;
+        if (desc.includes('energia') || desc.includes('luz') || desc.includes('água') || desc.includes('agua')) return `Atrasada há ${n} dia(s) — risco de corte do serviço`;
+        if (desc.includes('salário') || desc.includes('salario') || desc.includes('folha')) return `Atrasada há ${n} dia(s) — obrigação trabalhista, gera multa`;
+        if (d.categoria === 'imposto') return `Atrasada há ${n} dia(s) — multa e juros da Receita`;
+        return `Atrasada há ${n} dia(s) — cada dia acumula juros e multa`;
+      }
+      if (dias === 0) return 'Vence hoje — pague antes de qualquer outra coisa';
+      if (dias <= 3) {
+        if (desc.includes('energia') || desc.includes('luz')) return 'Vence em breve — corte de energia paralisa a loja';
+        if (desc.includes('aluguel')) return 'Vence em breve — priorize para não atrasar';
+        return `Vence em ${dias} dia(s) — muito urgente`;
+      }
+      if (dias <= 7) return `Vence em ${dias} dia(s) — programe o pagamento esta semana`;
+      if (dias <= 30) return `Vence em ${dias} dia(s) — planeje para esse mês`;
+      return dias === 999 ? 'Sem data definida — planeje quando possível' : `Vence em ${dias} dia(s) — sem urgência imediata`;
+    };
+
+    const comPrioridade = todas.map(d => {
+      const diasAteVenc = d.vencimento
+        ? Math.ceil((new Date(d.vencimento + 'T00:00:00') - new Date(hoje + 'T00:00:00')) / 86400000)
+        : 999;
+      let score = 0;
+      if (diasAteVenc < -30)      score = 230;
+      else if (diasAteVenc < -7)  score = 185;
+      else if (diasAteVenc < 0)   score = 155 + Math.abs(diasAteVenc) * 2;
+      else if (diasAteVenc === 0) score = 130;
+      else if (diasAteVenc <= 3)  score = 100;
+      else if (diasAteVenc <= 7)  score = 75;
+      else if (diasAteVenc <= 15) score = 50;
+      else if (diasAteVenc <= 30) score = 30;
+      else                        score = 10;
+      const desc = (d.descricao || '').toLowerCase();
+      if (desc.includes('energia') || desc.includes('luz') || desc.includes('água') || desc.includes('agua')) score += 40;
+      else if (desc.includes('aluguel')) score += 35;
+      else if (desc.includes('salário') || desc.includes('salario') || desc.includes('folha')) score += 38;
+      else if (d.categoria === 'imposto') score += 30;
+      else if (d.categoria === 'fixo' || d.recorrente) score += 20;
+      if (d.origem === 'pessoal') {
+        if (d.categoria === 'moradia')     score += 28;
+        else if (d.categoria === 'saude') score += 25;
+        else if (d.categoria === 'alimentacao') score += 20;
+      } else {
+        score += 10;
+      }
+      return { ...d, score, diasAteVenc, reason: getPriorityReason(d, diasAteVenc) };
+    }).sort((a, b) => b.score - a.score);
+
+    const grupos = {
+      critico: comPrioridade.filter(d => d.diasAteVenc < 0),
+      urgente: comPrioridade.filter(d => d.diasAteVenc >= 0 && d.diasAteVenc <= 7),
+      proximo: comPrioridade.filter(d => d.diasAteVenc > 7 && d.diasAteVenc <= 30),
+      planej:  comPrioridade.filter(d => d.diasAteVenc > 30 || d.diasAteVenc === 999),
+    };
+
+    let saldoRestante = saldoSalvo;
+    const pagaveis = new Set();
+    for (const d of comPrioridade) {
+      const v = parseFloat(d.valor) || 0;
+      if (saldoRestante >= v) { saldoRestante -= v; pagaveis.add(d.id); }
+    }
+    const valorPagaveis = comPrioridade.filter(d => pagaveis.has(d.id)).reduce((s,d)=>s+(parseFloat(d.valor)||0),0);
+
+    // Atualiza feedback do saldo
+    feedbackEl.innerHTML = saldoSalvo > 0 ? `
+      <div style="margin-top:12px;padding:10px 14px;background:${pagaveis.size===comPrioridade.length?'rgba(34,197,94,.1)':'rgba(234,179,8,.1)'};border-radius:var(--radius-sm);font-size:13px">
+        ${pagaveis.size===comPrioridade.length
+          ?`✅ Com <strong>${Utils.moeda(saldoSalvo)}</strong> você consegue pagar <strong>TODAS</strong> as ${comPrioridade.length} contas pendentes!`
+          :`⚠️ Com <strong>${Utils.moeda(saldoSalvo)}</strong> você consegue pagar <strong>${pagaveis.size}</strong> de <strong>${comPrioridade.length}</strong> contas seguindo a ordem do consultor. Saldo sobrando: <strong>${Utils.moeda(saldoRestante)}</strong>.`}
+      </div>` : '';
+
+    // Dicas do consultor
+    const dicas = [];
+    const pctDivida = receitaMedia > 0 ? (totalGeral / receitaMedia) * 100 : 0;
+    if (grupos.critico.length > 0) {
+      const totalCrit = grupos.critico.reduce((s,d)=>s+(parseFloat(d.valor)||0),0);
+      dicas.push({ urg: 'danger', icon: '🚨', txt: `Você tem <strong>${grupos.critico.length} conta(s) vencida(s)</strong> somando <strong>${Utils.moeda(totalCrit)}</strong>. Cada dia que passa acumula multa. Regularize agora antes de pagar qualquer outra coisa.` });
+    }
+    if (crediarioVencido > 0)
+      dicas.push({ urg: 'warning', icon: '💰', txt: `Há <strong>${Utils.moeda(crediarioVencido)}</strong> de crediário vencido a receber. Ligue para esses clientes hoje — esse dinheiro já é seu e pode ajudar a quitar dívidas.` });
+    if (crediarioReceber > 0)
+      dicas.push({ urg: 'info', icon: '📅', txt: `Nos próximos 30 dias você vai receber <strong>${Utils.moeda(crediarioReceber)}</strong> de crediários. Use isso para planejar o pagamento das contas que vencem nesse período.` });
+    if (pctDivida > 100 && receitaMedia > 0)
+      dicas.push({ urg: 'danger', icon: '⚠️', txt: `Suas dívidas (<strong>${Utils.moeda(totalGeral)}</strong>) representam <strong>${pctDivida.toFixed(0)}%</strong> do faturamento médio. Esse nível de endividamento precisa de ação urgente — considere renegociar os maiores valores.` });
+    if (totalPessoal > receitaMedia * 0.4 && receitaMedia > 0)
+      dicas.push({ urg: 'warning', icon: '🏠', txt: `Despesas pessoais de <strong>${Utils.moeda(totalPessoal)}</strong> representam <strong>${((totalPessoal/receitaMedia)*100).toFixed(0)}%</strong> do faturamento. Tente manter abaixo de 30% para não sufocar o negócio.` });
+    if (saldoSalvo > 0 && pagaveis.size < comPrioridade.length && comPrioridade.length > 0)
+      dicas.push({ urg: 'info', icon: '💡', txt: `Com <strong>${Utils.moeda(saldoSalvo)}</strong> você consegue pagar <strong>${pagaveis.size}</strong> de <strong>${comPrioridade.length}</strong> contas (as mais urgentes primeiro). Ainda faltam <strong>${Utils.moeda(totalGeral - valorPagaveis)}</strong> para quitar tudo.` });
+    if (dreAtual.margemLiquida > 0 && dreAtual.margemLiquida < 10 && dreAtual.receitaBruta > 0)
+      dicas.push({ urg: 'warning', icon: '📉', txt: `Sua margem líquida está em <strong>${dreAtual.margemLiquida.toFixed(1)}%</strong> este mês. Com margem tão baixa, qualquer imprevisto vira prejuízo. Revise os preços ou corte despesas desnecessárias.` });
+    if (dicas.length === 0 && todas.length === 0)
+      dicas.push({ urg: 'success', icon: '🎉', txt: 'Nenhuma dívida pendente! Suas finanças estão em dia.' });
+
+    const corDica = { danger:'var(--danger)', warning:'var(--warning)', success:'var(--success)', info:'var(--primary)' };
+    const bgDica  = { danger:'rgba(239,68,68,.08)', warning:'rgba(234,179,8,.08)', success:'rgba(34,197,94,.08)', info:'rgba(249,115,22,.08)' };
+
+    const renderGrupo = (items, titulo, cor, bg, instrucao) => {
+      if (items.length === 0) return '';
+      const total = items.reduce((s,d)=>s+(parseFloat(d.valor)||0),0);
+      return `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:${bg};border-radius:var(--radius-sm) var(--radius-sm) 0 0;border-left:4px solid ${cor};border-top:1px solid ${cor};border-right:1px solid ${cor}">
+            <div>
+              <span style="font-weight:800;color:${cor};font-size:14px">${titulo}</span>
+              <span style="font-size:12px;color:var(--text-muted);margin-left:8px">${items.length} conta(s)</span>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:900;font-size:16px;color:${cor}">${Utils.moeda(total)}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${instrucao}</div>
+            </div>
+          </div>
+          <div style="border:1px solid ${cor};border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow:hidden">
+            ${items.map(d => {
+              const isPessoal = d.origem === 'pessoal';
+              const corBorda  = isPessoal ? '#8b5cf6' : 'var(--primary)';
+              const badge = isPessoal
+                ? `<span style="font-size:10px;background:rgba(139,92,246,.15);color:#8b5cf6;border-radius:4px;padding:1px 6px;font-weight:700">🏠 Pessoal</span>`
+                : `<span style="font-size:10px;background:var(--primary-dim);color:var(--primary);border-radius:4px;padding:1px 6px;font-weight:700">🏪 Loja</span>`;
+              const cabeSaldo = pagaveis.has(d.id);
+              const numGlobal = comPrioridade.indexOf(d) + 1;
+              return `
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);border-left:4px solid ${corBorda};${cabeSaldo?'background:'+bg:'background:var(--card-bg)'}">
+                <div style="font-size:15px;font-weight:900;color:var(--text-muted);width:22px;flex-shrink:0;text-align:center;margin-top:2px">${numGlobal}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    ${d.descricao} ${badge}
+                    ${cabeSaldo?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:1px 6px;font-weight:700">✓ cabe no saldo</span>':''}
+                  </div>
+                  <div style="font-size:12px;color:${cor};margin-top:3px;font-weight:500">↳ ${d.reason}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                  <div style="font-weight:800;font-size:16px;color:${cor}">${Utils.moeda(d.valor)}</div>
+                  <button class="btn btn-outline btn-sm" style="margin-top:4px;font-size:11px;padding:2px 8px" onclick="Fin.pagarDespesa('${d.id}')">✅ Pagar</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    };
+
+    // ── Renda Pessoal ──────────────────────────────────────────────────────
+    const rendas       = DB.RendaPessoal.listar();
+    const totalRenda   = DB.RendaPessoal.totalMensal();
+    const saldoLivre   = totalRenda - totalPessoal;
+    const tipoLabel    = { prolabore: '💼 Pró-labore', salario_conjuge: '👩 Cônjuge', outro: '💰 Outra renda' };
+    const pctFolga     = totalRenda > 0 ? (saldoLivre / totalRenda) * 100 : 0;
+
+    const rendaCard = `
+      <div class="card" style="margin-bottom:16px;border-left:4px solid #10b981">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${rendas.length?'14px':'8px'}">
+          <div class="card-title" style="margin:0">💼 Renda Mensal Pessoal</div>
+          <button onclick="Fin._abrirFormRendaPessoal(null)" class="btn btn-sm btn-primary" style="font-size:12px">+ Adicionar</button>
+        </div>
+        ${rendas.length === 0 ? `
+        <div style="text-align:center;padding:20px 0 12px;color:var(--text-muted);font-size:13px">
+          Cadastre seu pró-labore e a renda do cônjuge para ver o balanço pessoal do mês.
+        </div>` : `
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+          ${rendas.map(r => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:2px">${tipoLabel[r.tipo] || '💰 Renda'}</div>
+              <div style="font-weight:600;font-size:14px">${r.descricao}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-weight:800;font-size:17px;color:#10b981">${Utils.moeda(r.valor)}<span style="font-size:11px;font-weight:500;color:var(--text-muted)">/mês</span></span>
+              <button onclick="Fin._abrirFormRendaPessoal('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:15px;padding:3px 5px;border-radius:4px" title="Editar">✏️</button>
+              <button onclick="Fin._excluirRendaPessoal('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:15px;padding:3px 5px;border-radius:4px" title="Excluir">🗑️</button>
+            </div>
+          </div>`).join('')}
+        </div>
+        <div style="border-top:2px dashed var(--border);padding-top:12px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            ${Fin._linhaAnalise('Total a receber por mês', Utils.moeda(totalRenda), 'success')}
+            ${Fin._linhaAnalise('Despesas pessoais pendentes', '− ' + Utils.moeda(totalPessoal), 'danger')}
+            <div style="height:1px;background:var(--border);margin:2px 0"></div>
+            ${Fin._linhaAnalise('Saldo pessoal livre', Utils.moeda(saldoLivre), saldoLivre >= 0 ? 'success' : 'danger', true)}
+          </div>
+          <div style="margin-top:10px;padding:10px 14px;background:${saldoLivre < 0 ? 'rgba(239,68,68,.1)' : pctFolga < 15 ? 'rgba(234,179,8,.1)' : 'rgba(16,185,129,.08)'};border-radius:var(--radius-sm);font-size:13px;border-left:3px solid ${saldoLivre < 0 ? 'var(--danger)' : pctFolga < 15 ? 'var(--warning)' : '#10b981'}">
+            ${saldoLivre < 0
+              ? `🔴 Suas despesas pessoais superam a renda em <strong>${Utils.moeda(Math.abs(saldoLivre))}</strong>. Isso pressiona diretamente o caixa da loja.`
+              : pctFolga < 15
+              ? `⚠️ A folga é pequena — só <strong>${pctFolga.toFixed(0)}%</strong> da renda fica livre. Tente manter ao menos 20% de reserva pessoal.`
+              : `✅ Sobram <strong>${Utils.moeda(saldoLivre)}</strong> após as despesas pessoais (${pctFolga.toFixed(0)}% da renda fica livre).`}
+          </div>
+        </div>`}
+      </div>`;
+
+    // ── Inadimplentes para cobrar ──────────────────────────────────────────
+    const inadimplentes = DB.Crediario.inadimplentes();
+    const porCliente = {};
+    inadimplentes.forEach(p => {
+      if (!porCliente[p.clienteId]) {
+        const cli = DB.Clientes.buscar(p.clienteId);
+        porCliente[p.clienteId] = { nome: p.clienteNome, valor: 0, qtd: 0, tel: (cli?.telefone || '').replace(/\D/g,'') };
+      }
+      porCliente[p.clienteId].valor += parseFloat(p.valor) || 0;
+      porCliente[p.clienteId].qtd++;
+    });
+    const topInad = Object.values(porCliente).sort((a,b) => b.valor - a.valor).slice(0, 6);
+    const totalInad = Object.values(porCliente).reduce((s,c) => s + c.valor, 0);
+
+    const cobrarCard = topInad.length === 0 ? '' : `
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="margin:0">📞 Cobrar Agora — ${Utils.moeda(totalInad)} em atraso</div>
+          <span style="font-size:12px;color:var(--text-muted)">Esse dinheiro já é seu. Ligue hoje.</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${topInad.map(c => {
+            const msg = encodeURIComponent(`Olá, ${c.nome.split(' ')[0]}! 😊 Passando para avisar que você tem ${c.qtd} parcela(s) em atraso no crediário da Move Pé, totalizando ${Utils.moeda(c.valor)}. Podemos resolver isso? 🙏`);
+            const waLink = c.tel ? `https://wa.me/55${c.tel}?text=${msg}` : '';
+            return `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(239,68,68,.05);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,.15)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:14px">${c.nome}</div>
+                <div style="font-size:12px;color:var(--text-muted)">${c.qtd} parcela(s) vencida(s)</div>
+              </div>
+              <div style="font-weight:900;font-size:16px;color:var(--danger);white-space:nowrap">${Utils.moeda(c.valor)}</div>
+              ${waLink ? `<a href="${waLink}" target="_blank" style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0">💬 WhatsApp</a>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+        ${Object.keys(porCliente).length > 6 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:center">+${Object.keys(porCliente).length - 6} outros inadimplentes — veja todos no Crediário</div>` : ''}
+      </div>`;
+
+    // ── Produtos parados para liquidar ────────────────────────────────────
+    const parados = DB.Produtos.listarParados(60).filter(p => DB.Produtos.estoqueTotal(p) > 0).slice(0, 5);
+    const capitalParado = parados.reduce((s,p) => s + (p.capitalPreso || 0), 0);
+
+    const liquidarCard = parados.length === 0 ? '' : `
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--warning)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="margin:0">🏷 Liquidar para liberar caixa — ${Utils.moeda(capitalParado)} parado</div>
+          <span style="font-size:12px;color:var(--text-muted)">Dê desconto e gire antes de comprar mais</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${parados.map(p => {
+            const qtd = DB.Produtos.estoqueTotal(p);
+            const precoSug = Math.round(p.precoCusto * 1.1 * 100) / 100; // 10% acima do custo
+            const pctDesc = p.precoVenda > 0 ? Math.round((1 - precoSug/p.precoVenda)*100) : 0;
+            const diasMsg = p.diasSemVenda >= 999 ? 'Nunca vendido' : `${p.diasSemVenda} dias parado`;
+            return `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(234,179,8,.05);border-radius:var(--radius-sm);border:1px solid rgba(234,179,8,.2)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:13px">${p.nome}</div>
+                <div style="font-size:12px;color:var(--text-muted)">${qtd} peça(s) · ${diasMsg}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:11px;color:var(--text-muted)">Venda por</div>
+                <div style="font-weight:900;color:var(--warning);font-size:15px">${Utils.moeda(precoSug)}</div>
+                <div style="font-size:11px;color:var(--success)">${pctDesc > 0 ? `desconto de ${pctDesc}%` : 'sem desconto'}</div>
+              </div>
+              <a href="estoque.html?editar=${p.id}" class="btn btn-outline btn-sm" style="white-space:nowrap;flex-shrink:0">✏️ Editar</a>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:8px">
+          💡 Preço sugerido = custo + 10% (mínimo para não perder dinheiro). Ajuste conforme necessário.
+        </div>
+      </div>`;
+
+    // ── Quando posso comprar? ─────────────────────────────────────────────
+    const contasProx30 = todas.filter(d => d.vencimento && d.vencimento >= hoje && d.vencimento <= em30);
+    const totalContasProx30 = contasProx30.reduce((s,d) => s + (parseFloat(d.valor)||0), 0);
+    const totalVencidas = grupos.critico.reduce((s,d) => s + (parseFloat(d.valor)||0), 0);
+    const necessarioParaPagar = totalVencidas + totalContasProx30;
+    const reservaSeguranca = Math.round(totalContasProx30 * 0.3); // 30% das contas do mês como reserva
+    const totalNecessario = necessarioParaPagar + reservaSeguranca;
+    const entradasEsperadas = saldoSalvo + crediarioReceber;
+    const disponivelCompra = Math.max(0, entradasEsperadas - totalNecessario);
+    const podeComprar = disponivelCompra > 0;
+    const faltaParaComprar = Math.max(0, totalNecessario - entradasEsperadas);
+
+    const comprarCard = `
+      <div class="card" style="margin-bottom:16px;border-left:4px solid ${podeComprar ? 'var(--success)' : 'var(--danger)'}">
+        <div class="card-title" style="margin-bottom:14px">🛒 Quando posso comprar estoque?</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">Saldo + crediário</div>
+            <div style="font-weight:800;font-size:16px;color:var(--success)">${Utils.moeda(entradasEsperadas)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">o que vai entrar</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">Contas a pagar</div>
+            <div style="font-weight:800;font-size:16px;color:var(--danger)">${Utils.moeda(necessarioParaPagar)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">vencidas + próx 30 dias</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">Reserva de segurança</div>
+            <div style="font-weight:800;font-size:16px;color:var(--warning)">${Utils.moeda(reservaSeguranca)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">30% das contas do mês</div>
+          </div>
+          <div style="background:${podeComprar?'rgba(34,197,94,.1)':'rgba(239,68,68,.1)'};border:2px solid ${podeComprar?'var(--success)':'var(--danger)'};border-radius:var(--radius-sm);padding:10px;text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">Disponível p/ compra</div>
+            <div style="font-weight:900;font-size:18px;color:${podeComprar?'var(--success)':'var(--danger)'}">${Utils.moeda(disponivelCompra)}</div>
+            <div style="font-size:11px;font-weight:700;color:${podeComprar?'var(--success)':'var(--danger)'}">${podeComprar ? '✅ pode comprar' : '🔴 não compre agora'}</div>
+          </div>
+        </div>
+        <div style="padding:12px 14px;background:${podeComprar?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};border-radius:var(--radius-sm);font-size:13px;line-height:1.6">
+          ${podeComprar
+            ? `✅ <strong>Você tem ${Utils.moeda(disponivelCompra)} disponível para reposição</strong> após pagar todas as contas e manter uma reserva de segurança. Compre apenas produtos que já comprovaram que vendem — foque nos mais rápidos.`
+            : `🔴 <strong>Não compre estoque agora.</strong> Ainda faltam ${Utils.moeda(faltaParaComprar)} para cobrir todas as contas e ter uma reserva mínima. Primeiro: ${totalVencidas > 0 ? 'quite as contas vencidas, ' : ''}receba o crediário em atraso (${Utils.moeda(crediarioVencido)}) e gire o estoque parado com promoções.`}
+        </div>
+        ${!podeComprar && crediarioVencido > 0 ? `
+        <div style="margin-top:10px;padding:10px 14px;background:rgba(99,102,241,.08);border-radius:var(--radius-sm);font-size:13px;border-left:3px solid var(--primary)">
+          💡 <strong>Ação mais rápida:</strong> Se você cobrar <strong>${Utils.moeda(crediarioVencido)}</strong> de crediário vencido, o disponível para compra muda para <strong style="color:${(entradasEsperadas + crediarioVencido - totalNecessario) > 0 ? 'var(--success)' : 'var(--warning)'}">${Utils.moeda(Math.max(0, entradasEsperadas + crediarioVencido - totalNecessario))}</strong>.
+        </div>` : ''}
+      </div>`;
+
+    resultEl.innerHTML = `
+      ${rendaCard}
+      ${cobrarCard}
+      ${dicas.length?`
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:12px">🧠 O que o consultor recomenda</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${dicas.map(d=>`
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:${bgDica[d.urg]};border-radius:var(--radius-sm);border-left:3px solid ${corDica[d.urg]}">
+              <span style="font-size:18px;flex-shrink:0">${d.icon}</span>
+              <span style="font-size:13px;line-height:1.6">${d.txt}</span>
+            </div>`).join('')}
+        </div>
+      </div>`:''}
+      ${comprarCard}
+      ${liquidarCard}
+      ${comPrioridade.length===0
+        ?`<div class="card"><div class="empty-state" style="padding:32px"><div class="empty-icon">🎉</div><div class="empty-title">Nenhuma dívida pendente!</div><div class="empty-sub">Parabéns, você está em dia.</div></div></div>`
+        :`<div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+            📋 Plano de Pagamento — ${comPrioridade.length} conta(s) na ordem do consultor
+          </div>
+          ${renderGrupo(grupos.critico,'🔴 PAGUE AGORA — Contas Vencidas','var(--danger)','rgba(239,68,68,.05)','pague imediatamente')}
+          ${renderGrupo(grupos.urgente,'🟠 ESTA SEMANA — Vence em até 7 dias','#f97316','rgba(249,115,22,.05)','programe esta semana')}
+          ${renderGrupo(grupos.proximo,'🟡 ESSE MÊS — Vence em até 30 dias','var(--warning)','rgba(234,179,8,.05)','planeje com antecedência')}
+          ${renderGrupo(grupos.planej,'🟢 PODE PLANEJAR — Mais de 30 dias','var(--success)','rgba(34,197,94,.05)','sem urgência imediata')}`
+      }`;
+  },
+
+  // ---- SIMULADOR DE EMPRÉSTIMO ----
+  _calcPMT: (pv, i, n) => {
+    if (!n || n <= 0) return 0;
+    if (i === 0) return pv / n;
+    return pv * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
+  },
+
+  _renderEmprestimo: () => {
+    const cont = document.getElementById('painelEmprestimo');
+    if (!cont) return;
+
+    // Render the form shell only ONCE — avoids destroying focused inputs on each keystroke
+    if (!document.getElementById('empValor')) {
+      const cfg = JSON.parse(localStorage.getItem('movePe_emprestimo_sim') || '{}');
+      cont.innerHTML = `
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:16px">💳 Simulador de Empréstimo</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Valor do empréstimo (R$)</label>
+              <input type="number" class="form-control" id="empValor" placeholder="0" step="100" min="0"
+                value="${cfg.valor||''}"
+                oninput="Fin._salvarSimEmp();Fin._calcEmpResultados()"
+                style="font-size:18px;font-weight:700;text-align:center">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Taxa de juros (% ao mês)</label>
+              <input type="number" class="form-control" id="empTaxa" placeholder="Ex: 2" step="0.1" min="0"
+                value="${cfg.taxaMes||''}"
+                oninput="Fin._salvarSimEmp();Fin._calcEmpResultados()"
+                style="font-size:18px;font-weight:700;text-align:center">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Número de parcelas</label>
+              <input type="number" class="form-control" id="empParcelas" placeholder="12" step="1" min="1" max="120"
+                value="${cfg.parcelas||12}"
+                oninput="Fin._salvarSimEmp();Fin._calcEmpResultados()"
+                style="font-size:18px;font-weight:700;text-align:center">
+            </div>
+          </div>
+          <div id="empResumoCalc"></div>
+        </div>
+        <div id="empResultados"></div>`;
+    }
+    Fin._calcEmpResultados();
+  },
+
+  _calcEmpResultados: () => {
+    const resumoEl = document.getElementById('empResumoCalc');
+    const resultEl = document.getElementById('empResultados');
+    if (!resumoEl || !resultEl) return;
+
+    const valor    = parseFloat(document.getElementById('empValor')?.value   || 0);
+    const taxaMes  = parseFloat(document.getElementById('empTaxa')?.value    || 0);
+    const parcelas = parseInt(document.getElementById('empParcelas')?.value  || 12);
+
+    const hoje = Utils.hoje();
+    const mes  = Utils.hoje().substring(0, 7);
+    const i    = taxaMes / 100;
+    const pmt  = valor > 0 && parcelas > 0 ? Fin._calcPMT(valor, i, parcelas) : 0;
+    const totalPago      = pmt * parcelas;
+    const totalJuros     = totalPago - valor;
+    const cetAnual       = taxaMes > 0 ? ((Math.pow(1 + i, 12) - 1) * 100) : 0;
+    const jurosSimplesTotal = valor * (taxaMes / 100) * parcelas;
+
+    // Dados financeiros reais
+    const meses3 = [];
+    for (let m = 0; m < 3; m++) {
+      const dt = new Date(); dt.setMonth(dt.getMonth() - m);
+      meses3.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
+    }
+    const receitaMedia = meses3.reduce((s, m) => s + Fin.calcularDRE(m).receitaBruta, 0) / 3;
+    const dreAtual     = Fin.calcularDRE(mes);
+
+    // Dívidas completas (loja + pessoal)
+    const todasDesp        = DB.Despesas.listar().filter(d => !d.pago);
+    const lojaDesp         = todasDesp.filter(d => (d.origem || 'loja') === 'loja');
+    const pessoalDesp      = todasDesp.filter(d => d.origem === 'pessoal');
+    const totalLojaDesp    = lojaDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalPessoalDesp = pessoalDesp.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalDesp        = totalLojaDesp + totalPessoalDesp;
+    const vencidas         = todasDesp.filter(d => d.vencimento && d.vencimento < hoje);
+    const totalVencido     = vencidas.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+
+    // Cenário A: quitar dívidas em ordem de prioridade
+    const despOrdenadas = [...todasDesp].map(d => {
+      const dias = d.vencimento ? Math.ceil((new Date(d.vencimento+'T00:00:00')-new Date(hoje+'T00:00:00'))/86400000) : 999;
+      let sc = dias < 0 ? 150+Math.abs(dias) : dias <= 7 ? 90 : dias <= 30 ? 60 : 20;
+      if (d.categoria === 'fixo' || d.recorrente) sc += 20;
+      return { ...d, sc, dias };
+    }).sort((a, b) => b.sc - a.sc);
+
+    let saldoLoan = valor;
+    const quitadas = [];
+    for (const d of despOrdenadas) {
+      const v = parseFloat(d.valor) || 0;
+      if (saldoLoan >= v) { saldoLoan -= v; quitadas.push(d); }
+    }
+    const totalQuitado    = quitadas.reduce((s, d) => s + (parseFloat(d.valor)||0), 0);
+    const totalNaoQuitado = totalDesp - totalQuitado;
+    const vencidasQuitadas = quitadas.filter(d => d.vencimento && d.vencimento < hoje);
+    const economiaMultas  = vencidasQuitadas.reduce((s, d) => s + (parseFloat(d.valor)||0)*0.02*parcelas, 0);
+
+    // Cenário B: investir na loja
+    const margemBruta     = dreAtual.margemBruta || 35;
+    const retornoEstoque  = valor * (margemBruta / 100);
+    const lucroEmpLiquido = retornoEstoque - totalJuros;
+
+    // Viabilidade de caixa — usa lucro líquido médio real (CMV + despesas + retiradas já descontados)
+    const lucroMedio  = meses3.reduce((s, m) => s + Fin.calcularDRE(m).lucroLiquido, 0) / 3;
+    const sobraComEmp = lucroMedio - pmt;
+    const pctParcela  = receitaMedia > 0 ? (pmt / receitaMedia) * 100 : 0;
+    const pctLucro    = lucroMedio > 0 ? (pmt / lucroMedio) * 100 : 0;
+
+    // Estoque parado
+    const estoqueParado = DB.Produtos.listarParados(60).reduce((s, p) => s + p.capitalPreso, 0);
+
+    // Veredicto final
+    let veredicto = null;
+    if (pmt > 0) {
+      if (lucroMedio <= 0 && receitaMedia > 0) {
+        veredicto = { icon: '🔴', label: 'NÃO RECOMENDADO', cor: 'var(--danger)', bg: 'rgba(239,68,68,.1)',
+          texto: `A loja está operando sem lucro nos últimos meses. Tomar um empréstimo agora aumentaria as dívidas sem que o negócio gere caixa suficiente para pagar. Primeiro é preciso aumentar o lucro.` };
+      } else if (sobraComEmp < 0) {
+        veredicto = { icon: '🔴', label: 'NÃO RECOMENDADO', cor: 'var(--danger)', bg: 'rgba(239,68,68,.1)',
+          texto: `A parcela de <strong>${Utils.moeda(pmt)}/mês</strong> é maior que o lucro médio da loja (${Utils.moeda(lucroMedio)}). Você ficaria <strong>${Utils.moeda(Math.abs(sobraComEmp))} no vermelho</strong> todo mês — esse empréstimo criaria mais dívida.` };
+      } else if (totalVencido > 0 && valor >= totalVencido * 0.7 && pctLucro <= 80) {
+        veredicto = { icon: '✅', label: 'PODE COMPENSAR — Para quitar vencidas', cor: 'var(--success)', bg: 'rgba(34,197,94,.1)',
+          texto: `Você tem <strong>${Utils.moeda(totalVencido)}</strong> em dívidas vencidas. O custo dos juros do empréstimo (${Utils.moeda(totalJuros)}) tende a ser menor que as multas acumulando nas vencidas. <strong>A parcela cabe no lucro — priorize quitar as vencidas primeiro.</strong>` };
+      } else if (pctLucro <= 40 && dreAtual.margemLiquida >= 10 && totalVencido === 0) {
+        veredicto = { icon: '✅', label: 'VIÁVEL — Condições favoráveis', cor: 'var(--success)', bg: 'rgba(34,197,94,.1)',
+          texto: `A parcela representa <strong>${pctLucro.toFixed(0)}%</strong> do lucro líquido médio e ainda sobrariam <strong>${Utils.moeda(sobraComEmp)}/mês</strong>. Com as dívidas em dia e margem positiva, o empréstimo é administrável.` };
+      } else if (pctLucro > 80) {
+        veredicto = { icon: '⚠️', label: 'MUITO ARRISCADO', cor: 'var(--warning)', bg: 'rgba(234,179,8,.1)',
+          texto: `A parcela consome <strong>${pctLucro.toFixed(0)}%</strong> do lucro líquido. Qualquer mês com vendas abaixo do normal e você não conseguirá pagar. Negocie um prazo maior ou valor menor.` };
+      } else {
+        veredicto = { icon: '⚠️', label: 'ATENÇÃO — Avalie com cuidado', cor: 'var(--warning)', bg: 'rgba(234,179,8,.1)',
+          texto: `Sobraria <strong>${Utils.moeda(sobraComEmp)}/mês</strong> após a parcela — possível, mas sem folga. ${totalVencido > 0 ? 'Regularize as dívidas vencidas antes de pegar o empréstimo, se possível.' : 'Mantenha uma reserva de emergência.'}` };
+      }
+    }
+
+    // ── Atualiza resumo dentro do card de inputs ──────────────────────────
+    resumoEl.innerHTML = pmt > 0 ? `
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Parcela mensal</div>
+            <div style="font-size:26px;font-weight:900;color:var(--primary)">${Utils.moeda(pmt)}</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total a pagar</div>
+            <div style="font-size:26px;font-weight:900;color:var(--text)">${Utils.moeda(totalPago)}</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:rgba(239,68,68,.08);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total de juros</div>
+            <div style="font-size:26px;font-weight:900;color:var(--danger)">${Utils.moeda(totalJuros)}</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">% do faturamento</div>
+            <div style="font-size:26px;font-weight:900;color:${pctParcela>35?'var(--danger)':pctParcela>20?'var(--warning)':'var(--success)'}">
+              ${receitaMedia>0?pctParcela.toFixed(1)+'%':'—'}
+            </div>
+          </div>
+        </div>
+        <!-- Explicação dos juros -->
+        <div style="padding:12px 14px;background:rgba(59,130,246,.08);border-radius:var(--radius-sm);border-left:3px solid #3b82f6;font-size:13px;line-height:1.6">
+          <strong>ℹ️ Por que o total de juros parece menor do que ${taxaMes}% × ${parcelas} meses?</strong><br>
+          Juros simples seria: ${Utils.moeda(jurosSimplesTotal)} (${(taxaMes*parcelas).toFixed(0)}% do valor). Porém o banco usa a <strong>Tabela Price</strong>: a cada parcela você amortiza parte do saldo — então o mês seguinte você paga juros sobre um valor menor. Por isso os juros reais (${Utils.moeda(totalJuros)}) são menores que o cálculo simples.<br>
+          <span style="font-size:12px;color:var(--text-muted)">CET anual equivalente: <strong>${cetAnual.toFixed(1)}%</strong> ao ano</span>
+        </div>
+      </div>` : `
+      <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:14px;margin-top:12px">
+        Preencha os campos acima para calcular.
+      </div>`;
+
+    // ── Atualiza o bloco de análise completa ─────────────────────────────
+    if (valor <= 0) {
+      resultEl.innerHTML = `
+        <div style="text-align:center;padding:40px;color:var(--text-muted)">
+          <div style="font-size:48px;margin-bottom:12px">💳</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:8px">Preencha o simulador acima</div>
+          <div style="font-size:13px">Informe o valor, a taxa e o número de parcelas para ver a análise completa com dois cenários: quitar dívidas ou investir na loja.</div>
+        </div>`;
+      return;
+    }
+
+    resultEl.innerHTML = `
+      <!-- SITUAÇÃO ATUAL DAS DÍVIDAS -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:12px">📊 Situação Atual das Suas Dívidas</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:${estoqueParado>500?'12px':'0'}">
+          <div style="padding:12px;background:var(--bg);border-radius:var(--radius-sm);border-left:4px solid var(--primary)">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase">🏪 Loja</div>
+            <div style="font-size:20px;font-weight:900">${Utils.moeda(totalLojaDesp)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${lojaDesp.length} conta(s)</div>
+          </div>
+          <div style="padding:12px;background:var(--bg);border-radius:var(--radius-sm);border-left:4px solid #8b5cf6">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase">🏠 Pessoal</div>
+            <div style="font-size:20px;font-weight:900">${Utils.moeda(totalPessoalDesp)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${pessoalDesp.length} conta(s)</div>
+          </div>
+          <div style="padding:12px;background:${totalVencido>0?'rgba(239,68,68,.08)':'var(--bg)'};border-radius:var(--radius-sm);border-left:4px solid ${totalVencido>0?'var(--danger)':'var(--border)'}">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase">⚠️ Vencidas</div>
+            <div style="font-size:20px;font-weight:900;color:${totalVencido>0?'var(--danger)':'var(--text-muted)'}">${Utils.moeda(totalVencido)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${vencidas.length} conta(s)</div>
+          </div>
+          <div style="padding:12px;background:rgba(239,68,68,.05);border-radius:var(--radius-sm);border:2px solid var(--danger)">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase">💳 TOTAL</div>
+            <div style="font-size:20px;font-weight:900;color:var(--danger)">${Utils.moeda(totalDesp)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">loja + pessoal</div>
+          </div>
+        </div>
+        ${estoqueParado>500?`
+        <div style="padding:10px 14px;background:rgba(234,179,8,.1);border-radius:var(--radius-sm);font-size:13px;border-left:3px solid var(--warning)">
+          💡 <strong>Antes de pedir empréstimo:</strong> você tem <strong>${Utils.moeda(estoqueParado)}</strong> em estoque parado há mais de 60 dias. Vender com promoção pode gerar caixa imediato sem custo de juros.
+        </div>`:''}
+      </div>
+
+      <!-- CENÁRIO A: QUITAR DÍVIDAS -->
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--danger)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:20px">🧹</span>
+          <div class="card-title" style="margin:0">Cenário A — Usar para QUITAR DÍVIDAS</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">
+          Com <strong>${Utils.moeda(valor)}</strong>, seguindo a ordem de prioridade do consultor, você quitaria ${quitadas.length} de ${despOrdenadas.length} conta(s):
+        </div>
+        ${quitadas.length > 0 ? `
+        <div style="background:rgba(34,197,94,.06);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;border:1px solid rgba(34,197,94,.3)">
+          <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:8px">✅ Contas quitadas — ${Utils.moeda(totalQuitado)}</div>
+          ${quitadas.map(d=>`
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--border)">
+              <span>${d.descricao}
+                <span style="font-size:10px;margin-left:4px;color:${d.origem==='pessoal'?'#8b5cf6':'var(--primary)'}">${d.origem==='pessoal'?'🏠':'🏪'}</span>
+                ${d.vencimento&&d.vencimento<hoje?'<span style="color:var(--danger);font-size:10px;font-weight:700;margin-left:4px">VENCIDA</span>':''}
+              </span>
+              <strong>${Utils.moeda(d.valor)}</strong>
+            </div>`).join('')}
+        </div>` : ''}
+        ${totalNaoQuitado > 0 ? `
+        <div style="background:rgba(239,68,68,.06);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:13px;border-left:3px solid var(--danger)">
+          ⚠️ Ainda restariam <strong>${Utils.moeda(totalNaoQuitado)}</strong> em dívidas não cobertas pelo empréstimo.
+        </div>` : `
+        <div style="background:rgba(34,197,94,.08);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:700;color:var(--success)">
+          ✅ O empréstimo cobre TODAS as dívidas e ainda sobram ${Utils.moeda(valor-totalDesp)} de capital de giro!
+        </div>`}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="padding:10px;background:var(--bg);border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Custo do empréstimo (juros)</div>
+            <div style="font-size:18px;font-weight:900;color:var(--danger)">${Utils.moeda(totalJuros)}</div>
+          </div>
+          <div style="padding:10px;background:var(--bg);border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Economia estimada (evitar multas)</div>
+            <div style="font-size:18px;font-weight:900;color:${economiaMultas>0?'var(--success)':'var(--text-muted)'}">
+              ${economiaMultas>0?Utils.moeda(economiaMultas):'Sem vencidas'}
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:10px 14px;background:${economiaMultas>totalJuros||totalVencido>totalJuros?'rgba(34,197,94,.1)':'rgba(234,179,8,.1)'};border-radius:var(--radius-sm);font-size:13px;font-weight:600;border-left:3px solid ${economiaMultas>totalJuros||totalVencido>totalJuros?'var(--success)':'var(--warning)'}">
+          ${totalVencido===0?'ℹ️ Nenhuma dívida vencida no momento — o benefício de quitar é menor nesse cenário.':economiaMultas>totalJuros?'✅ As multas das vencidas provavelmente superam o custo do empréstimo — pode compensar!':'⚠️ Analise se o custo do empréstimo (juros) não supera a economia de quitar as dívidas agora.'}
+        </div>
+      </div>
+
+      <!-- CENÁRIO B: INVESTIR -->
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--success)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:20px">🚀</span>
+          <div class="card-title" style="margin:0">Cenário B — Usar para INVESTIR na Loja</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">
+          Se investir <strong>${Utils.moeda(valor)}</strong> em estoque com a margem bruta atual da loja:
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px">
+          <div style="padding:10px;background:var(--bg);border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Margem bruta atual</div>
+            <div style="font-size:18px;font-weight:900;color:var(--primary)">${margemBruta.toFixed(1)}%</div>
+          </div>
+          <div style="padding:10px;background:var(--bg);border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Retorno estimado</div>
+            <div style="font-size:18px;font-weight:900;color:var(--success)">+${Utils.moeda(retornoEstoque)}</div>
+          </div>
+          <div style="padding:10px;background:rgba(239,68,68,.08);border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Custo dos juros</div>
+            <div style="font-size:18px;font-weight:900;color:var(--danger)">−${Utils.moeda(totalJuros)}</div>
+          </div>
+          <div style="padding:10px;background:${lucroEmpLiquido>=0?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'};border-radius:var(--radius-sm);text-align:center">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:700">Lucro líquido estimado</div>
+            <div style="font-size:18px;font-weight:900;color:${lucroEmpLiquido>=0?'var(--success)':'var(--danger)'}">
+              ${lucroEmpLiquido>=0?'+':''}${Utils.moeda(lucroEmpLiquido)}
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;background:${totalVencido>0?'rgba(239,68,68,.1)':lucroEmpLiquido>=0?'rgba(34,197,94,.1)':'rgba(234,179,8,.1)'};border-radius:var(--radius-sm);font-size:13px;font-weight:600;border-left:3px solid ${totalVencido>0?'var(--danger)':lucroEmpLiquido>=0?'var(--success)':'var(--warning)'}">
+          ${totalVencido>0
+            ?'🔴 Você tem dívidas vencidas. Investir antes de regularizar o que está em atraso é muito arriscado — priorize quitar as vencidas primeiro.'
+            :lucroEmpLiquido>=0
+              ?'✅ O retorno estimado supera o custo do empréstimo. Se o estoque girar bem, pode ser um bom investimento.'
+              :'⚠️ Com a margem atual, o custo do empréstimo supera o retorno estimado. Invista somente se tiver certeza de giro rápido.'}
+        </div>
+      </div>
+
+      <!-- VIABILIDADE DE CAIXA -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:4px">💰 Consegue pagar as parcelas mensalmente?</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Baseado na média dos últimos 3 meses da loja (CMV + todas as despesas já descontados)</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${Fin._linhaAnalise('Faturamento médio (3 meses)', receitaMedia>0?Utils.moeda(receitaMedia):'sem dados', '')}
+          ${Fin._linhaAnalise('CMV + despesas + retiradas (média)', receitaMedia>0?'− '+Utils.moeda(receitaMedia-lucroMedio):'—', 'danger')}
+          <div style="height:1px;background:var(--border);margin:2px 0"></div>
+          ${Fin._linhaAnalise('Lucro líquido médio', receitaMedia>0?Utils.moeda(lucroMedio):'sem dados de vendas', lucroMedio>=0?'success':'danger')}
+          ${Fin._linhaAnalise('Parcela do empréstimo', '− '+Utils.moeda(pmt), 'danger')}
+          <div style="height:1px;background:var(--border);margin:2px 0"></div>
+          ${Fin._linhaAnalise('Sobra após pagar parcela', Utils.moeda(sobraComEmp), sobraComEmp>=0?'success':'danger', true)}
+        </div>
+        ${lucroMedio <= 0 && receitaMedia > 0 ? `
+        <div style="margin-top:10px;padding:10px 14px;background:rgba(239,68,68,.1);border-radius:var(--radius-sm);font-size:13px;border-left:3px solid var(--danger)">
+          🔴 <strong>Atenção:</strong> a loja está operando sem lucro nos últimos meses. Tomar um empréstimo agora aumentaria as dívidas sem que o negócio consiga pagar.
+        </div>` : sobraComEmp < 0 ? `
+        <div style="margin-top:10px;padding:10px 14px;background:rgba(239,68,68,.1);border-radius:var(--radius-sm);font-size:13px;border-left:3px solid var(--danger)">
+          🔴 <strong>Atenção:</strong> a parcela de ${Utils.moeda(pmt)} é maior que o lucro médio da loja. Você precisaria de renda extra para pagar esse empréstimo todo mês.
+        </div>` : pctLucro > 60 ? `
+        <div style="margin-top:10px;padding:10px 14px;background:rgba(234,179,8,.1);border-radius:var(--radius-sm);font-size:13px;border-left:3px solid var(--warning)">
+          ⚠️ A parcela consome <strong>${pctLucro.toFixed(0)}%</strong> do lucro líquido médio. Qualquer mês de venda abaixo do normal pode deixar o caixa no vermelho.
+        </div>` : ''}
+      </div>
+
+      <!-- VEREDICTO FINAL -->
+      ${veredicto?`
+      <div style="background:${veredicto.bg};border:2px solid ${veredicto.cor};border-radius:var(--radius);padding:16px 20px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:28px">${veredicto.icon}</span>
+          <span style="font-size:18px;font-weight:900;color:${veredicto.cor}">${veredicto.label}</span>
+        </div>
+        <div style="font-size:14px;line-height:1.7">${veredicto.texto}</div>
+      </div>`:''}
+
+      <!-- REGISTRAR -->
+      <div class="card" style="background:rgba(139,92,246,.05);border-color:#8b5cf6">
+        <div class="card-title" style="color:#8b5cf6;margin-bottom:12px">✅ Decidiu pegar? Registre as parcelas automaticamente</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;min-width:220px;flex:1">
+            <label class="form-label">Descrição (nome do empréstimo)</label>
+            <input type="text" id="empDescricao" class="form-control" placeholder="Ex: Empréstimo Banco do Brasil">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Data da 1ª parcela</label>
+            <input type="date" id="empPrimeiraParcela" class="form-control">
+          </div>
+          <button class="btn btn-primary" onclick="Fin._registrarEmprestimo()" style="background:#8b5cf6;border-color:#8b5cf6;white-space:nowrap">
+            ✅ Registrar ${parcelas} parcela(s) de ${Utils.moeda(pmt)}
+          </button>
+        </div>
+      </div>`;
+  },
+
+
+  _linhaAnalise: (label, valor, cor, destaque = false) => {
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:${destaque ? '10px 12px' : '7px 12px'};background:${destaque ? 'var(--bg)' : 'transparent'};border-radius:var(--radius-sm)">
+      <span style="font-size:${destaque ? '14px' : '13px'};font-weight:${destaque ? '700' : '400'}">${label}</span>
+      <span style="font-size:${destaque ? '18px' : '14px'};font-weight:${destaque ? '900' : '700'};color:${cor ? 'var(--' + cor + ')' : 'var(--text)'}">${valor}</span>
+    </div>`;
+  },
+
+  _salvarSimEmp: () => {
+    const cfg = {
+      valor:    document.getElementById('empValor')?.value    || '',
+      taxaMes:  document.getElementById('empTaxa')?.value     || '',
+      parcelas: document.getElementById('empParcelas')?.value || 12,
+      descricao:       document.getElementById('empDescricao')?.value       || '',
+      primeiraParcela: document.getElementById('empPrimeiraParcela')?.value || '',
+    };
+    localStorage.setItem('movePe_emprestimo_sim', JSON.stringify(cfg));
+  },
+
+  _registrarEmprestimo: () => {
+    Fin._salvarSimEmp();
+    const cfg      = JSON.parse(localStorage.getItem('movePe_emprestimo_sim') || '{}');
+    const valor    = parseFloat(cfg.valor    || 0);
+    const taxaMes  = parseFloat(cfg.taxaMes  || 0);
+    const n        = parseInt(cfg.parcelas   || 12);
+    const descricao      = document.getElementById('empDescricao')?.value?.trim() || 'Empréstimo';
+    const primeiraParcela = document.getElementById('empPrimeiraParcela')?.value;
+    if (!valor || !n) { Utils.toast('Preencha o valor e número de parcelas', 'error'); return; }
+    if (!primeiraParcela) { Utils.toast('Informe a data da 1ª parcela', 'error'); return; }
+    if (!Utils.confirmar(`Registrar ${n} parcelas de ${Utils.moeda(Fin._calcPMT(valor, taxaMes/100, n))} em Contas → A Pagar?`)) return;
+
+    const pmt = Fin._calcPMT(valor, taxaMes / 100, n);
+    const base = new Date(primeiraParcela + 'T00:00:00');
+    for (let k = 0; k < n; k++) {
+      const venc = new Date(base);
+      venc.setMonth(venc.getMonth() + k);
+      const vencStr = `${venc.getFullYear()}-${String(venc.getMonth()+1).padStart(2,'0')}-${String(venc.getDate()).padStart(2,'0')}`;
+      DB.Despesas.salvar({
+        descricao: `${descricao} — Parcela ${k+1}/${n}`,
+        valor: parseFloat(pmt.toFixed(2)),
+        vencimento: vencStr,
+        categoria: 'variavel',
+        origem: 'loja',
+        recorrente: false,
+        pago: false,
+      });
+    }
+    Utils.toast(`${n} parcelas registradas em Contas → A Pagar!`, 'success');
+    Fin.setSubContas('pagar', document.querySelector('.tab-btn-sub'));
   },
 
   // ---- COMPRA PARCELADA ----
@@ -1212,6 +2448,7 @@ const Fin = {
 
     // Crediário a receber
     DB.Crediario.listar().forEach(cred => {
+      if (!cred.parcelas) return;
       cred.parcelas.forEach(p => {
         if (p.status !== 'pago' && p.vencimento && p.vencimento >= hoje && p.vencimento <= dataFimStr) {
           adicionarDia(p.vencimento);
@@ -1702,7 +2939,236 @@ const Fin = {
           ? `<div style="color:var(--success);font-weight:700">✅ Você já ultrapassou o ponto de equilíbrio este mês!</div>`
           : `<div style="color:var(--danger);font-weight:700">⚠️ Ainda faltam ${Utils.moeda(pontoEquilibrio - d.receitaBruta)} para cobrir todos os custos.</div>`}
       </div>` : ''}`;
-  }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ABA TRÁFEGO PAGO
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Retorna a segunda-feira da semana que contém a data informada (YYYY-MM-DD)
+  _inicioSemana: (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    const dia = d.getDay(); // 0=Dom
+    const diff = dia === 0 ? -6 : 1 - dia;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split('T')[0];
+  },
+
+  // Retorna label legível para a semana: "Semana atual", "Semana passada", "DD/MM–DD/MM"
+  _labelSemana: (seg, isAtual, isAnterior) => {
+    if (isAtual)    return 'Semana atual';
+    if (isAnterior) return 'Semana passada';
+    const d1 = new Date(seg + 'T00:00:00');
+    const d2 = new Date(seg + 'T00:00:00'); d2.setDate(d2.getDate() + 6);
+    return `${d1.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })} – ${d2.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}`;
+  },
+
+  renderTrafego: () => {
+    const cont = document.getElementById('trafegoConteudo');
+    if (!cont) return;
+
+    const hoje = Utils.hoje();
+
+    // Restaurar % salvo
+    const pctSalvo = parseInt(DB.Config.get('trafegoPct', 5)) || 5;
+    const sliderEl = document.getElementById('trafegoPct');
+    const labelEl  = document.getElementById('trafegoPctLabel');
+    if (sliderEl && sliderEl.value != pctSalvo) {
+      sliderEl.value = pctSalvo;
+      if (labelEl) labelEl.textContent = pctSalvo + '%';
+    }
+    const pct = sliderEl ? parseInt(sliderEl.value) : pctSalvo;
+
+    const segAtual   = Fin._inicioSemana(hoje);
+    const segAnterior = (() => { const d = new Date(segAtual + 'T00:00:00'); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+
+    // Montar dados das últimas 8 semanas (da mais antiga à atual)
+    const semanas = [];
+    for (let i = 7; i >= 0; i--) {
+      const d = new Date(segAtual + 'T00:00:00');
+      d.setDate(d.getDate() - i * 7);
+      const seg = d.toISOString().split('T')[0];
+      const fim = (() => { const f = new Date(seg + 'T00:00:00'); f.setDate(f.getDate()+6); return f.toISOString().split('T')[0]; })();
+
+      const vendas  = DB.Vendas.listarPorPeriodo(seg, fim);
+      const receita = vendas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+      const cmv     = vendas.reduce((s, v) => s + (v.itens || []).reduce((sc, item) =>
+        sc + (parseFloat(item.precoCusto) || 0) * (parseInt(item.quantidade) || 1), 0), 0);
+      const lucroBruto = receita - cmv;
+      const investido  = DB.Trafego.totalSemana(seg);
+      const entradas   = DB.Trafego.listarSemana(seg);
+
+      semanas.push({ seg, fim, receita, cmv, lucroBruto, investido, entradas,
+        isAtual: seg === segAtual, isAnterior: seg === segAnterior });
+    }
+
+    // Média de receita e lucro bruto das últimas 4 semanas completas (excluindo atual)
+    const passadas = semanas.filter(s => !s.isAtual && s.receita > 0).slice(-4);
+    const mediaReceita     = passadas.length ? passadas.reduce((s, w) => s + w.receita, 0)     / passadas.length : 0;
+    const mediaLucroBruto  = passadas.length ? passadas.reduce((s, w) => s + w.lucroBruto, 0)  / passadas.length : 0;
+
+    const orcamento    = Math.round(mediaReceita * pct / 100 * 100) / 100;
+    const semanaAtual  = semanas.find(s => s.isAtual);
+    const investidoSem = semanaAtual ? semanaAtual.investido : 0;
+    const disponivel   = Math.max(0, orcamento - investidoSem);
+    const pctUsado     = orcamento > 0 ? Math.min(100, (investidoSem / orcamento) * 100) : 0;
+
+    // Alerta de segurança: orçamento vs lucro bruto médio
+    const pctDaLucro = mediaLucroBruto > 0 ? (orcamento / mediaLucroBruto) * 100 : 0;
+    let alertaHtml = '';
+    if (mediaReceita === 0) {
+      alertaHtml = `<div style="padding:14px 18px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:var(--radius);margin-bottom:20px;font-size:13px">
+        ℹ️ <strong>Sem vendas registradas nas últimas 4 semanas.</strong> Registre algumas vendas para o sistema calcular seu orçamento de tráfego automaticamente.
+      </div>`;
+    } else if (pctDaLucro > 60) {
+      alertaHtml = `<div style="padding:14px 18px;background:rgba(239,68,68,.08);border:1px solid var(--danger);border-radius:var(--radius);margin-bottom:20px;font-size:13px">
+        ⚠️ <strong>Orçamento alto em relação ao lucro bruto.</strong> Investir ${Utils.moeda(orcamento)}/semana representaria ${pctDaLucro.toFixed(0)}% do seu lucro bruto médio (${Utils.moeda(mediaLucroBruto)}). Considere começar com um % menor.
+      </div>`;
+    } else if (pctDaLucro > 35) {
+      alertaHtml = `<div style="padding:14px 18px;background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.5);border-radius:var(--radius);margin-bottom:20px;font-size:13px">
+        💡 <strong>Orçamento moderado.</strong> ${Utils.moeda(orcamento)}/semana = ${pctDaLucro.toFixed(0)}% do lucro bruto. Viável se as campanhas trouxerem retorno. Monitore os resultados.
+      </div>`;
+    } else if (orcamento > 0) {
+      alertaHtml = `<div style="padding:14px 18px;background:rgba(34,197,94,.08);border:1px solid var(--success);border-radius:var(--radius);margin-bottom:20px;font-size:13px">
+        ✅ <strong>Orçamento seguro.</strong> ${Utils.moeda(orcamento)}/semana = ${pctDaLucro.toFixed(0)}% do lucro bruto médio. Você pode investir com tranquilidade.
+      </div>`;
+    }
+
+    // Barra de progresso da semana atual
+    const corBarra = pctUsado >= 100 ? 'var(--danger)' : pctUsado >= 80 ? 'var(--warning)' : 'var(--primary)';
+    const statusSem = pctUsado >= 100 ? '🔴 Orçamento esgotado' : pctUsado >= 80 ? '🟡 Quase no limite' : '🟢 Dentro do orçamento';
+
+    const cardSemanaHtml = orcamento > 0 ? `
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Esta semana</div>
+            <div style="font-size:32px;font-weight:900;color:${disponivel > 0 ? 'var(--primary)' : 'var(--danger)'};line-height:1.1;margin-top:4px">
+              ${Utils.moeda(disponivel)}
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:2px">disponível para investir</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13px;color:var(--text-muted)">Já investido</div>
+            <div style="font-size:22px;font-weight:800;color:var(--text)">${Utils.moeda(investidoSem)}</div>
+            <div style="font-size:13px;color:var(--text-muted)">de ${Utils.moeda(orcamento)} orçados</div>
+          </div>
+        </div>
+        <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden;margin-bottom:8px">
+          <div style="height:100%;width:${pctUsado}%;background:${corBarra};border-radius:99px;transition:width .4s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">
+          <span>${statusSem}</span>
+          <span>${pctUsado.toFixed(0)}% usado</span>
+        </div>
+        ${semanaAtual && semanaAtual.entradas.length > 0 ? `
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">LANÇAMENTOS DESTA SEMANA</div>
+          ${semanaAtual.entradas.map(e => {
+            const plat = { meta:'Meta/Instagram', google:'Google Ads', tiktok:'TikTok Ads', outro:'Outro' }[e.plataforma] || e.plataforma;
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <div>
+                <span style="font-weight:600">${plat}</span>
+                ${e.obs ? `<span style="color:var(--text-muted)"> · ${e.obs}</span>` : ''}
+                <div style="font-size:11px;color:var(--text-muted)">${Utils.data(e.data)}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-weight:800;color:var(--danger)">${Utils.moeda(e.valor)}</span>
+                <button class="btn btn-danger btn-sm btn-icon" onclick="Fin.excluirTrafego('${e.id}')" title="Excluir">🗑</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>` : ''}
+      </div>` : '';
+
+    // Cards de contexto
+    const cardsContexto = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+        <div class="stat-card">
+          <div class="stat-label">Faturamento médio semanal</div>
+          <div class="stat-value">${Utils.moeda(mediaReceita)}</div>
+          <div class="stat-sub">média das últimas ${passadas.length} semanas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Lucro bruto médio semanal</div>
+          <div class="stat-value success">${Utils.moeda(mediaLucroBruto)}</div>
+          <div class="stat-sub">receita – custo dos produtos</div>
+        </div>
+        <div class="stat-card stat-destaque">
+          <div class="stat-label">Orçamento semanal (${pct}%)</div>
+          <div class="stat-value primary">${Utils.moeda(orcamento)}</div>
+          <div class="stat-sub">${pct}% do faturamento médio</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total investido (8 semanas)</div>
+          <div class="stat-value">${Utils.moeda(semanas.reduce((s, w) => s + w.investido, 0))}</div>
+          <div class="stat-sub">histórico de tráfego pago</div>
+        </div>
+      </div>`;
+
+    // Histórico semanal
+    const semanasComDados = semanas.filter(s => s.receita > 0 || s.investido > 0);
+    const historicoHtml = semanasComDados.length === 0 ? '' : `
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+        Histórico — Últimas Semanas
+      </div>
+      <div class="card" style="padding:0">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text-muted)">
+          <span>Semana</span>
+          <span style="text-align:right">Faturamento</span>
+          <span style="text-align:right">Lucro bruto</span>
+          <span style="text-align:right">Investido</span>
+          <span style="text-align:right">% do fat.</span>
+        </div>
+        ${[...semanasComDados].reverse().map(s => {
+          const label = Fin._labelSemana(s.seg, s.isAtual, s.isAnterior);
+          const pctInv = s.receita > 0 ? (s.investido / s.receita * 100).toFixed(1) : '—';
+          const dentroOrcamento = s.investido <= (s.receita * pct / 100) + 0.01;
+          return `<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);align-items:center;${s.isAtual ? 'background:rgba(99,102,241,.04)' : ''}">
+            <div style="font-weight:${s.isAtual ? '700' : '400'};font-size:13px">${label}</div>
+            <div style="text-align:right;font-size:13px">${s.receita > 0 ? Utils.moeda(s.receita) : '<span style="color:var(--text-muted)">—</span>'}</div>
+            <div style="text-align:right;font-size:13px;color:var(--success)">${s.lucroBruto > 0 ? Utils.moeda(s.lucroBruto) : '<span style="color:var(--text-muted)">—</span>'}</div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:${s.investido > 0 ? 'var(--danger)' : 'var(--text-muted)'}">${s.investido > 0 ? Utils.moeda(s.investido) : '—'}</div>
+            <div style="text-align:right;font-size:13px;font-weight:700;color:${s.investido === 0 ? 'var(--text-muted)' : dentroOrcamento ? 'var(--success)' : 'var(--danger)'}">
+              ${pctInv !== '—' && s.investido > 0 ? pctInv + '%' : '—'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    cont.innerHTML = alertaHtml + cardSemanaHtml + cardsContexto + historicoHtml;
+  },
+
+  abrirFormTrafego: () => {
+    document.getElementById('formTrafego').reset();
+    document.getElementById('trafegoData').value = Utils.hoje();
+    Utils.abrirModal('modalTrafego');
+  },
+
+  salvarTrafego: (e) => {
+    e.preventDefault();
+    const f = document.getElementById('formTrafego');
+    const data = f.data.value;
+    const semana = Fin._inicioSemana(data);
+    DB.Trafego.salvar({
+      data,
+      semana,
+      plataforma: f.plataforma.value,
+      valor: parseFloat(f.valor.value) || 0,
+      obs: f.obs.value.trim()
+    });
+    Utils.fecharModal('modalTrafego');
+    Fin.renderTrafego();
+    Utils.toast('Investimento registrado!', 'success');
+  },
+
+  excluirTrafego: (id) => {
+    if (!Utils.confirmar('Excluir este lançamento?')) return;
+    DB.Trafego.excluir(id);
+    Fin.renderTrafego();
+    Utils.toast('Lançamento excluído');
+  },
+
 };
 
 document.addEventListener('DOMContentLoaded', Fin.init);
