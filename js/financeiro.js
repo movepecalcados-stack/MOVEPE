@@ -3172,26 +3172,83 @@ const Fin = {
 
   // ---- HISTÓRICO TINY ----
 
+  _xlsParaRegistros: (workbook) => {
+    const mapForma = { 'Crediário':'crediario', 'Cartão de crédito':'cartao_credito', 'Pix':'pix', 'Dinheiro':'dinheiro', 'Cartão de débito':'cartao_debito', 'Múltiplas':'multiplas' };
+    const ws = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    return rows.slice(1)
+      .filter(r => r[0] && r[1])
+      .map(r => {
+        const [d, m, y] = String(r[0]).split('/');
+        const data = y && m && d ? `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` : '';
+        return {
+          data,
+          numero: String(r[1]),
+          valorTotal: parseFloat(r[2]) || 0,
+          taxas: parseFloat(r[3]) || 0,
+          valorLiquido: parseFloat(r[5]) || 0,
+          forma: mapForma[r[6]] || (r[6] || '').toLowerCase(),
+          meioPagamento: r[7] || '',
+          parcelas: r[9] || '1x',
+          situacao: r[11] || ''
+        };
+      })
+      .filter(r => r.data);
+  },
+
   importarHistoricoTiny: () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json';
+    input.accept = '.xls,.xlsx,.json';
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (ext === 'json') {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            if (!Array.isArray(data)) throw new Error('Formato inválido');
+            DB.HistoricoTiny.salvar(data);
+            Utils.toast('Histórico importado: ' + data.length + ' pedidos', 'success');
+            Fin.renderHistorico();
+          } catch (err) {
+            Utils.toast('Erro ao ler arquivo: ' + err.message, 'error');
+          }
+        };
+        reader.readAsText(file);
+        return;
+      }
+
+      // XLS / XLSX — carrega biblioteca xlsx do CDN se ainda não estiver
+      const processarXls = (arrayBuffer) => {
         try {
-          const data = JSON.parse(ev.target.result);
-          if (!Array.isArray(data)) throw new Error('Formato inválido');
+          const wb = XLSX.read(arrayBuffer, { type: 'array' });
+          const data = Fin._xlsParaRegistros(wb);
+          if (data.length === 0) throw new Error('Nenhum pedido encontrado no arquivo');
           DB.HistoricoTiny.salvar(data);
           Utils.toast('Histórico importado: ' + data.length + ' pedidos', 'success');
           Fin.renderHistorico();
         } catch (err) {
-          Utils.toast('Erro ao ler arquivo: ' + err.message, 'error');
+          Utils.toast('Erro ao processar XLS: ' + err.message, 'error');
         }
       };
-      reader.readAsText(file);
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (typeof XLSX !== 'undefined') {
+          processarXls(ev.target.result);
+        } else {
+          const script = document.createElement('script');
+          script.src = 'https://unpkg.com/xlsx/dist/xlsx.full.min.js';
+          script.onload = () => processarXls(ev.target.result);
+          script.onerror = () => Utils.toast('Erro ao carregar biblioteca XLS. Tente com o arquivo .json', 'error');
+          document.head.appendChild(script);
+        }
+      };
+      reader.readAsArrayBuffer(file);
     };
     input.click();
   },
@@ -3216,12 +3273,14 @@ const Fin = {
           <div style="font-size:48px;margin-bottom:16px">📦</div>
           <div style="font-size:18px;font-weight:700;margin-bottom:8px">Histórico do sistema anterior (Tiny/Olist)</div>
           <div style="color:var(--text-muted);margin-bottom:24px;max-width:440px;margin-left:auto;margin-right:auto">
-            Importe os dados do Tiny para visualizar tendências, sazonalidade e projeções sem misturar com os dados atuais.<br><br>
-            <strong>Arquivo:</strong> <code>dados_tiny_historico.json</code> — está na pasta <strong>MovePe</strong> do seu computador.
+            Importe os dados do Tiny para visualizar tendências, sazonalidade e projeções sem misturar com os dados atuais.
           </div>
           <button id="btnImportarTiny" class="btn btn-primary" onclick="Fin.importarHistoricoTiny()">
-            Selecionar arquivo dados_tiny_historico.json
+            Selecionar relatório Tiny (.xls ou .json)
           </button>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:12px">
+            Aceita o arquivo <strong>.xls</strong> exportado direto do Tiny ou o <strong>.json</strong> gerado pelo sistema
+          </div>
         </div>`;
       return;
     }
