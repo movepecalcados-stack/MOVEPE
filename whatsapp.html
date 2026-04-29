@@ -192,6 +192,18 @@
     </div>
 
     <div class="content">
+
+      <!-- TABS -->
+      <div class="tabs" style="margin-bottom:20px">
+        <button class="tab-btn active wa-tab-btn" data-tab="cobDiaria" onclick="WA.setTab('cobDiaria',this)">🎯 Cobrança do Dia</button>
+        <button class="tab-btn wa-tab-btn" data-tab="templates" onclick="WA.setTab('templates',this)">💬 Templates & Envio</button>
+      </div>
+
+      <!-- ===== ABA COBRANÇA DO DIA ===== -->
+      <div id="secaoCobDiaria"></div>
+
+      <!-- ===== ABA TEMPLATES ===== -->
+      <div id="secaoTemplates" style="display:none">
       <div class="wa-layout">
 
         <!-- ===== PAINEL ESQUERDO — CONFIGURAÇÃO ===== -->
@@ -211,6 +223,8 @@
               <span class="var-chip" onclick="WA.inserirVar('{nome}')" title="Primeiro nome do cliente">{nome}</span>
               <span class="var-chip" onclick="WA.inserirVar('{nomeCompleto}')" title="Nome completo">{nomeCompleto}</span>
               <span class="var-chip" onclick="WA.inserirVar('{valor}')" title="Valor da parcela">{valor}</span>
+              <span class="var-chip" onclick="WA.inserirVar('{totalDevido}')" title="Total que o cliente deve">{totalDevido}</span>
+              <span class="var-chip" onclick="WA.inserirVar('{qtdParcelas}')" title="Quantidade de parcelas em atraso">{qtdParcelas}</span>
               <span class="var-chip" onclick="WA.inserirVar('{vencimento}')" title="Data de vencimento">{vencimento}</span>
               <span class="var-chip" onclick="WA.inserirVar('{loja}')" title="Nome da loja">{loja}</span>
               <span class="var-chip" onclick="WA.inserirVar('{telLoja}')" title="Telefone da loja">{telLoja}</span>
@@ -275,6 +289,7 @@
         </div>
 
       </div>
+      </div><!-- fim secaoTemplates -->
     </div>
   </div>
 
