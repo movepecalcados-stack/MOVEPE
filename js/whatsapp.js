@@ -13,15 +13,15 @@ const WA_TEMPLATES = [
     mensagem:
 `Oi, {nome}! Tudo bem? 😊
 
-Passando aqui rapidinho só pra te lembrar que sua parcela do crediário na *{loja}* vence em breve.
+Aqui é o *{atendente}* da *{loja}*!
+
+Passando rapidinho pra te lembrar que sua parcela vence dia *{vencimento}* 📅
 
 💰 Valor: *{valor}*
-📅 Vencimento: *{vencimento}*
 
-Se quiser já adiantar o pagamento ou tiver alguma dúvida, é só nos chamar aqui ou ligar:
-📞 {telLoja}
+Se quiser já resolver antes ou tiver qualquer dúvida, me chama aqui! A gente se entende fácil 😄
 
-Qualquer coisa a gente resolve junto! 😊`,
+📞 {telLoja}`,
   },
   {
     id: 'cobranca',
@@ -29,20 +29,15 @@ Qualquer coisa a gente resolve junto! 😊`,
     icon: '⚠️',
     filtroSugerido: 'inadimplentes',
     mensagem:
-`Oi, {nome}! 😊
+`Oi, {nome}! Aqui é o *{atendente}* da *{loja}* 😊
 
-Tudo bem? Aqui é da *{loja}*, passando para dar um aviso importante.
+Olhando aqui vi que sua parcela ficou em aberto:
 
-Identificamos que há uma parcela do seu crediário em atraso:
+💰 *{totalDevido}* ({qtdParcelas} em atraso há {diasAtraso})
 
-💰 Valor: *{valor}*
-📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+Sei que às vezes a gente esquece mesmo, sem problema! Me manda uma mensagem aqui pra gente resolver 👊
 
-Sabemos que imprevistos acontecem, e estamos aqui para ajudar! Entre em contato com a gente para a gente encontrar a melhor forma de regularizar, tá?
-
-📞 {telLoja}
-
-Obrigado pela atenção! 🙏`,
+📞 {telLoja}`,
   },
   {
     id: 'cobranca2',
@@ -50,41 +45,33 @@ Obrigado pela atenção! 🙏`,
     icon: '🔔',
     filtroSugerido: 'inadimplentes',
     mensagem:
-`Oi, {nome}, bom dia! 😊
+`Oi, {nome}! *{atendente}* da *{loja}* aqui de novo 🙋
 
-Aqui é da *{loja}* novamente. Percebemos que a parcela abaixo ainda está em aberto:
+Ainda não conseguimos resolver o valor em aberto:
 
-💰 Valor: *{valor}*
-📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+💰 *{totalDevido}* ({qtdParcelas} — {diasAtraso} de atraso)
 
-Gostaríamos muito de resolver isso de forma tranquila, sem complicação pra nenhum dos dois lados. 🤝
+Vamos dar um jeito nisso antes que complique mais? Pode me chamar aqui ou passar na loja que a gente conversa tranquilo 🤝
 
-⚠️ Para evitar qualquer transtorno futuro, pedimos que entre em contato o quanto antes para regularizar.
-
-📞 {telLoja}
-
-Estamos à disposição! 😊`,
+📞 {telLoja}`,
   },
   {
     id: 'cobranca_serasa',
-    label: '🚨 Aviso SPC/Serasa',
+    label: '🚨 Aviso Final',
     icon: '🚨',
     filtroSugerido: 'inadimplentes',
     mensagem:
-`Oi, {nome}. Aqui é da *{loja}*.
+`Oi, {nome}. Aqui é o *{atendente}*, da *{loja}*.
 
-Tentamos entrar em contato antes e ainda não conseguimos resolver a parcela em aberto:
+Já tentei te contatar algumas vezes e ainda não conseguimos resolver. Preciso te avisar com transparência:
 
-💰 Valor: *{valor}*
-📅 Venceu em: *{vencimento}* ({diasAtraso} dia(s) em atraso)
+💰 Total em aberto: *{totalDevido}* ({diasAtraso} de atraso)
 
-Precisamos te informar que débitos não regularizados podem resultar na inclusão do seu nome nos órgãos de proteção ao crédito, como *SPC e Serasa*, o que pode dificultar compras a prazo, financiamentos e cartões no futuro.
+Infelizmente se não regularizarmos em breve vou precisar tomar outras medidas, incluindo o *SPC/Serasa*. E não quero isso pra você.
 
-Queremos muito evitar isso! Entre em contato *hoje* para a gente encontrar uma solução:
+Me chama *hoje*, a gente encontra uma saída juntos. 🙏
 
-📞 {telLoja}
-
-Estamos esperando seu retorno. 🙏`,
+📞 {telLoja}`,
   },
   {
     id: 'aniversario',
@@ -92,31 +79,32 @@ Estamos esperando seu retorno. 🙏`,
     icon: '🎂',
     filtroSugerido: 'aniversario_hoje',
     mensagem:
-`🎉 Feliz Aniversário, {nome}!
+`🎉 *Feliz aniversário, {nome}!*
 
-A equipe da *{loja}* deseja um dia muito especial para você! 🥳🎁
+Aqui é o *{atendente}* da *{loja}*!
 
-Que tal comemorar seu aniversário com um calçado novo? Venha nos visitar e ganhe uma surpresa especial! 🎀
+Que seu dia seja incrível, cheio de coisas boas e muito motivo pra sorrir! 🥳🎁
+
+Te espero aqui na loja pra você escolher um presentão pra se dar! 👟✨
 
 Com carinho,
-*{loja}* 👟`,
+{atendente} 😄`,
   },
   {
     id: 'promocao',
-    label: 'Promoção',
+    label: 'Promoção 🔥',
     icon: '🔥',
     filtroSugerido: 'todos',
     mensagem:
-`Oi, {nome}! 🔥
+`Oi, {nome}! Aqui é o *{atendente}* da *{loja}* 👟
 
-*PROMOÇÃO ESPECIAL* na {loja}!
+Chegaram novidades aqui na loja e eu pensei em você! 🔥
 
-Confira nossas ofertas imperdíveis com até 50% de desconto em produtos selecionados! 👟✨
+Temos modelos novos com preços ótimos e parcelamos no crediário sem juros pra quem já é cliente!
 
-🏃 Corra! Estoque limitado!
+Passa aqui pra dar uma olhada quando puder, tô te esperando 😊
 
-📞 {telLoja}
-📍 Venha nos visitar!`,
+📞 {telLoja}`,
   },
   {
     id: 'reativacao',
@@ -124,14 +112,15 @@ Confira nossas ofertas imperdíveis com até 50% de desconto em produtos selecio
     icon: '💛',
     filtroSugerido: 'reativacao',
     mensagem:
-`Olá, {nome}! Sentimos sua falta! 💛
+`Oi, {nome}! Tudo bem? 😊
 
-Faz um tempinho que você não passa na *{loja}* e gostaríamos de te ver por aqui de novo!
+Aqui é o *{atendente}* da *{loja}*!
 
-🆕 Chegaram muitas novidades que com certeza vão te surpreender!
-👟 Novos modelos, novas cores, novos tamanhos!
+Faz um tempinho que você não aparece por aqui e senti sua falta! 💛
 
-Venha conferir! Te esperamos com muito carinho. 😊
+Chegaram muitas novidades — novos modelos, novas cores — com certeza tem coisa do seu gosto!
+
+Quando puder passa aqui, vai adorar o que tá chegando 👟
 
 📞 {telLoja}`,
   },
@@ -245,9 +234,11 @@ const WA = {
   _substituirVarsCompleto: (template, cli, extra, loja, telLoja) => {
     const primeiro = (cli.nome || '').split(' ')[0];
     const diasAtraso = extra.diasAtraso || 0;
+    const atendente = DB.Config.get('nomeAtendente', 'Weto');
     return template
       .replace(/{nome}/g, primeiro)
       .replace(/{nomeCompleto}/g, cli.nome || '')
+      .replace(/{atendente}/g, atendente)
       .replace(/{loja}/g, loja)
       .replace(/{telLoja}/g, telLoja ? Utils.telefone(telLoja) : loja)
       .replace(/{valor}/g, extra.valor ? Utils.moeda(extra.valor) : '')

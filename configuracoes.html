@@ -54,6 +54,10 @@
             <input type="text" id="inputNomeLoja" class="form-control" placeholder="Ex: MOVE PÉ CALÇADOS">
           </div>
           <div class="form-group">
+            <label class="form-label">Seu nome (aparece no WhatsApp)</label>
+            <input type="text" id="inputNomeAtendente" class="form-control" placeholder="Ex: Weto">
+          </div>
+          <div class="form-group">
             <label class="form-label">CNPJ</label>
             <input type="text" id="inputCnpjLoja" class="form-control" placeholder="00.000.000/0000-00" maxlength="18">
           </div>
@@ -503,6 +507,7 @@
       carregarDadosLoja: () => {
         const campos = {
           inputNomeLoja: 'nomeLoja',
+          inputNomeAtendente: 'nomeAtendente',
           inputCnpjLoja: 'cnpj',
           inputEnderecoLojaCompleto: 'enderecoLoja',
           inputCidadeLoja: 'cidadeLoja',
@@ -514,11 +519,13 @@
       },
 
       salvarDadosLoja: () => {
-        const nome = document.getElementById('inputNomeLoja').value.trim();
-        const cnpj = document.getElementById('inputCnpjLoja').value.trim();
-        const end  = document.getElementById('inputEnderecoLojaCompleto').value.trim();
-        const cid  = document.getElementById('inputCidadeLoja').value.trim();
+        const nome  = document.getElementById('inputNomeLoja').value.trim();
+        const aten  = document.getElementById('inputNomeAtendente').value.trim();
+        const cnpj  = document.getElementById('inputCnpjLoja').value.trim();
+        const end   = document.getElementById('inputEnderecoLojaCompleto').value.trim();
+        const cid   = document.getElementById('inputCidadeLoja').value.trim();
         if (nome) DB.Config.set('nomeLoja', nome);
+        if (aten) DB.Config.set('nomeAtendente', aten);
         if (cnpj) DB.Config.set('cnpj', cnpj);
         if (end)  DB.Config.set('enderecoLoja', end);
         if (cid)  DB.Config.set('cidadeLoja', cid);
