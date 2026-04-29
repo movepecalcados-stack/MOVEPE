@@ -167,15 +167,53 @@ const WA = {
   },
 
   // ---- COBRANÇA DO DIA ----
-  _getContatados: () => JSON.parse(localStorage.getItem('movePe_wa_contatados') || '{}'),
-  _setContatados: (data) => localStorage.setItem('movePe_wa_contatados', JSON.stringify(data)),
 
-  marcarContatado: (clienteId) => {
-    const todos = WA._getContatados();
-    todos[clienteId] = Utils.hoje();
-    WA._setContatados(todos);
+  // Histórico: { clienteId: [ { data, diasAtraso, template }, ... ] }
+  _getHistorico: () => JSON.parse(localStorage.getItem('movePe_wa_historico') || '{}'),
+  _setHistorico: (data) => localStorage.setItem('movePe_wa_historico', JSON.stringify(data)),
+
+  // Quantos dias esperar antes do próximo contato
+  _intervaloPorDias: (diasAtraso) => {
+    if (diasAtraso <= 30) return 7;
+    if (diasAtraso <= 60) return 4;
+    return 2;
+  },
+
+  // Retorna { ultimoContato, proximoContato, contatadoHoje, totalContatos }
+  _statusContato: (clienteId, diasAtraso) => {
+    const hist = WA._getHistorico();
+    const registros = hist[clienteId] || [];
+    if (registros.length === 0) return { ultimoContato: null, proximoContato: null, contatadoHoje: false, totalContatos: 0 };
+    const ultimo = registros[registros.length - 1];
+    const hoje = Utils.hoje();
+    const intervalo = WA._intervaloPorDias(diasAtraso);
+    const dProximo = new Date(ultimo.data + 'T12:00:00');
+    dProximo.setDate(dProximo.getDate() + intervalo);
+    const proximoContato = dProximo.toISOString().substring(0, 10);
+    return {
+      ultimoContato: ultimo.data,
+      proximoContato,
+      contatadoHoje: ultimo.data === hoje,
+      totalContatos: registros.length,
+    };
+  },
+
+  // Deve aparecer na lista de hoje?
+  _deveContatarHoje: (clienteId, diasAtraso) => {
+    if (diasAtraso < 6) return false; // dentro da carência
+    const s = WA._statusContato(clienteId, diasAtraso);
+    if (!s.ultimoContato) return true; // nunca contatado
+    const hoje = Utils.hoje();
+    return s.proximoContato <= hoje;
+  },
+
+  marcarContatado: (clienteId, diasAtraso, templateId) => {
+    const hist = WA._getHistorico();
+    if (!hist[clienteId]) hist[clienteId] = [];
+    hist[clienteId].push({ data: Utils.hoje(), diasAtraso, template: templateId || '' });
+    WA._setHistorico(hist);
     WA.renderCobDiaria();
-    Utils.toast('Marcado como contatado!', 'success');
+    Utils.toast('Contato registrado!', 'success');
   },
 
   _toggleMostrarContatados: () => {
@@ -184,10 +222,10 @@ const WA = {
   },
 
   _getTemplatePorDias: (dias) => {
-    if (dias <= 7)  return WA_TEMPLATES.find(t => t.id === 'vencendo')         || WA_TEMPLATES[0];
-    if (dias <= 20) return WA_TEMPLATES.find(t => t.id === 'cobranca')         || WA_TEMPLATES[1];
-    if (dias <= 45) return WA_TEMPLATES.find(t => t.id === 'cobranca2')        || WA_TEMPLATES[2];
-    return              WA_TEMPLATES.find(t => t.id === 'cobranca_serasa')     || WA_TEMPLATES[3];
+    if (dias <= 7)  return WA_TEMPLATES.find(t => t.id === 'vencendo')     || WA_TEMPLATES[0];
+    if (dias <= 20) return WA_TEMPLATES.find(t => t.id === 'cobranca')     || WA_TEMPLATES[1];
+    if (dias <= 45) return WA_TEMPLATES.find(t => t.id === 'cobranca2')    || WA_TEMPLATES[2];
+    return              WA_TEMPLATES.find(t => t.id === 'cobranca_serasa') || WA_TEMPLATES[3];
   },
 
   _corPorDias: (dias) => {
@@ -224,8 +262,7 @@ const WA = {
     if (!cont) return;
 
     const hoje = Utils.hoje();
-    const contatados = WA._getContatados();
-    const loja = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS');
+    const loja   = DB.Config.get('nomeLoja', 'MOVE PÉ CALÇADOS');
     const telLoja = DB.Config.get('whatsapp', '') || DB.Config.get('telefone', '');
 
     // Agrupa parcelas em atraso por cliente
@@ -246,17 +283,21 @@ const WA = {
       });
     });
 
-    const todos = Object.values(clientesMap)
-      .sort((a, b) => (b.diasMaxAtraso * Math.sqrt(b.totalDevido)) - (a.diasMaxAtraso * Math.sqrt(a.totalDevido)));
+    // Enriquece com status de contato
+    const todos = Object.values(clientesMap).map(item => ({
+      ...item,
+      status: WA._statusContato(item.cliente.id, item.diasMaxAtraso),
+    })).sort((a, b) => (b.diasMaxAtraso * Math.sqrt(b.totalDevido)) - (a.diasMaxAtraso * Math.sqrt(a.totalDevido)));
 
-    const comTel   = todos.filter(c => c.cliente.telefone);
-    const semTel   = todos.filter(c => !c.cliente.telefone);
-    const jaHoje   = comTel.filter(c => contatados[c.cliente.id] === hoje);
-    const pendente = comTel.filter(c => contatados[c.cliente.id] !== hoje);
+    const comTel     = todos.filter(c => c.cliente.telefone);
+    const semTel     = todos.filter(c => !c.cliente.telefone);
+    const paraHoje   = comTel.filter(c => WA._deveContatarHoje(c.cliente.id, c.diasMaxAtraso));
+    const aguardando = comTel.filter(c => !WA._deveContatarHoje(c.cliente.id, c.diasMaxAtraso));
+    const jaContatadosHoje = paraHoje.filter(c => c.status.contatadoHoje);
+    const pendentes  = paraHoje.filter(c => !c.status.contatadoHoje);
     const totalEmAberto = todos.reduce((s, c) => s + c.totalDevido, 0);
-    const roteiro = Math.ceil(pendente.length / 7);
 
-    const renderItem = (item, jaContatado) => {
+    const renderItem = (item, dimmed) => {
       const cli = item.cliente;
       const tel = (cli.telefone || '').replace(/\D/g, '');
       const tpl = WA._getTemplatePorDias(item.diasMaxAtraso);
@@ -269,35 +310,41 @@ const WA = {
         qtdParcelas: item.parcelas.length,
       }, loja, telLoja);
       const link = `https://wa.me/55${tel}?text=${encodeURIComponent(mensagem)}`;
-      const ultimoContato = contatados[cli.id];
+      const { ultimoContato, proximoContato, contatadoHoje, totalContatos } = item.status;
       const cor = WA._corPorDias(item.diasMaxAtraso);
 
+      // Info de histórico
+      let historicoInfo = '';
+      if (contatadoHoje) {
+        const intervalo = WA._intervaloPorDias(item.diasMaxAtraso);
+        historicoInfo = `<span style="color:var(--success);font-weight:600">✅ Contatado hoje</span> · próximo em <strong>${intervalo} dias</strong> (${Utils.data(proximoContato)})`;
+      } else if (ultimoContato) {
+        historicoInfo = `Último contato: ${Utils.data(ultimoContato)} · ${totalContatos}x no total`;
+      } else {
+        historicoInfo = `<span style="color:var(--warning);font-weight:600">Nunca contatado</span>`;
+      }
+
       return `
-        <div style="padding:14px 16px;border-bottom:1px solid var(--border);${jaContatado ? 'opacity:.5' : ''}">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);${dimmed ? 'opacity:.5' : ''}">
           <div style="display:flex;align-items:flex-start;gap:12px">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
                 <span style="font-weight:700;font-size:14px">${cli.nome}</span>
                 <span style="font-size:11px;font-weight:700;color:${cor};background:${cor}20;padding:2px 8px;border-radius:10px">${WA._labelDias(item.diasMaxAtraso)}</span>
-                ${jaContatado ? '<span style="font-size:11px;color:var(--success);font-weight:600">✅ Contatado hoje</span>' : ''}
               </div>
               <div style="font-size:13px;color:var(--text-muted)">
-                ${item.parcelas.length} parcela(s) em atraso ·
-                <strong style="color:var(--danger)">${Utils.moeda(item.totalDevido)}</strong> no total
+                ${item.parcelas.length} parcela(s) · <strong style="color:var(--danger)">${Utils.moeda(item.totalDevido)}</strong> · template: <em>${tpl.label}</em>
               </div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
-                Template: <em>${tpl.label}</em>
-                ${ultimoContato && ultimoContato !== hoje ? ` · Último contato: ${Utils.data(ultimoContato)}` : ''}
-                ${!ultimoContato ? ' · Nunca contatado' : ''}
-              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${historicoInfo}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:5px;align-items:center;flex-shrink:0">
               ${tel
-                ? `<a href="${link}" target="_blank" onclick="setTimeout(()=>WA.marcarContatado('${cli.id}'),800)"
-                    style="background:#25D366;color:#fff;border-radius:8px;padding:10px 14px;font-size:20px;text-decoration:none;display:block;line-height:1" title="Enviar WhatsApp">💬</a>`
+                ? `<a href="${link}" target="_blank"
+                    onclick="setTimeout(()=>WA.marcarContatado('${cli.id}',${item.diasMaxAtraso},'${tpl.id}'),800)"
+                    style="background:#25D366;color:#fff;border-radius:8px;padding:10px 14px;font-size:20px;text-decoration:none;display:block;line-height:1">💬</a>`
                 : `<span style="font-size:11px;color:var(--danger);font-weight:600">Sem tel.</span>`}
-              ${!jaContatado
-                ? `<button onclick="WA.marcarContatado('${cli.id}')"
+              ${!contatadoHoje && tel
+                ? `<button onclick="WA.marcarContatado('${cli.id}',${item.diasMaxAtraso},'${tpl.id}')"
                     style="font-size:10px;border:1px solid var(--border);background:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text-muted)">✓ Marcar</button>`
                 : ''}
             </div>
@@ -305,77 +352,104 @@ const WA = {
         </div>`;
     };
 
+    const renderItemAguardando = (item) => {
+      const { proximoContato, ultimoContato, totalContatos } = item.status;
+      const diasRestantes = Math.ceil((new Date(proximoContato) - new Date(hoje)) / 86400000);
+      const cor = WA._corPorDias(item.diasMaxAtraso);
+      return `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-weight:600;font-size:13px">${item.cliente.nome}</span>
+              <span style="font-size:11px;color:${cor}">${WA._labelDias(item.diasMaxAtraso)}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+              ${Utils.moeda(item.totalDevido)} · Último contato: ${Utils.data(ultimoContato)} (${totalContatos}x)
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;font-size:12px">
+            <div style="color:var(--text-muted)">Próximo contato</div>
+            <div style="font-weight:700;color:var(--primary)">${Utils.data(proximoContato)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">em ${diasRestantes} dia(s)</div>
+          </div>
+        </div>`;
+    };
+
     cont.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
         <div class="card" style="padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Inadimplentes</div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total Inadimplentes</div>
           <div style="font-size:28px;font-weight:700;color:var(--danger)">${todos.length}</div>
-          <div style="font-size:12px;color:var(--text-muted)">clientes</div>
+          <div style="font-size:12px;color:var(--text-muted)">${Utils.moeda(totalEmAberto)} em aberto</div>
         </div>
         <div class="card" style="padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total em Atraso</div>
-          <div style="font-size:22px;font-weight:700;color:var(--danger)">${Utils.moeda(totalEmAberto)}</div>
-          <div style="font-size:12px;color:var(--text-muted)">a receber</div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Contatar Hoje</div>
+          <div style="font-size:28px;font-weight:700;color:${pendentes.length > 0 ? 'var(--warning)' : 'var(--success)'}">${pendentes.length}</div>
+          <div style="font-size:12px;color:var(--text-muted)">pendentes</div>
         </div>
         <div class="card" style="padding:16px;text-align:center">
           <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Contatados Hoje</div>
-          <div style="font-size:28px;font-weight:700;color:var(--success)">${jaHoje.length}</div>
-          <div style="font-size:12px;color:var(--text-muted)">de ${comTel.length} com telefone</div>
+          <div style="font-size:28px;font-weight:700;color:var(--success)">${jaContatadosHoje.length}</div>
+          <div style="font-size:12px;color:var(--text-muted)">de ${paraHoje.length} previstos</div>
         </div>
         <div class="card" style="padding:16px;text-align:center">
-          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Pendentes Hoje</div>
-          <div style="font-size:28px;font-weight:700;color:var(--warning)">${pendente.length}</div>
-          <div style="font-size:12px;color:var(--text-muted)">${roteiro > 0 ? `~${roteiro}/dia p/ cobrir em 7d` : 'Todos contatados! 🎉'}</div>
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Aguardando</div>
+          <div style="font-size:28px;font-weight:700;color:var(--text-muted)">${aguardando.length}</div>
+          <div style="font-size:12px;color:var(--text-muted)">no prazo de espera</div>
         </div>
       </div>
 
-      <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <!-- PENDENTES HOJE -->
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <div>
-            <div style="font-weight:700;font-size:15px">Lista de Cobrança — Ordem de Prioridade</div>
-            <div style="font-size:12px;color:var(--text-muted)">Ordenado por urgência. Template escolhido automaticamente por dias de atraso.</div>
+            <div style="font-weight:700;font-size:15px">📋 Contatar Hoje (${pendentes.length})</div>
+            <div style="font-size:12px;color:var(--text-muted)">Nunca contatados ou que chegaram no prazo de retorno</div>
           </div>
-          ${jaHoje.length > 0 ? `
+          ${jaContatadosHoje.length > 0 ? `
             <button class="btn btn-outline btn-sm" onclick="WA._toggleMostrarContatados()">
-              ${_mostrarContatados ? 'Ocultar' : 'Mostrar'} já contatados (${jaHoje.length})
+              ${_mostrarContatados ? 'Ocultar' : 'Ver'} já contatados hoje (${jaContatadosHoje.length})
             </button>` : ''}
         </div>
-
-        ${pendente.length === 0 && todos.length > 0 ? `
-          <div style="text-align:center;padding:40px 20px">
-            <div style="font-size:48px;margin-bottom:12px">🎉</div>
-            <div style="font-weight:700;font-size:16px;color:var(--success)">Cobrança do dia concluída!</div>
-            <div style="font-size:13px;color:var(--text-muted);margin-top:6px">Todos os clientes com telefone foram contatados hoje.</div>
+        ${pendentes.length === 0 && jaContatadosHoje.length > 0 ? `
+          <div style="text-align:center;padding:32px 20px">
+            <div style="font-size:40px;margin-bottom:8px">🎉</div>
+            <div style="font-weight:700;color:var(--success)">Cobrança do dia concluída!</div>
           </div>` : ''}
-
-        ${pendente.length === 0 && todos.length === 0 ? `
-          <div style="text-align:center;padding:40px 20px">
-            <div style="font-size:48px;margin-bottom:12px">✅</div>
-            <div style="font-weight:700;font-size:16px;color:var(--success)">Nenhum inadimplente!</div>
-            <div style="font-size:13px;color:var(--text-muted);margin-top:6px">Todos os crediários estão em dia.</div>
+        ${pendentes.length === 0 && jaContatadosHoje.length === 0 ? `
+          <div style="text-align:center;padding:32px 20px;color:var(--text-muted)">
+            <div style="font-size:40px;margin-bottom:8px">✅</div>
+            <div style="font-weight:600">Nenhum contato previsto para hoje</div>
           </div>` : ''}
+        ${pendentes.map(item => renderItem(item, false)).join('')}
+        ${_mostrarContatados && jaContatadosHoje.length > 0 ? `
+          <div style="padding:8px 16px;background:var(--input-bg);font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">✅ Já contatados hoje</div>
+          ${jaContatadosHoje.map(item => renderItem(item, true)).join('')}` : ''}
+      </div>
 
-        ${pendente.map(item => renderItem(item, false)).join('')}
-
-        ${_mostrarContatados && jaHoje.length > 0 ? `
-          <div style="padding:8px 16px;background:var(--input-bg);font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">
-            ✅ Já contatados hoje
+      <!-- AGUARDANDO PRÓXIMO CONTATO -->
+      ${aguardando.length > 0 ? `
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+            <div style="font-weight:700;font-size:15px">⏳ Aguardando Próximo Contato (${aguardando.length})</div>
+            <div style="font-size:12px;color:var(--text-muted)">Já foram contatados — sistema calculou quando contatar de novo</div>
           </div>
-          ${jaHoje.map(item => renderItem(item, true)).join('')}` : ''}
+          ${aguardando.map(item => renderItemAguardando(item)).join('')}
+        </div>` : ''}
 
-        ${semTel.length > 0 ? `
-          <div style="padding:8px 16px;background:var(--input-bg);font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--border)">
-            ⚠️ Sem telefone cadastrado (${semTel.length})
-          </div>
+      <!-- SEM TELEFONE -->
+      ${semTel.length > 0 ? `
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="padding:8px 16px;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">⚠️ Sem telefone (${semTel.length})</div>
           ${semTel.map(item => `
-            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
               <div>
                 <span style="font-weight:600">${item.cliente.nome}</span>
                 <span style="font-size:12px;color:var(--text-muted);margin-left:8px">${Utils.moeda(item.totalDevido)} · ${item.diasMaxAtraso}d</span>
               </div>
-              <a href="clientes.html" style="font-size:12px;color:var(--primary)">Cadastrar telefone →</a>
-            </div>`).join('')}` : ''}
-      </div>`;
+              <a href="clientes.html" style="font-size:12px;color:var(--primary)">Cadastrar →</a>
+            </div>`).join('')}
+        </div>` : ''}`;
   },
 
   // ---- TEMPLATES ----
