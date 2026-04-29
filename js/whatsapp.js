@@ -205,6 +205,25 @@ const WA = {
     Utils.toast('Contato registrado!', 'success');
   },
 
+  copiarMensagem: (btnId, clienteId, diasAtraso, templateId, mensagem) => {
+    navigator.clipboard.writeText(mensagem).then(() => {
+      // Feedback visual no botão
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '✅ Copiado!';
+        btn.style.background = 'var(--success)';
+        setTimeout(() => {
+          if (btn) { btn.innerHTML = original; btn.style.background = '#25D366'; }
+        }, 2000);
+      }
+      // Registra o contato automaticamente
+      WA.marcarContatado(clienteId, diasAtraso, templateId);
+    }).catch(() => {
+      Utils.toast('Não foi possível copiar. Tente de novo.', 'error');
+    });
+  },
+
   _toggleMostrarContatados: () => {
     _mostrarContatados = !_mostrarContatados;
     WA.renderCobDiaria();
@@ -315,6 +334,9 @@ const WA = {
         historicoInfo = `<span style="color:var(--warning);font-weight:600">Nunca contatado</span>`;
       }
 
+      // Escapa a mensagem para usar no atributo data-
+      const msgId = `msg_${cli.id}`;
+
       return `
         <div style="padding:14px 16px;border-bottom:1px solid var(--border);${dimmed ? 'opacity:.5' : ''}">
           <div style="display:flex;align-items:flex-start;gap:12px">
@@ -322,6 +344,7 @@ const WA = {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
                 <span style="font-weight:700;font-size:14px">${cli.nome}</span>
                 <span style="font-size:11px;font-weight:700;color:${cor};background:${cor}20;padding:2px 8px;border-radius:10px">${WA._labelDias(item.diasMaxAtraso)}</span>
+                ${tel ? `<span style="font-size:11px;color:var(--text-muted)">📱 ${Utils.telefone(cli.telefone)}</span>` : ''}
               </div>
               <div style="font-size:13px;color:var(--text-muted)">
                 ${item.parcelas.length} parcela(s) · <strong style="color:var(--danger)">${Utils.moeda(item.totalDevido)}</strong> · template: <em>${tpl.label}</em>
@@ -329,15 +352,18 @@ const WA = {
               <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${historicoInfo}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:5px;align-items:center;flex-shrink:0">
-              ${tel
-                ? `<a href="${link}" target="_blank"
-                    onclick="setTimeout(()=>WA.marcarContatado('${cli.id}',${item.diasMaxAtraso},'${tpl.id}'),800)"
-                    style="background:#25D366;color:#fff;border-radius:8px;padding:10px 14px;font-size:20px;text-decoration:none;display:block;line-height:1">💬</a>`
-                : `<span style="font-size:11px;color:var(--danger);font-weight:600">Sem tel.</span>`}
-              ${!contatadoHoje && tel
-                ? `<button onclick="WA.marcarContatado('${cli.id}',${item.diasMaxAtraso},'${tpl.id}')"
-                    style="font-size:10px;border:1px solid var(--border);background:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text-muted)">✓ Marcar</button>`
-                : ''}
+              ${tel ? `
+                <button id="${msgId}"
+                  onclick="WA.copiarMensagem('${msgId}', '${cli.id}', ${item.diasMaxAtraso}, '${tpl.id}', ${JSON.stringify(mensagem).replace(/'/g,"\\'")})"
+                  style="background:#25D366;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">
+                  📋 Copiar msg
+                </button>
+                ${!contatadoHoje ? `
+                  <button onclick="WA.marcarContatado('${cli.id}',${item.diasMaxAtraso},'${tpl.id}')"
+                    style="font-size:10px;border:1px solid var(--border);background:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:var(--text-muted)">
+                    ✓ Já enviei
+                  </button>` : ''}
+              ` : `<span style="font-size:11px;color:var(--danger);font-weight:600">Sem tel.</span>`}
             </div>
           </div>
         </div>`;
