@@ -26,6 +26,12 @@ const Utils = {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   },
 
+  fimMes: (mesStr) => {
+    // Retorna o último dia do mês no formato YYYY-MM-DD a partir de "YYYY-MM"
+    const [ano, mes] = mesStr.split('-').map(Number);
+    return `${mesStr}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
+  },
+
   hojeFormatado: () => {
     return new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
   },
@@ -506,7 +512,7 @@ const Utils = {
           const dataPag = p.dataPagamento
             ? `  pg:${new Date(p.dataPagamento).toLocaleDateString('pt-BR')}`
             : '';
-          parcelasLinha += `  ${num}ª  ${Utils.data(p.vencimento)}  ${Utils.moeda(p.valor)}  [${st}]${dataPag}\n`;
+          parcelasLinha += `  ${num}º  ${Utils.data(p.vencimento)}  ${Utils.moeda(p.valor)}  [${st}]${dataPag}\n`;
         });
       } else {
         parcelasLinha = `${linhaL}\nCREDIÁRIO\n`;
@@ -581,13 +587,13 @@ const Utils = {
     msg += `Data: ${dataStr}\n`;
     msg += `\n🛍️ *Itens:*\n`;
     (venda.itens || []).forEach(item => {
-      const nome = item.nome || item.produtoNome || '—';
+      const nome = item.nome || item.produtoNome || '-';
       const tamParts2 = item.tamanhoLabel ? [item.tamanhoLabel, item.cor].filter(Boolean) : (item.tamanho ? [item.tamanho.split('||')[0], item.tamanho.split('||')[1]].filter(Boolean) : []);
-      const tam = tamParts2.length ? ` · Tam ${tamParts2.join(' ')}` : '';
+      const tam = tamParts2.length ? ` – Tam ${tamParts2.join(' ')}` : '';
       const qtd = item.quantidade || 1;
       const totalItem = (item.total != null ? item.total : (item.precoUnitario || item.preco || 0) * qtd);
       const val = Utils.moeda(ehCrediario ? Math.round(totalItem * fatorCrediario * 100) / 100 : totalItem);
-      msg += `• ${nome}${tam} (${qtd}x) — ${val}\n`;
+      msg += `• ${nome}${tam} (${qtd}x) – ${val}\n`;
     });
     if (venda.desconto && venda.desconto.calculado > 0) {
       msg += `\n🏷️ Desconto: -${Utils.moeda(venda.desconto.calculado)}\n`;
@@ -698,7 +704,7 @@ ${H}
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Comprovante — MOVE PÉ</title>
+  <title>Comprovante – MOVE PÉ</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {

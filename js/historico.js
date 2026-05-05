@@ -42,11 +42,12 @@ const Historico = {
   },
 
   render: () => {
+    const _localDate = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
     let vendas = DB.Vendas.listar()
       .sort((a, b) => new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0));
 
-    if (_dataInicio) vendas = vendas.filter(v => (v.criadoEm || '') >= _dataInicio);
-    if (_dataFim) vendas = vendas.filter(v => (v.criadoEm || '').substring(0, 10) <= _dataFim);
+    if (_dataInicio) vendas = vendas.filter(v => v.criadoEm && _localDate(v.criadoEm) >= _dataInicio);
+    if (_dataFim)    vendas = vendas.filter(v => v.criadoEm && _localDate(v.criadoEm) <= _dataFim);
 
     if (_buscaHist.trim()) {
       const t = _buscaHist.toLowerCase();
@@ -166,6 +167,7 @@ const Historico = {
 
   filtroPeriodo: (periodo) => {
     const hoje = new Date();
+    const fmtLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     let ini = '', fim = Utils.hoje();
 
     if (periodo === 'hoje') {
@@ -173,14 +175,14 @@ const Historico = {
     } else if (periodo === 'semana') {
       const d = new Date(hoje);
       d.setDate(d.getDate() - d.getDay());
-      ini = d.toISOString().substring(0, 10);
+      ini = fmtLocal(d);
     } else if (periodo === 'mes') {
       ini = Utils.hoje().substring(0, 7) + '-01';
     } else if (periodo === 'mes_passado') {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      const d  = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
       const df = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-      ini = d.toISOString().substring(0, 10);
-      fim = df.toISOString().substring(0, 10);
+      ini = fmtLocal(d);
+      fim = fmtLocal(df);
     }
 
     _dataInicio = ini;
@@ -191,11 +193,12 @@ const Historico = {
   },
 
   imprimirRelatorio: () => {
+    const _localDate = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
     let vendas = DB.Vendas.listar()
       .sort((a, b) => new Date(a.criadoEm || 0) - new Date(b.criadoEm || 0));
 
-    if (_dataInicio) vendas = vendas.filter(v => (v.criadoEm || '') >= _dataInicio);
-    if (_dataFim) vendas = vendas.filter(v => (v.criadoEm || '').substring(0, 10) <= _dataFim);
+    if (_dataInicio) vendas = vendas.filter(v => v.criadoEm && _localDate(v.criadoEm) >= _dataInicio);
+    if (_dataFim)    vendas = vendas.filter(v => v.criadoEm && _localDate(v.criadoEm) <= _dataFim);
     if (_buscaHist.trim()) {
       const t = _buscaHist.toLowerCase();
       vendas = vendas.filter(v =>
@@ -209,7 +212,13 @@ const Historico = {
 
     const total = vendas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
     const totais = { dinheiro: 0, pix: 0, cartao_credito: 0, cartao_debito: 0, crediario: 0 };
-    vendas.forEach(v => { if (totais[v.formaPagamento] !== undefined) totais[v.formaPagamento] += parseFloat(v.total) || 0; });
+    vendas.forEach(v => {
+      if (v.formasPagamento && v.formasPagamento.length > 0) {
+        v.formasPagamento.forEach(f => { if (totais[f.forma] !== undefined) totais[f.forma] += parseFloat(f.valor) || 0; });
+      } else {
+        if (totais[v.formaPagamento] !== undefined) totais[v.formaPagamento] += parseFloat(v.total) || 0;
+      }
+    });
 
     const periodoStr = _dataInicio && _dataFim
       ? `${Utils.data(_dataInicio)} a ${Utils.data(_dataFim)}`

@@ -1238,7 +1238,7 @@ const PDV = {
 
     const mes = Utils.hoje().substring(0, 7);
     const limite = parseFloat(DB.Config.get('limiteCrediario', 25)) || 25;
-    const vendasMes = DB.Vendas.listarPorPeriodo(mes + '-01', mes + '-31');
+    const vendasMes = DB.Vendas.listarPorPeriodo(mes + '-01', Utils.fimMes(mes));
     const faturamentoMes = vendasMes.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
     const totalCrediarioMes = vendasMes
       .filter(v => v.formaPagamento === 'crediario')

@@ -98,7 +98,7 @@ const Fin = {
   // ---- CÁLCULOS BASE ----
   calcularDRE: (mes) => {
     const inicio = mes + '-01';
-    const fim    = mes + '-31';
+    const fim = Utils.fimMes(mes);
 
     const produtosCache = {};
     const getCMVVenda = (venda) => {
@@ -320,7 +320,7 @@ const Fin = {
 
   _renderMovimentacoes: (mes) => {
     const movs = [];
-    const inicio = mes + '-01', fim = mes + '-31';
+    const inicio = mes + '-01', fim = Utils.fimMes(mes);
 
     DB.Vendas.listarPorPeriodo(inicio, fim).forEach(v => {
       if (v.formaPagamento !== 'crediario') {
@@ -335,7 +335,7 @@ const Fin = {
         }
       });
     });
-    DB.FluxoCaixa.listar().filter(f => (f.data || '').startsWith(mes) && f.categoria !== 'venda').forEach(f => movs.push(f));
+    DB.FluxoCaixa.listar().filter(f => (f.data || '').startsWith(mes) && f.categoria !== 'venda' && f.categoria !== 'crediario').forEach(f => movs.push(f));
 
     movs.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
 

@@ -602,7 +602,7 @@ const Dashboard = {
     const limite = parseFloat(DB.Config.get('limiteCrediario', 25)) || 25;
 
     // Vendas do mês
-    const vendasMes = DB.Vendas.listarPorPeriodo(mes + '-01', mes + '-31');
+    const vendasMes = DB.Vendas.listarPorPeriodo(mes + '-01', Utils.fimMes(mes));
     const faturamentoMes = vendasMes.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
     const vendasCrediario = vendasMes.filter(v => v.formaPagamento === 'crediario');
     const totalCrediarioMes = vendasCrediario.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
@@ -658,7 +658,7 @@ const Dashboard = {
       for (let i = 1; i <= 3; i++) {
         const d = new Date(new Date().getFullYear(), new Date().getMonth() - i, 1);
         const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        const vv = DB.Vendas.listarPorPeriodo(m + '-01', m + '-31');
+        const vv = DB.Vendas.listarPorPeriodo(m + '-01', Utils.fimMes(m));
         const fat = vv.reduce((s, v) => s + (parseFloat(v.total)||0), 0);
         if (fat > 0) {
           const cr = vv.filter(v => v.formaPagamento === 'crediario').reduce((s, v) => s + (parseFloat(v.total)||0), 0);
@@ -800,7 +800,7 @@ const Dashboard = {
             const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
             const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
             const nomeMes = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
-            const vMes = DB.Vendas.listarPorPeriodo(m + '-01', m + '-31');
+            const vMes = DB.Vendas.listarPorPeriodo(m + '-01', Utils.fimMes(m));
             const fat = vMes.reduce((s, v) => s + (parseFloat(v.total)||0), 0);
             const cred = vMes.filter(v => v.formaPagamento === 'crediario').reduce((s, v) => s + (parseFloat(v.total)||0), 0);
             const p = fat > 0 ? (cred / fat) * 100 : null;
@@ -965,7 +965,7 @@ const Dashboard = {
     const mes = Utils.hoje().substring(0, 7);
 
     // Faturamento do mês (vendas à vista + crediário recebido)
-    const vendas = DB.Vendas.listarPorPeriodo(mes + '-01', mes + '-31');
+    const vendas = DB.Vendas.listarPorPeriodo(mes + '-01', Utils.fimMes(mes));
     const receitaVista = vendas.filter(v => v.formaPagamento !== 'crediario').reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
     const credRecebido = DB.FluxoCaixa.listar()
       .filter(f => f.categoria === 'crediario' && (f.data || '').startsWith(mes))

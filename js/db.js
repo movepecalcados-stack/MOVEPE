@@ -211,17 +211,9 @@ const DB = (() => {
     delete: (col, id) => {
       if (!_fbDb || !id) return;
       try {
-        Sync.updateStatus('syncing');
         _fbDb.collection('movePe_' + col).doc(id).delete()
-          .then(() => Sync.updateStatus('synced'))
-          .catch((e) => {
-            console.error('Erro ao deletar no Firestore:', e);
-            Sync.updateStatus('error');
-          });
-      } catch (e) {
-        console.error('Erro ao chamar delete no Firestore:', e);
-        Sync.updateStatus('error');
-      }
+          .catch(e => console.error('Erro ao excluir do Firestore:', e));
+      } catch(e) {}
     },
 
     syncAll: () => {
@@ -419,7 +411,7 @@ const DB = (() => {
     },
 
     excluir: (id) => {
-      const temCredAberto = _get('crediario').some(c =>
+      const temCredAberto = Crediario.listar().some(c =>
         c.clienteId === id && c.parcelas && c.parcelas.some(p => p.status !== 'pago')
       );
       if (temCredAberto) return false;
@@ -470,17 +462,73 @@ const DB = (() => {
     },
 
     listarPorPeriodo: (inicio, fim) => {
-      return _get('vendas').filter(v => {
-        if (!v.criadoEm) return false;
-        const d = v.criadoEm.substring(0, 10);
-        return d >= inicio && d <= fim;
-      });
+      const inicioISO = new Date(inicio + 'T00:00:00').toISOString();
+      const fimISO    = new Date(fim   + 'T23:59:59').toISOString();
+      return _get('vendas').filter(v => v.criadoEm && v.criadoEm >= inicioISO && v.criadoEm <= fimISO);
     }
   };
 
   // ---- CREDIÁRIO ----
   const Crediario = {
-    listar: () => _get('crediario'),
+    listar: () => {
+      const lista = _get('crediario');
+      const seenId = new Set();
+
+      const _melhor = (existing, candidato, pagas) => {
+        if (!existing) return true;
+        if (pagas > existing.pagas) return true;
+        if (pagas === existing.pagas && (candidato || '') > (existing.criadoEm || '')) return true;
+        return false;
+      };
+
+      // Dedup 1: mesmo vendaId → mesma venda, manter o com mais parcelas pagas
+      const melhorPorVenda = new Map();
+      lista.forEach(c => {
+        if (!c.vendaId || !c.id) return;
+        const pagas = (c.parcelas || []).filter(p => p.status === 'pago').length;
+        if (_melhor(melhorPorVenda.get(c.vendaId), c.criadoEm, pagas))
+          melhorPorVenda.set(c.vendaId, { id: c.id, pagas, criadoEm: c.criadoEm || '' });
+      });
+
+      // Dedup 2: parcelas idênticas completas (clienteId + todos venc+valor) → entrada duplicada
+      const melhorPorParcelas = new Map();
+      lista.forEach(c => {
+        if (!c.id || !c.clienteId || !(c.parcelas || []).length) return;
+        const fp = c.clienteId + '|' + c.parcelas.map(p => `${p.vencimento}:${p.valor}`).join(',');
+        const pagas = c.parcelas.filter(p => p.status === 'pago').length;
+        if (_melhor(melhorPorParcelas.get(fp), c.criadoEm, pagas))
+          melhorPorParcelas.set(fp, { id: c.id, pagas, criadoEm: c.criadoEm || '' });
+      });
+
+      // Dedup 3: parcelas PENDENTES idênticas → entrada "sombra" sem histórico de pagamentos
+      // Guarda a que tem mais parcelas pagas (ex: cred com p1 pago vence o clone sem p1)
+      const melhorPorPend = new Map();
+      lista.forEach(c => {
+        if (!c.id || !c.clienteId || !(c.parcelas || []).length) return;
+        const pend = (c.parcelas || []).filter(p => p.status !== 'pago');
+        if (!pend.length) return; // quitado não participa
+        const fp = c.clienteId + '|P|' + pend.map(p => `${p.vencimento}:${p.valor}`).join(',');
+        const pagas = c.parcelas.filter(p => p.status === 'pago').length;
+        if (_melhor(melhorPorPend.get(fp), c.criadoEm, pagas))
+          melhorPorPend.set(fp, { id: c.id, pagas, criadoEm: c.criadoEm || '' });
+      });
+
+      return lista.filter(c => {
+        if (!c.id || seenId.has(c.id)) return false;
+        seenId.add(c.id);
+        if (c.vendaId && melhorPorVenda.get(c.vendaId)?.id !== c.id) return false;
+        if (c.clienteId && (c.parcelas || []).length) {
+          const fp = c.clienteId + '|' + c.parcelas.map(p => `${p.vencimento}:${p.valor}`).join(',');
+          if (melhorPorParcelas.get(fp)?.id !== c.id) return false;
+          const pend = c.parcelas.filter(p => p.status !== 'pago');
+          if (pend.length) {
+            const fpP = c.clienteId + '|P|' + pend.map(p => `${p.vencimento}:${p.valor}`).join(',');
+            if (melhorPorPend.get(fpP)?.id !== c.id) return false;
+          }
+        }
+        return true;
+      });
+    },
 
     buscar: (id) => _get('crediario').find(c => c.id === id),
 
@@ -488,7 +536,16 @@ const DB = (() => {
 
     salvar: (cred) => {
       const lista = _get('crediario');
-      const idx = lista.findIndex(c => c.id === cred.id);
+      let idx = lista.findIndex(c => c.id === cred.id);
+      // Se não tem id (entrada nova) e tem vendaId, evita duplicar a mesma venda
+      if (idx < 0 && !cred.id && cred.vendaId) {
+        const dupIdx = lista.findIndex(c => c.vendaId === cred.vendaId);
+        if (dupIdx >= 0) {
+          cred.id = lista[dupIdx].id;
+          cred.criadoEm = lista[dupIdx].criadoEm;
+          idx = dupIdx;
+        }
+      }
       if (idx >= 0) {
         lista[idx] = cred;
       } else {
@@ -518,7 +575,7 @@ const DB = (() => {
       const hoje = new Date().toISOString().substring(0, 10);
       const clientes = _get('clientes');
       const result = [];
-      _get('crediario').forEach(cred => {
+      Crediario.listar().forEach(cred => {
         if (!cred.parcelas) return;
         cred.parcelas.forEach((p, idx) => {
           if (p.status !== 'pago' && p.vencimento < hoje) {
@@ -526,6 +583,7 @@ const DB = (() => {
             result.push({
               credId: cred.id,
               parcelaIdx: idx,
+              clienteId: cred.clienteId,
               clienteNome: cli ? cli.nome : 'Cliente',
               vencimento: p.vencimento,
               valor: p.valor
@@ -538,7 +596,7 @@ const DB = (() => {
 
     totalPendente: () => {
       let total = 0;
-      _get('crediario').forEach(cred => {
+      Crediario.listar().forEach(cred => {
         if (!cred.parcelas) return;
         cred.parcelas.forEach(p => {
           if (p.status !== 'pago') total += parseFloat(p.valor) || 0;
@@ -603,8 +661,7 @@ const DB = (() => {
         const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
         const movs = _get('fluxo').filter(m => (m.data || '').startsWith(prefix));
         const vendas = _get('vendas').filter(v => (v.criadoEm || '').startsWith(prefix));
-        const entradas = movs.filter(m => m.tipo === 'entrada').reduce((s, m) => s + (parseFloat(m.valor) || 0), 0)
-          + vendas.filter(v => v.formaPagamento !== 'crediario').reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+        const entradas = movs.filter(m => m.tipo === 'entrada').reduce((s, m) => s + (parseFloat(m.valor) || 0), 0);
         const saidas = movs.filter(m => m.tipo === 'saida').reduce((s, m) => s + (parseFloat(m.valor) || 0), 0);
         resultado.push({ label, entradas, saidas, mes: prefix });
       }
