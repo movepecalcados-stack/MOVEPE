@@ -293,6 +293,14 @@ const DB = (() => {
     },
 
     salvar: (prod) => {
+      // Bloqueia foto se armazenamento > 85% (TAREFA 2)
+      if (prod.foto && prod.foto.startsWith('data:')) {
+        const espaco = verificarEspaco();
+        if (espaco && espaco.bloqueiaFoto) {
+          console.warn('[BACKUP] Foto bloqueada: armazenamento crítico. Produto salvo sem foto.');
+          delete prod.foto;
+        }
+      }
       const lista = _get('produtos');
       const idx = lista.findIndex(p => p.id === prod.id);
       prod.atualizadoEm = new Date().toISOString();
@@ -555,7 +563,9 @@ const DB = (() => {
       }
       _set('crediario', lista);
       const salvo = idx >= 0 ? lista[idx] : lista[lista.length - 1];
-      Sync.save('crediario', salvo);
+      Sync.save('crediario', salvo); // Sync já é imediato (direct .set() no Firestore)
+      _backupEmergenciaCrediario(); // TAREFA 3: snapshot dos últimos 30 crediários
+      console.log('[BACKUP] Crediário salvo — emergência + Firebase atualizados');
       return salvo;
     },
 
@@ -942,8 +952,146 @@ const DB = (() => {
     importado: () => localStorage.getItem(P + 'historico_tiny') !== null,
   };
 
-  // Inicializa Firebase ao carregar a página
-  document.addEventListener('DOMContentLoaded', Sync.init);
+  // ================================================================
+  // BACKUP AUTOMÁTICO, MONITOR DE ESPAÇO & EMERGÊNCIA (v1.0 — 2026-05-06)
+  // Regras: não altera lógica existente, apenas adiciona camadas de segurança
+  // ================================================================
 
-  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, RendaPessoal, Config, HistoricoTiny, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady };
+  const _mostrarToastBackup = (msg, tipo) => {
+    const cores = { success: '#16a34a', warning: '#ca8a04', danger: '#dc2626' };
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:99999;' +
+      'padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;' +
+      'color:#fff;background:' + (cores[tipo] || cores.success) + ';' +
+      'box-shadow:0 4px 16px rgba(0,0,0,0.25);pointer-events:none';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity .4s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 420);
+    }, 4500);
+  };
+
+  // Salva snapshot dos últimos 30 crediários como camada extra de recuperação
+  const _backupEmergenciaCrediario = () => {
+    try {
+      const todos = _get('crediario');
+      const ultimos = [...todos]
+        .sort((a, b) => ((b.criadoEm || '') > (a.criadoEm || '') ? 1 : -1))
+        .slice(0, 30);
+      localStorage.setItem(P + 'crediario_backup_emergencia', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        totalCrediarios: todos.length,
+        ultimos30: ultimos
+      }));
+      console.log('[BACKUP] Emergência crediário: ' + ultimos.length + ' de ' + todos.length + ' salvos');
+    } catch (e) {
+      console.error('[BACKUP] Erro no backup emergência crediário:', e);
+    }
+  };
+
+  // Verifica uso do localStorage e exibe banner se necessário
+  const verificarEspaco = () => {
+    let bytes = 0;
+    for (const k in localStorage) {
+      if (k.startsWith(P)) bytes += (localStorage[k] || '').length * 2;
+    }
+    const max = 5 * 1024 * 1024; // 5MB (limite Chrome)
+    const pct = Math.min(100, Math.round((bytes / max) * 100));
+    const kb  = Math.round(bytes / 1024);
+    console.log('[BACKUP] Espaço localStorage: ' + kb + 'KB (' + pct + '%)');
+
+    const antigo = document.getElementById('_bannerEspacoDB');
+    if (antigo) antigo.remove();
+
+    const bloqueiaFoto = pct >= 85;
+    if (pct < 70) return { pct, kb, bloqueiaFoto: false };
+
+    const cor = pct >= 95 ? '#b91c1c' : pct >= 85 ? '#dc2626' : '#ca8a04';
+    const txt = pct >= 95
+      ? '🔴 ARMAZENAMENTO CRÍTICO (' + pct + '%) — Backup automático iniciado!'
+      : pct >= 85
+        ? '⚠️ Armazenamento em ' + pct + '% — Fotos bloqueadas. Faça backup urgente!'
+        : '⚠️ Armazenamento em ' + pct + '% (' + kb + 'KB) — Recomendamos fazer backup.';
+
+    const banner = document.createElement('div');
+    banner.id = '_bannerEspacoDB';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;' +
+      'padding:9px 16px;background:' + cor + ';color:#fff;font-size:13px;' +
+      'font-weight:700;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+    banner.textContent = txt + '  ✕ (clique para fechar)';
+    banner.onclick = () => banner.remove();
+    document.body.appendChild(banner);
+
+    if (pct >= 95) setTimeout(backupAutomatico, 800);
+
+    console.warn('[BACKUP] ' + txt);
+    return { pct, kb, bloqueiaFoto };
+  };
+
+  // Download automático do JSON completo — apenas 1x por dia
+  const backupAutomatico = () => {
+    const hoje = typeof Utils !== 'undefined' && Utils.hoje
+      ? Utils.hoje()
+      : new Date().toISOString().substring(0, 10);
+    const chave = P + 'ultimo_backup_auto';
+    if (localStorage.getItem(chave) === hoje) {
+      console.log('[BACKUP] Backup automático já realizado hoje (' + hoje + ')');
+      return;
+    }
+    console.log('[BACKUP] Iniciando backup automático:', hoje);
+    try {
+      const dados = {
+        versao: '3.0',
+        exportadoEm: new Date().toISOString(),
+        tipoBackup: 'automatico',
+        produtos:      _get('produtos'),
+        clientes:      _get('clientes'),
+        vendas:        _get('vendas'),
+        crediario:     _get('crediario'),
+        caixa:         _get('caixa'),
+        fluxo:         _get('fluxo'),
+        despesas:      _get('despesas'),
+        retiradas:     _get('retiradas'),
+        grades:        _get('grades'),
+        trafego:       _get('trafego'),
+        renda_pessoal: RendaPessoal.listar(),
+        config:        JSON.parse(localStorage.getItem(P + 'config') || '{}')
+      };
+      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const pad  = n => String(n).padStart(2, '0');
+      const d    = new Date();
+      a.href     = url;
+      a.download = 'movePe_AUTO_' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      localStorage.setItem(chave, hoje);
+      localStorage.setItem(P + 'ultimo_backup', new Date().toISOString());
+      console.log('[BACKUP] Backup automático concluído:', a.download);
+      _mostrarToastBackup('✅ Backup automático realizado — salve o arquivo baixado!', 'success');
+    } catch (e) {
+      console.error('[BACKUP] Erro no backup automático:', e);
+    }
+  };
+
+  // Inicializa Firebase ao carregar a página
+  document.addEventListener('DOMContentLoaded', () => {
+    Sync.init();
+    // Backup automático após 2s (aguarda sistema carregar completamente)
+    setTimeout(backupAutomatico, 2000);
+    // Verificação de espaço após 3s
+    setTimeout(verificarEspaco, 3000);
+    // Repete backup a cada 4 horas (caso o sistema fique aberto o dia todo)
+    setInterval(backupAutomatico, 4 * 60 * 60 * 1000);
+    // Verifica espaço a cada 30 minutos
+    setInterval(verificarEspaco, 30 * 60 * 1000);
+    console.log('[BACKUP] Sistema de backup automático ativado');
+  });
+
+  return { Produtos, Clientes, Vendas, Crediario, Caixa, FluxoCaixa, Despesas, Retiradas, Grades, Trafego, RendaPessoal, Config, HistoricoTiny, exportar, importar, lerArquivoBackup, ultimoBackup, genId, Sync, onReady, backupAutomatico, verificarEspaco };
 })();
