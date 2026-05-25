@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diagnóstico localStorage — MOVE PÉ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    h1 { font-size: 22px; color: #60a5fa; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 24px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .card h2 { font-size: 15px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: #64748b; font-size: 11px; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid #334155; }
+    td { padding: 8px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    tr:hover td { background: #243447; }
+    .bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .bar { height: 14px; border-radius: 4px; min-width: 2px; transition: width 0.3s; }
+    .bar-label { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .pill-danger { background: #7f1d1d; color: #fca5a5; }
+    .pill-warn { background: #78350f; color: #fcd34d; }
+    .pill-ok { background: #14532d; color: #86efac; }
+    .pill-info { background: #1e3a5f; color: #93c5fd; }
+    .num { font-variant-numeric: tabular-nums; }
+    .highlight { color: #fb923c; font-weight: 700; }
+    .section-title { font-size: 18px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+    .top-alert { background: #7f1d1d; border: 1px solid #b91c1c; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; }
+    .top-alert .label { font-size: 13px; color: #fca5a5; font-weight: 700; margin-bottom: 4px; }
+    .top-alert .value { font-size: 28px; font-weight: 900; color: #fff; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+    .stat-card .label { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 6px; }
+    .stat-card .value { font-size: 24px; font-weight: 800; color: #60a5fa; }
+    .stat-card .sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .finding { background: #1e3a5f; border-left: 4px solid #3b82f6; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 8px 0; }
+    .finding.danger { background: #3b0e0e; border-color: #ef4444; }
+    .finding.warn { background: #3b2a0e; border-color: #f59e0b; }
+    .finding .title { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
+    .finding .desc { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+    pre { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px; font-size: 11px; color: #94a3b8; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .btn { display: inline-block; background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; margin: 4px; }
+    .btn:hover { background: #1d4ed8; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+    .badge { display: inline-block; background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-family: monospace; color: #60a5fa; }
+    #loading { text-align: center; padding: 60px; color: #64748b; }
+    .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #334155; }
+    @media (max-width: 600px) { .grid3 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<div id="loading">⏳ Analisando localStorage...</div>
+<div id="app" style="display:none"></div>
+
+<script>
+// ─── Utilidades ───────────────────────────────────────────────
+const P = 'movePe_';
+const fmt = n => n.toLocaleString('pt-BR');
+const fmtKB = bytes => (bytes / 1024).toFixed(1) + ' KB';
+const corBarra = pct => pct > 80 ? '#ef4444' : pct > 60 ? '#f59e0b' : '#22c55e';
+const pillPct = pct => {
+  if (pct > 50) return 'danger';
+  if (pct > 20) return 'warn';
+  return 'ok';
+};
+
+function tamanhoChave(chave) {
+  const val = localStorage.getItem(chave) || '';
+  return val.length * 2; // UTF-16: 2 bytes por char
+}
+
+function parseArray(chave) {
+  try { return JSON.parse(localStorage.getItem(chave) || '[]'); }
+  catch { return []; }
+}
+
+function parseObj(chave) {
+  try { return JSON.parse(localStorage.getItem(chave) || '{}'); }
+  catch { return {}; }
+}
+
+function b64Size(str) {
+  if (!str || !str.startsWith('data:')) return 0;
+  // base64: 4 chars = 3 bytes
+  const b64 = str.split(',')[1] || '';
+  return Math.round(b64.length * 0.75);
+}
+
+// ─── Coleta dados ─────────────────────────────────────────────
+function coletar() {
+  const totalMax = 5 * 1024 * 1024;
+  const chaves = [];
+  let totalBytes = 0;
+
+  // Todas as chaves movePe_
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k.startsWith(P)) continue;
+    const bytes = tamanhoChave(k);
+    totalBytes += bytes;
+    chaves.push({ chave: k, nome: k.replace(P, ''), bytes });
+  }
+
+  chaves.sort((a, b) => b.bytes - a.bytes);
+
+  // ─── Análise de Produtos ───────────────────────────────────
+  const produtos = parseArray(P + 'produtos');
+  const produtosAnalise = produtos.map(p => {
+    const fotoBytes = b64Size(p.foto || '');
+    let fotosVarBytes = 0;
+    let numFotosVar = 0;
+    if (p.fotosVariacoes) {
+      Object.values(p.fotosVariacoes).forEach(v => {
+        if (v && v.startsWith('data:')) { fotosVarBytes += b64Size(v); numFotosVar++; }
+      });
+    }
+    const totalFotos = fotoBytes + fotosVarBytes;
+    const semFoto = !p.foto || !p.foto.startsWith('data:');
+    return { id: p.id, nome: p.nome || '(sem nome)', foto: p.foto, fotoBytes, fotosVarBytes, numFotosVar, totalFotos, semFoto, ativo: p.ativo !== false };
+  });
+
+  const temFoto = produtosAnalise.filter(p => !p.semFoto);
+  const temFotosVar = produtosAnalise.filter(p => p.numFotosVar > 0);
+  const totalFotoBytes = produtosAnalise.reduce((s, p) => s + p.totalFotos, 0);
+  const top5Fotos = [...produtosAnalise].sort((a, b) => b.totalFotos - a.totalFotos).slice(0, 10);
+
+  // ─── Backup emergência crediário ─────────────────────────
+  let backupEmerg = null;
+  try {
+    const raw = localStorage.getItem(P + 'crediario_backup_emergencia');
+    if (raw) {
+      const obj = JSON.parse(raw);
+      backupEmerg = {
+        timestamp: obj.timestamp,
+        totalCrediarios: obj.totalCrediarios,
+        ultimos: (obj.ultimos30 || []).length,
+        bytes: raw.length * 2
+      };
+    }
+  } catch {}
+
+  // ─── Histórico Tiny ───────────────────────────────────────
+  const histTiny = parseArray(P + 'historico_tiny');
+
+  // ─── Clientes, vendas, crediário ─────────────────────────
+  const clientes = parseArray(P + 'clientes');
+  const vendas = parseArray(P + 'vendas');
+  const crediario = parseArray(P + 'crediario');
+  const fluxo = parseArray(P + 'fluxo');
+  const despesas = parseArray(P + 'despesas');
+  const retiradas = parseArray(P + 'retiradas');
+  const grades = parseArray(P + 'grades');
+  const trafego = parseArray(P + 'trafego');
+  const caixa = parseArray(P + 'caixa');
+
+  // ─── Firebase config ──────────────────────────────────────
+  const fbConfig = parseObj('movePe_fb_config');
+  const fbConfigBytes = tamanhoChave('movePe_fb_config');
+
+  return {
+    chaves, totalBytes, totalMax,
+    produtos, produtosAnalise, temFoto, temFotosVar, totalFotoBytes, top5Fotos,
+    backupEmerg,
+    histTiny,
+    clientes, vendas, crediario, fluxo, despesas, retiradas, grades, trafego, caixa,
+    fbConfig, fbConfigBytes
+  };
+}
+
+// ─── Render ───────────────────────────────────────────────────
+function render(d) {
+  const pct = Math.min(100, Math.round((d.totalBytes / d.totalMax) * 100));
+  const corTotal = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#22c55e';
+  const pillNivel = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : 'ok';
+
+  // Monta linhas da tabela de chaves
+  const linhasChaves = d.chaves.map(c => {
+    const cPct = Math.round((c.bytes / d.totalBytes) * 100);
+    const bPct = Math.min(100, Math.round((c.bytes / d.totalMax) * 100));
+    let extra = '';
+
+    if (c.nome === 'produtos') {
+      extra = `${d.produtos.length} produtos · ${d.temFoto.length} com foto · ${fmtKB(d.totalFotoBytes)} em fotos`;
+    } else if (c.nome === 'clientes') {
+      extra = `${d.clientes.length} clientes`;
+    } else if (c.nome === 'vendas') {
+      extra = `${d.vendas.length} vendas`;
+    } else if (c.nome === 'crediario') {
+      extra = `${d.crediario.length} registros`;
+    } else if (c.nome === 'fluxo') {
+      extra = `${d.fluxo.length} movimentos`;
+    } else if (c.nome === 'despesas') {
+      extra = `${d.despesas.length} despesas`;
+    } else if (c.nome === 'crediario_backup_emergencia') {
+      extra = d.backupEmerg ? `snapshot de ${d.backupEmerg.ultimos} crediários — ${d.backupEmerg.timestamp}` : '';
+    } else if (c.nome === 'historico_tiny') {
+      extra = `${d.histTiny.length} registros Tiny importados`;
+    } else if (c.nome === 'retiradas') {
+      extra = `${d.retiradas.length} retiradas`;
+    } else if (c.nome === 'grades') {
+      extra = `${d.grades.length} grades`;
+    } else if (c.nome === 'trafego') {
+      extra = `${d.trafego.length} registros`;
+    } else if (c.nome === 'caixa') {
+      extra = `${d.caixa.length} sessões`;
+    }
+
+    const corBarra2 = bPct > 40 ? '#ef4444' : bPct > 20 ? '#f59e0b' : '#22c55e';
+    return `
+      <tr>
+        <td><code style="color:#60a5fa;font-size:12px">${c.nome}</code></td>
+        <td class="num">
+          <div class="bar-wrap">
+            <div class="bar" style="width:${Math.max(3, bPct * 2.5)}px;background:${corBarra2}"></div>
+            <span class="bar-label">${fmtKB(c.bytes)}</span>
+          </div>
+        </td>
+        <td><span class="pill pill-${pillPct(cPct)}">${cPct}%</span></td>
+        <td style="color:#94a3b8;font-size:12px">${extra}</td>
+      </tr>`;
+  }).join('');
+
+  // Top fotos
+  const linhasTop = d.top5Fotos.filter(p => p.totalFotos > 0).map((p, i) => {
+    const thumb = (p.foto && p.foto.startsWith('data:'))
+      ? `<img src="${p.foto}" class="thumb" alt="">`
+      : `<div style="width:40px;height:40px;background:#1e293b;border-radius:4px;border:1px solid #334155;display:flex;align-items:center;justify-content:center;font-size:18px">📷</div>`;
+    return `
+      <tr>
+        <td style="color:#94a3b8">${i + 1}</td>
+        <td>${thumb}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nome}</td>
+        <td class="num">${fmtKB(p.fotoBytes)}</td>
+        <td class="num">${fmtKB(p.fotosVarBytes)} <span style="color:#64748b">(${p.numFotosVar} var.)</span></td>
+        <td class="num ${p.totalFotos > 200000 ? 'highlight' : ''}">${fmtKB(p.totalFotos)}</td>
+        <td><span class="pill pill-${p.ativo ? 'ok' : 'warn'}">${p.ativo ? 'ativo' : 'inativo'}</span></td>
+      </tr>`;
+  }).join('');
+
+  // Diagnóstico automático
+  const suspeitos = [];
+  const fotosGrandes = d.top5Fotos.filter(p => p.totalFotos > 100000);
+
+  const produtosBytes = d.chaves.find(c => c.nome === 'produtos')?.bytes || 0;
+  const fotosPct = d.totalFotoBytes > 0 ? Math.round((d.totalFotoBytes / produtosBytes) * 100) : 0;
+
+  if (produtosBytes > 1024 * 1024) {
+    suspeitos.push({ nivel: 'danger', title: `⚠️ Chave 'produtos' muito grande: ${fmtKB(produtosBytes)}`, desc: `${fmtKB(d.totalFotoBytes)} são fotos base64 (${fotosPct}% da chave). ${d.temFotosVar.length} produtos têm fotos de variações. Fotos em base64 no localStorage são a principal causa de crescimento explosivo.` });
+  }
+
+  const backupBytes = d.chaves.find(c => c.nome === 'crediario_backup_emergencia')?.bytes || 0;
+  if (backupBytes > 50 * 1024) {
+    suspeitos.push({ nivel: 'warn', title: `Backup emergência crediário: ${fmtKB(backupBytes)}`, desc: `Chave 'movePe_crediario_backup_emergencia' contém ${d.backupEmerg?.ultimos || 0} crediários (limite 30). Criado em: ${d.backupEmerg?.timestamp || 'desconhecido'}. Tamanho aceitável, mas contribui para o total.` });
+  }
+
+  const tinyBytes = d.chaves.find(c => c.nome === 'historico_tiny')?.bytes || 0;
+  if (tinyBytes > 100 * 1024) {
+    suspeitos.push({ nivel: 'warn', title: `Histórico Tiny grande: ${fmtKB(tinyBytes)}`, desc: `${d.histTiny.length} registros importados do Tiny ainda em localStorage. Essa chave pode ser limpa após importação concluída.` });
+  }
+
+  const outras = d.chaves.filter(c => !['produtos','clientes','vendas','crediario','fluxo','despesas','retiradas','grades','trafego','caixa','config','crediario_backup_emergencia','historico_tiny','ultimo_backup','ultimo_backup_auto','renda_pessoal','fb_config'].includes(c.nome));
+  if (outras.length > 0) {
+    const bytesOutras = outras.reduce((s, c) => s + c.bytes, 0);
+    suspeitos.push({ nivel: 'info', title: `${outras.length} chave(s) inesperada(s): ${outras.map(c => `'${c.nome}'`).join(', ')}`, desc: `Total: ${fmtKB(bytesOutras)}. Podem ser resquícios de versões antigas ou acúmulo não gerenciado.` });
+  }
+
+  const html = `
+    <h1>🔍 Diagnóstico de Armazenamento</h1>
+    <p class="subtitle">MOVE PÉ Calçados — gerado em ${new Date().toLocaleString('pt-BR')}</p>
+
+    <div class="top-alert">
+      <div class="label">TOTAL USADO</div>
+      <div class="value">${fmtKB(d.totalBytes)} <span style="font-size:18px;color:#fca5a5">de 5.000 KB (${pct}%)</span></div>
+    </div>
+
+    <div class="grid3">
+      <div class="stat-card">
+        <div class="label">Produtos</div>
+        <div class="value">${d.produtos.length}</div>
+        <div class="sub">${d.temFoto.length} com foto principal · ${d.temFotosVar.length} com fotos de variação</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Fotos base64 (total)</div>
+        <div class="value" style="color:#fb923c">${fmtKB(d.totalFotoBytes)}</div>
+        <div class="sub">${Math.round(d.totalFotoBytes / d.totalBytes * 100)}% do armazenamento total</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Clientes / Vendas / Crediário</div>
+        <div class="value" style="color:#a78bfa">${d.clientes.length} / ${d.vendas.length} / ${d.crediario.length}</div>
+        <div class="sub">${fmtKB(d.chaves.filter(c=>['clientes','vendas','crediario'].includes(c.nome)).reduce((s,c)=>s+c.bytes,0))} combinados</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📦 Todas as chaves movePe_*</h2>
+      <table>
+        <thead><tr><th>Chave</th><th>Tamanho</th><th>% do total</th><th>Detalhes</th></tr></thead>
+        <tbody>${linhasChaves}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>📸 Top produtos por tamanho de foto</h2>
+      <table>
+        <thead><tr><th>#</th><th>Foto</th><th>Nome</th><th>Foto principal</th><th>Fotos variação</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>${linhasTop || '<tr><td colspan="7" style="color:#64748b;text-align:center;padding:20px">Nenhum produto com foto base64</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    ${suspeitos.length > 0 ? `
+    <div class="card">
+      <h2>🚨 Suspeitos detectados automaticamente</h2>
+      ${suspeitos.map(s => `<div class="finding ${s.nivel}"><div class="title">${s.title}</div><div class="desc">${s.desc}</div></div>`).join('')}
+    </div>` : ''}
+
+    <div class="card">
+      <h2>🔬 Dados brutos para análise</h2>
+      <pre id="rawData">${JSON.stringify({
+        totalBytes: d.totalBytes,
+        totalKB: (d.totalBytes/1024).toFixed(1),
+        percentual: pct + '%',
+        porChave: Object.fromEntries(d.chaves.map(c => [c.nome, (c.bytes/1024).toFixed(1) + ' KB'])),
+        fotos: {
+          totalFotosKB: (d.totalFotoBytes/1024).toFixed(1),
+          produtosComFotoPrincipal: d.temFoto.length,
+          produtosComFotosVariacao: d.temFotosVar.length,
+          top10PorFoto: d.top5Fotos.filter(p=>p.totalFotos>0).map(p=>({ nome: p.nome, totalKB: (p.totalFotos/1024).toFixed(1), ativo: p.ativo }))
+        },
+        backupEmergencia: d.backupEmerg,
+        histTinyCount: d.histTiny.length
+      }, null, 2)}</pre>
+
+      <div style="margin-top:16px">
+        <button class="btn" onclick="copiarRaw()">📋 Copiar dados brutos</button>
+        <button class="btn" onclick="exportarRelatorio()">💾 Exportar relatório JSON</button>
+        <button class="btn btn-danger" onclick="if(confirm('Limpar APENAS o histórico Tiny? (seguro)')) { localStorage.removeItem('movePe_historico_tiny'); alert('Limpo! Recarregue a página.'); }">🗑️ Limpar Histórico Tiny</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💡 Como liberar espaço agora (sem perder dados)</h2>
+      <div class="finding">
+        <div class="title">1. Remover fotos de produtos inativos</div>
+        <div class="desc">Produtos marcados como inativos não precisam de foto no localStorage. Execute no console: <code style="color:#60a5fa">limparFotosInativas()</code> (botão abaixo)</div>
+      </div>
+      <div class="finding warn">
+        <div class="title">2. Fazer backup ANTES de qualquer limpeza</div>
+        <div class="desc">Vá em Configurações → Backup → Exportar JSON. Salve o arquivo em lugar seguro.</div>
+      </div>
+      <div class="finding">
+        <div class="title">3. Limpar histórico Tiny (se importação já foi concluída)</div>
+        <div class="desc">O botão acima remove a chave 'movePe_historico_tiny' se a importação do Tiny ERP já foi concluída.</div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn" onclick="analisarFotosInativas()">🔍 Analisar fotos de inativos</button>
+      </div>
+      <div id="analiseInativos" style="margin-top:12px"></div>
+    </div>
+  `;
+
+  document.getElementById('app').innerHTML = html;
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('loading').style.display = 'none';
+
+  window._diagData = d;
+}
+
+function copiarRaw() {
+  const el = document.getElementById('rawData');
+  navigator.clipboard.writeText(el.textContent).then(() => alert('Copiado!'));
+}
+
+function exportarRelatorio() {
+  const d = window._diagData;
+  const obj = {
+    geradoEm: new Date().toISOString(),
+    totalBytes: d.totalBytes,
+    porChave: Object.fromEntries(d.chaves.map(c => [c.nome, { bytes: c.bytes, kb: (c.bytes/1024).toFixed(1) }])),
+    fotos: {
+      totalBytes: d.totalFotoBytes,
+      produtosComFoto: d.temFoto.length,
+      produtosComFotoVar: d.temFotosVar.length,
+      detalhes: d.produtosAnalise.filter(p => p.totalFotos > 0).map(p => ({
+        nome: p.nome, ativo: p.ativo,
+        fotoKB: (p.fotoBytes/1024).toFixed(1),
+        fotosVarKB: (p.fotosVarBytes/1024).toFixed(1),
+        totalKB: (p.totalFotos/1024).toFixed(1)
+      }))
+    },
+    backupEmergencia: d.backupEmerg,
+    histTiny: { count: d.histTiny.length }
+  };
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'diagnostico_storage_movePe.json';
+  a.click();
+}
+
+function analisarFotosInativas() {
+  const d = window._diagData;
+  const inativas = d.produtosAnalise.filter(p => !p.ativo && p.totalFotos > 0);
+  const totalBytes = inativas.reduce((s, p) => s + p.totalFotos, 0);
+  const el = document.getElementById('analiseInativos');
+  if (inativas.length === 0) {
+    el.innerHTML = '<div class="finding" style="background:#14532d;border-color:#22c55e"><div class="title" style="color:#86efac">✅ Nenhum produto inativo com foto</div><div class="desc">Todos os produtos inativos já não têm fotos.</div></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="finding warn">
+      <div class="title">⚠️ ${inativas.length} produtos inativos com foto — ${fmtKB(totalBytes)} a economizar</div>
+      <div class="desc">${inativas.slice(0,5).map(p => `• ${p.nome}: ${fmtKB(p.totalFotos)}`).join('<br>')}${inativas.length > 5 ? `<br>... e mais ${inativas.length - 5}` : ''}</div>
+    </div>
+    <button class="btn btn-danger" onclick="limparFotosInativas()" style="margin-top:8px">⚠️ Remover fotos de inativos (${fmtKB(totalBytes)})</button>
+  `;
+}
+
+function limparFotosInativas() {
+  if (!confirm('Isso vai remover as fotos de produtos inativos do localStorage.\nFaça backup ANTES! Confirma?')) return;
+  const lista = JSON.parse(localStorage.getItem('movePe_produtos') || '[]');
+  let removidas = 0;
+  const nova = lista.map(p => {
+    if (p.ativo === false) {
+      const tinha = (p.foto && p.foto.startsWith('data:')) || Object.values(p.fotosVariacoes || {}).some(v => v && v.startsWith('data:'));
+      if (tinha) {
+        removidas++;
+        return { ...p, foto: '', fotosVariacoes: {} };
+      }
+    }
+    return p;
+  });
+  localStorage.setItem('movePe_produtos', JSON.stringify(nova));
+  alert(`Feito! Fotos de ${removidas} produtos inativos removidas. Recarregue a página para ver o novo tamanho.`);
+  location.reload();
+}
+
+// ─── Inicializa ───────────────────────────────────────────────
+try {
+  const dados = coletar();
+  render(dados);
+} catch (err) {
+  document.getElementById('loading').innerHTML = `<div style="color:#ef4444">Erro ao analisar: ${err.message}</div>`;
+  console.error(err);
+}
+</script>
+</body>
+</html>

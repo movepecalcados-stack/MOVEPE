@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diagnóstico Estrutural — MovePe</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    header { background: #1e293b; border-bottom: 2px solid #6366f1; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: #f8fafc; }
+    header p { font-size: 0.8rem; color: #94a3b8; margin-top: 3px; }
+    .badge { background: #6366f1; color: white; font-size: 0.68rem; font-weight: 700; padding: 3px 10px; border-radius: 9999px; letter-spacing: 0.05em; }
+
+    main { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+
+    button { cursor: pointer; font-size: 0.82rem; font-weight: 600; padding: 9px 16px; border-radius: 8px; border: none; transition: background 0.15s; }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-danger { background: #991b1b; color: white; }
+    .btn-danger:hover { background: #7f1d1d; }
+
+    .section { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
+    .section-title { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+    .section-sub { font-size: 0.88rem; font-weight: 600; color: #94a3b8; margin: 18px 0 10px; }
+
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .stat-card { background: #0f172a; border-radius: 8px; padding: 12px 14px; border: 1px solid #334155; }
+    .stat-label { font-size: 0.68rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .stat-value { font-size: 1.35rem; font-weight: 700; color: #f1f5f9; }
+    .stat-sub { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 16px; }
+    .tab-btn { padding: 6px 14px; border-radius: 6px 6px 0 0; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: #94a3b8; background: none; border: none; }
+    .tab-btn.active { background: #6366f1; color: white; }
+    .tab-btn:hover:not(.active) { background: #334155; color: #f1f5f9; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Tabela */
+    .tbl-wrap { overflow-x: auto; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.79rem; }
+    th { background: #0f172a; color: #64748b; font-weight: 600; text-align: left; padding: 8px 10px; border-bottom: 1px solid #334155; white-space: nowrap; }
+    td { padding: 7px 10px; border-bottom: 1px solid #1e293b33; vertical-align: middle; }
+    tbody tr:hover td { background: #ffffff08; }
+    td.mono { font-family: monospace; font-size: 0.75rem; color: #93c5fd; }
+
+    /* Barra */
+    .bar-wrap { background: #0f172a; border-radius: 4px; height: 5px; min-width: 60px; margin-top: 3px; }
+    .bar-fill { height: 5px; border-radius: 4px; }
+    .bar-ok { background: #22c55e; }
+    .bar-warn { background: #f59e0b; }
+    .bar-danger { background: #ef4444; }
+
+    /* Tags */
+    .tag { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; white-space: nowrap; }
+    .tag-red { background: #7f1d1d; color: #fca5a5; }
+    .tag-amber { background: #78350f; color: #fcd34d; }
+    .tag-blue { background: #1e3a5f; color: #93c5fd; }
+    .tag-green { background: #14532d; color: #86efac; }
+    .tag-purple { background: #3b0764; color: #d8b4fe; }
+
+    /* Alertas */
+    .alert { border-radius: 8px; padding: 11px 14px; margin-bottom: 8px; border-left: 3px solid; }
+    .alert-danger { background: #7f1d1d1a; border-color: #ef4444; }
+    .alert-warn { background: #78350f1a; border-color: #f59e0b; }
+    .alert-info { background: #1e3a5f1a; border-color: #6366f1; }
+    .alert-ok { background: #14532d1a; border-color: #22c55e; }
+    .alert strong { font-size: 0.83rem; display: block; margin-bottom: 3px; }
+    .alert p { font-size: 0.78rem; color: #94a3b8; }
+
+    /* Cards de produto */
+    .item-card { background: #0f172a; border-radius: 8px; padding: 13px; margin-bottom: 8px; border: 1px solid #334155; }
+    .item-card .item-name { font-weight: 700; font-size: 0.9rem; color: #f1f5f9; }
+    .item-card .item-id { font-size: 0.68rem; color: #64748b; font-family: monospace; margin-bottom: 8px; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .chip { font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; background: #1e293b; color: #94a3b8; white-space: nowrap; }
+    .chip-big { background: #7f1d1d; color: #fca5a5; }
+    .chip-med { background: #78350f; color: #fcd34d; }
+
+    code { font-family: monospace; background: #0f172a; padding: 1px 5px; border-radius: 3px; font-size: 0.78em; color: #93c5fd; }
+    .example-box { font-family: monospace; font-size: 0.7rem; color: #64748b; background: #0f172a; padding: 5px 8px; border-radius: 4px; word-break: break-all; max-width: 320px; white-space: pre-wrap; margin-top: 4px; }
+    hr.sep { border: none; border-top: 1px solid #334155; margin: 18px 0; }
+
+    .number { font-variant-numeric: tabular-nums; }
+    .right { text-align: right; }
+    .muted { color: #64748b; }
+
+    #loading { text-align: center; padding: 48px; color: #64748b; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Diagnóstico Estrutural — MovePe</h1>
+    <p>Análise de campos, tamanhos e anomalias nas coleções do localStorage</p>
+  </div>
+  <span class="badge">DIAGNÓSTICO v2</span>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button class="btn-primary" onclick="executar()">▶ Executar Análise</button>
+    <button class="btn-secondary" onclick="exportarJSON()">⬇ Exportar JSON</button>
+  </div>
+
+  <div id="resultado">
+    <div id="loading" style="display:none">Analisando localStorage...</div>
+    <div class="section" style="text-align:center;padding:40px;color:#64748b">
+      Clique em <strong style="color:#f1f5f9">▶ Executar Análise</strong> para iniciar o diagnóstico.
+    </div>
+  </div>
+</main>
+
+<script>
+// ═══ UTILITÁRIOS ════════════════════════════════════════════════════════════
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function byteSize(val) {
+  return JSON.stringify(val === undefined ? null : val).length * 2;
+}
+
+function itemBytes(obj) {
+  return JSON.stringify(obj).length * 2;
+}
+
+function kb(bytes) {
+  if (bytes < 512) return bytes + ' B';
+  return (bytes / 1024).toFixed(1) + ' KB';
+}
+
+function kbNum(bytes) {
+  return (bytes / 1024).toFixed(1);
+}
+
+function pct(val, total) {
+  return total > 0 ? Math.round(val / total * 100) : 0;
+}
+
+function truncate(str, n) {
+  str = String(str || '');
+  return str.length > (n || 180) ? str.substring(0, n || 180) + '…' : str;
+}
+
+function barClass(pctVal) {
+  return pctVal >= 66 ? 'bar-danger' : pctVal >= 33 ? 'bar-warn' : 'bar-ok';
+}
+
+function getCol(colName) {
+  try {
+    const raw = localStorage.getItem('movePe_' + colName);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : Object.values(parsed);
+  } catch(e) { return []; }
+}
+
+function getRawSize(colName) {
+  const raw = localStorage.getItem('movePe_' + colName);
+  return raw ? raw.length * 2 : 0;
+}
+
+// ═══ ANÁLISE DE CAMPOS ══════════════════════════════════════════════════════
+
+function analyzeFields(items) {
+  const stats = {};
+
+  items.forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    Object.entries(item).forEach(([key, value]) => {
+      const sz = byteSize(value);
+      const valStr = JSON.stringify(value) || '';
+
+      if (!stats[key]) {
+        stats[key] = {
+          field: key,
+          count: 0,
+          totalSize: 0,
+          maxSize: 0,
+          minSize: Infinity,
+          exampleSmall: '',
+          exampleLarge: '',
+          isArray: false,
+          isObject: false,
+          typeSeen: typeof value,
+        };
+      }
+
+      const s = stats[key];
+      s.count++;
+      s.totalSize += sz;
+      if (sz > s.maxSize) {
+        s.maxSize = sz;
+        s.exampleLarge = truncate(valStr, 250);
+      }
+      if (sz < s.minSize) {
+        s.minSize = sz;
+        s.exampleSmall = truncate(valStr, 80);
+      }
+      if (!s.exampleSmall) s.exampleSmall = truncate(valStr, 80);
+      if (Array.isArray(value)) s.isArray = true;
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) s.isObject = true;
+    });
+  });
+
+  return Object.values(stats)
+    .map(s => ({
+      ...s,
+      avgSize: s.count > 0 ? Math.round(s.totalSize / s.count) : 0,
+      minSize: s.minSize === Infinity ? 0 : s.minSize,
+    }))
+    .sort((a, b) => b.totalSize - a.totalSize);
+}
+
+// ═══ TOP ITENS POR TAMANHO ══════════════════════════════════════════════════
+
+function topBySize(items, n) {
+  n = n || 10;
+  return items
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const total = itemBytes(item);
+      const fields = Object.entries(item)
+        .map(([key, val]) => ({ key, size: byteSize(val) }))
+        .sort((a, b) => b.size - a.size);
+      return {
+        id: item.id || '?',
+        nome: item.nome || item.descricao || item.nomeCliente || item.cliente || item.referencia || '?',
+        total,
+        fields,
+      };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, n);
+}
+
+// ═══ DETECÇÃO DE ANOMALIAS ══════════════════════════════════════════════════
+
+function detectAnomalies(items, fieldStats) {
+  const anomalias = [];
+  const n = items.length;
+
+  // Campo pesado (média > 1 KB)
+  fieldStats.forEach(f => {
+    if (f.avgSize > 1024) {
+      anomalias.push({
+        level: 'danger',
+        title: 'Campo "' + f.field + '" muito pesado — média ' + kb(f.avgSize) + ' por registro',
+        detail: 'Total: ' + kb(f.totalSize) + ' em ' + f.count + ' registros. ' +
+                'Tipo: ' + (f.isArray ? 'array' : f.isObject ? 'objeto' : f.typeSeen) + '. ' +
+                'Maior exemplo: ' + truncate(f.exampleLarge, 200),
+      });
+    } else if (f.avgSize > 300 && (f.isArray || f.isObject)) {
+      anomalias.push({
+        level: 'warn',
+        title: 'Campo "' + f.field + '" (' + (f.isArray ? 'array' : 'objeto') + ') com média ' + kb(f.avgSize),
+        detail: 'Total: ' + kb(f.totalSize) + ' em ' + f.count + ' registros.',
+      });
+    }
+  });
+
+  // Nome suspeito de campo
+  var suspeitos = ['historico','versoes','changelog','log','backup','old','previous','cache','temp','debug','auditoria','registro'];
+  fieldStats.forEach(f => {
+    if (suspeitos.some(s => f.field.toLowerCase().indexOf(s) !== -1)) {
+      anomalias.push({
+        level: 'warn',
+        title: 'Campo com nome suspeito: "' + f.field + '"',
+        detail: 'Parece ser histórico/log/cache embedado. Total: ' + kb(f.totalSize) + '.',
+      });
+    }
+  });
+
+  // Campo raro e pesado (< 10% dos registros mas > 20 KB total)
+  fieldStats.forEach(f => {
+    if (f.count < n * 0.1 && f.totalSize > 20 * 1024) {
+      anomalias.push({
+        level: 'warn',
+        title: 'Campo raro e pesado: "' + f.field + '"',
+        detail: 'Só em ' + f.count + ' de ' + n + ' registros (' + pct(f.count, n) + '%), mas ocupa ' + kb(f.totalSize) + '.',
+      });
+    }
+  });
+
+  // Registro individual gigante (> 20 KB)
+  items.forEach(item => {
+    const sz = itemBytes(item);
+    if (sz > 20 * 1024) {
+      var maiores = Object.entries(item)
+        .map(function(e) { return e[0] + '=' + kb(byteSize(e[1])); })
+        .sort(function(a, b) { return byteSize(b) - byteSize(a); })
+        .slice(0, 5).join(', ');
+      anomalias.push({
+        level: 'danger',
+        title: 'Registro gigante: "' + (item.nome || item.id || '?') + '" — ' + kb(sz),
+        detail: 'ID: ' + (item.id || '?') + '. Campos maiores: ' + maiores,
+      });
+    }
+  });
+
+  // Arrays que crescem sem limite (length > 100)
+  items.forEach(item => {
+    if (!item) return;
+    Object.entries(item).forEach(function(kv) {
+      var k = kv[0], v = kv[1];
+      if (Array.isArray(v) && v.length > 100) {
+        anomalias.push({
+          level: 'danger',
+          title: 'Array gigante: campo "' + k + '" com ' + v.length + ' elementos no registro "' + (item.nome || item.id || '?') + '"',
+          detail: 'Arrays muito longos geralmente indicam acúmulo sem paginação. Tamanho: ' + kb(byteSize(v)) + '.',
+        });
+      }
+    });
+  });
+
+  return anomalias;
+}
+
+// ═══ RENDER TABELA DE CAMPOS ════════════════════════════════════════════════
+
+function renderFieldTable(fieldStats, totalItems) {
+  if (!fieldStats.length) return '<p class="muted" style="font-size:0.8rem">Sem dados.</p>';
+  var maxTotal = fieldStats[0].totalSize || 1;
+
+  var rows = fieldStats.map(function(f) {
+    var barPct = pct(f.totalSize, maxTotal);
+    var bClass = f.avgSize > 1024 ? 'bar-danger' : f.avgSize > 300 ? 'bar-warn' : 'bar-ok';
+    var typeLabel = f.isArray ? 'array' : f.isObject ? 'objeto' : f.typeSeen;
+    var tags = '';
+    if (f.avgSize > 1024) tags += '<span class="tag tag-red">PESADO</span>';
+    else if (f.avgSize > 300) tags += '<span class="tag tag-amber">médio</span>';
+    if (f.isArray) tags += '<span class="tag tag-purple">array</span>';
+    if (f.isObject) tags += '<span class="tag tag-blue">obj</span>';
+    var coverage = pct(f.count, totalItems);
+    var coverageTag = coverage < 50 ? '<span class="tag tag-amber">' + coverage + '%</span>' : '';
+
+    return '<tr>' +
+      '<td class="mono">' + esc(f.field) + tags + '</td>' +
+      '<td class="number">' + f.count + coverageTag + '</td>' +
+      '<td>' +
+        kb(f.totalSize) +
+        '<div class="bar-wrap"><div class="bar-fill ' + bClass + '" style="width:' + barPct + '%"></div></div>' +
+      '</td>' +
+      '<td class="number ' + (f.avgSize > 1024 ? 'tag-red' : '') + '">' + kb(f.avgSize) + '</td>' +
+      '<td class="number">' + kb(f.maxSize) + '</td>' +
+      '<td><div class="example-box">' + esc(truncate(f.exampleLarge || f.exampleSmall, 120)) + '</div></td>' +
+      '</tr>';
+  }).join('');
+
+  return '<div class="tbl-wrap"><table>' +
+    '<thead><tr>' +
+    '<th>Campo</th><th>Registros</th><th>Total ↓</th>' +
+    '<th>Média</th><th>Máximo</th><th>Exemplo (maior)</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '</table></div>';
+}
+
+// ═══ RENDER TOP ITENS ═══════════════════════════════════════════════════════
+
+function renderTopItems(top) {
+  if (!top.length) return '<p class="muted" style="font-size:0.8rem">Sem dados.</p>';
+  return top.map(function(t, i) {
+    var sizeColor = t.total > 30720 ? '#ef4444' : t.total > 10240 ? '#f59e0b' : '#86efac';
+    var chips = t.fields.slice(0, 8).map(function(f) {
+      var cls = f.size > 10240 ? 'chip-big' : f.size > 2048 ? 'chip-med' : '';
+      return '<span class="chip ' + cls + '">' + esc(f.key) + ': ' + kb(f.size) + '</span>';
+    }).join('');
+    return '<div class="item-card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+        '<div>' +
+          '<div class="item-name">#' + (i + 1) + ' ' + esc(String(t.nome)) + '</div>' +
+          '<div class="item-id">ID: ' + esc(String(t.id)) + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:1.2rem;font-weight:700;color:' + sizeColor + '">' + kb(t.total) + '</div>' +
+          '<div style="font-size:0.68rem;color:#64748b">' + t.fields.length + ' campos</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="chip-row">' + chips + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+// ═══ RENDER ANOMALIAS ═══════════════════════════════════════════════════════
+
+function renderAnomalies(anomalias) {
+  if (!anomalias.length) {
+    return '<div class="alert alert-ok"><strong>✅ Nenhuma anomalia detectada.</strong></div>';
+  }
+  return anomalias.map(function(a) {
+    return '<div class="alert alert-' + a.level + '">' +
+      '<strong>' + esc(a.title) + '</strong>' +
+      '<p>' + esc(a.detail) + '</p>' +
+      '</div>';
+  }).join('');
+}
+
+// ═══ ANÁLISE DE UMA COLEÇÃO ════════════════════════════════════════════════
+
+function analyzeCollection(colName, label) {
+  var items = getCol(colName);
+  var rawSize = getRawSize(colName);
+  if (!items.length) {
+    return { colName: colName, label: label, items: [], rawSize: 0, fieldStats: [], top: [], anomalias: [], avgItemSize: 0 };
+  }
+  var fieldStats = analyzeFields(items);
+  var top = topBySize(items, 10);
+  var anomalias = detectAnomalies(items, fieldStats);
+  return {
+    colName: colName,
+    label: label,
+    items: items,
+    rawSize: rawSize,
+    fieldStats: fieldStats,
+    top: top,
+    anomalias: anomalias,
+    avgItemSize: rawSize / items.length,
+  };
+}
+
+// ═══ COMPARAR COM FIRESTORE ════════════════════════════════════════════════
+
+async function compararFirestore() {
+  var div = document.getElementById('fb-resultado');
+  div.innerHTML = '<p class="muted" style="font-size:0.82rem">Verificando Firebase...</p>';
+
+  var fbDb = window._fbDb || null;
+  if (!fbDb && typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
+    try { fbDb = firebase.firestore(); } catch(e) {}
+  }
+
+  if (!fbDb) {
+    div.innerHTML = '<div class="alert alert-warn"><strong>Firebase não disponível neste contexto</strong>' +
+      '<p>Este diagnóstico está rodando como arquivo independente. Para usar esta função, abra o arquivo ' +
+      'no mesmo navegador onde o MovePe está carregado, ou copie o código para dentro do console do sistema.</p></div>';
+    return;
+  }
+
+  var COLS = ['produtos','clientes','vendas','crediario','caixa','fluxo','despesas','retiradas','grades','trafego'];
+  div.innerHTML = '<p class="muted" style="font-size:0.82rem">Consultando Firestore (pode levar alguns segundos)...</p>';
+
+  try {
+    var resultados = await Promise.all(COLS.map(async function(col) {
+      var snap = await fbDb.collection('movePe_' + col).get();
+      var fbCount = snap.size;
+      var localCount = getCol(col).length;
+      var diff = fbCount - localCount;
+
+      // Estima tamanho dos docs do Firestore
+      var fbSize = 0;
+      snap.forEach(function(d) { fbSize += JSON.stringify(d.data()).length * 2; });
+
+      return { col: col, localCount: localCount, fbCount: fbCount, diff: diff, fbSize: fbSize };
+    }));
+
+    var rows = resultados.map(function(r) {
+      var diffStr = r.diff > 0 ? '+' + r.diff : String(r.diff);
+      var diffColor = r.diff !== 0 ? '#f59e0b' : '#86efac';
+      var status = r.diff === 0 ? '✅ Igual' : r.diff > 0 ? '⚠️ Firestore tem mais' : '⚠️ Local tem mais';
+      return '<tr>' +
+        '<td class="mono">' + r.col + '</td>' +
+        '<td class="number right">' + r.localCount + '</td>' +
+        '<td class="number right">' + r.fbCount + '</td>' +
+        '<td class="number right" style="color:' + diffColor + '">' + diffStr + '</td>' +
+        '<td class="number right">' + kb(r.fbSize) + '</td>' +
+        '<td>' + status + '</td>' +
+        '</tr>';
+    }).join('');
+
+    div.innerHTML = '<div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Coleção</th><th class="right">Local</th><th class="right">Firestore</th>' +
+      '<th class="right">Diff</th><th class="right">Tam. Firestore</th><th>Status</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  } catch(e) {
+    div.innerHTML = '<div class="alert alert-danger"><strong>Erro ao consultar Firestore:</strong><p>' + esc(e.message) + '</p></div>';
+  }
+}
+
+// ═══ EXECUÇÃO PRINCIPAL ════════════════════════════════════════════════════
+
+var _allData = null;
+
+var COLECOES = [
+  { colName: 'produtos',  label: 'Produtos' },
+  { colName: 'crediario', label: 'Crediário' },
+  { colName: 'clientes',  label: 'Clientes' },
+  { colName: 'vendas',    label: 'Vendas' },
+  { colName: 'caixa',     label: 'Caixa' },
+  { colName: 'fluxo',     label: 'Fluxo' },
+  { colName: 'despesas',  label: 'Despesas' },
+  { colName: 'retiradas', label: 'Retiradas' },
+  { colName: 'grades',    label: 'Grades' },
+];
+
+function executar() {
+  document.getElementById('resultado').innerHTML = '<div id="loading">Analisando — aguarde...</div>';
+
+  // setTimeout para UI atualizar antes do processamento pesado
+  setTimeout(function() {
+    _allData = COLECOES.map(function(c) { return analyzeCollection(c.colName, c.label); });
+
+    var totalUsed = Object.keys(localStorage)
+      .filter(function(k) { return k.startsWith('movePe_'); })
+      .reduce(function(sum, k) { return sum + (localStorage.getItem(k) || '').length * 2; }, 0);
+
+    renderTudo(_allData, totalUsed);
+  }, 50);
+}
+
+function renderTudo(data, totalUsed) {
+  var LIMITE = 5 * 1024 * 1024; // 5 MB em bytes
+  var usoPct = pct(totalUsed, LIMITE);
+  var usoClass = usoPct > 80 ? 'bar-danger' : usoPct > 50 ? 'bar-warn' : 'bar-ok';
+
+  // ── Resumo Geral ──────────────────────────────────────────────────
+  var summaryCards = data.map(function(d) {
+    var p = pct(d.rawSize, totalUsed);
+    var avgColor = d.avgItemSize > 5120 ? 'color:#ef4444' : d.avgItemSize > 1024 ? 'color:#f59e0b' : '';
+    return '<div class="stat-card">' +
+      '<div class="stat-label">' + d.label + '</div>' +
+      '<div class="stat-value">' + kbNum(d.rawSize) + ' <span style="font-size:0.8rem;color:#94a3b8">KB</span></div>' +
+      '<div class="stat-sub">' + d.items.length + ' registros · ' + p + '% do total</div>' +
+      '<div class="stat-sub" style="' + avgColor + '">' + kb(d.avgItemSize) + ' / registro</div>' +
+      '</div>';
+  }).join('');
+
+  // ── Tabs por coleção ──────────────────────────────────────────────
+  var tabBtns = data.map(function(d, i) {
+    var hasAnomaly = d.anomalias.some(function(a) { return a.level === 'danger'; });
+    var label = d.label + (hasAnomaly ? ' ⚠' : '') + ' <span style="font-size:0.68em;opacity:0.65">' + kbNum(d.rawSize) + 'KB</span>';
+    return '<button class="tab-btn ' + (i === 0 ? 'active' : '') + '" onclick="switchTab(' + i + ')">' + label + '</button>';
+  }).join('');
+
+  var tabPanes = data.map(function(d, i) {
+    var maxTotal = d.fieldStats.length > 0 ? d.fieldStats[0].totalSize : 1;
+    var paneContent;
+
+    if (!d.items.length) {
+      paneContent = '<div class="alert alert-info"><strong>Coleção vazia ou não encontrada no localStorage.</strong></div>';
+    } else {
+      paneContent =
+        '<div class="section-sub">Campos por Tamanho Total — ' + d.items.length + ' registros, ' + kb(d.rawSize) + ' total, ' + kb(d.avgItemSize) + ' por registro em média</div>' +
+        renderFieldTable(d.fieldStats, d.items.length) +
+        '<hr class="sep">' +
+        '<div class="section-sub">Anomalias Detectadas (' + d.anomalias.length + ')</div>' +
+        renderAnomalies(d.anomalias) +
+        '<hr class="sep">' +
+        '<div class="section-sub">Top 10 Registros Mais Pesados</div>' +
+        renderTopItems(d.top);
+    }
+
+    return '<div class="tab-pane ' + (i === 0 ? 'active' : '') + '" id="tab-' + i + '">' + paneContent + '</div>';
+  }).join('');
+
+  // ── Diagnóstico Rápido (Automático) ──────────────────────────────
+  var autoFindings = gerarDiagnosticoAutomatico(data, totalUsed);
+
+  var html =
+    // Resumo
+    '<div class="section">' +
+      '<div class="section-title">Resumo Geral do localStorage</div>' +
+      '<div style="margin-bottom:14px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px">' +
+          '<span>Uso Total MovePe</span>' +
+          '<span><strong style="font-size:1.1rem;color:' + (usoPct > 80 ? '#ef4444' : '#f1f5f9') + '">' + kbNum(totalUsed) + ' KB</strong> de ~5120 KB (' + usoPct + '%)</span>' +
+        '</div>' +
+        '<div class="bar-wrap" style="height:8px"><div class="bar-fill ' + usoClass + '" style="height:8px;width:' + usoPct + '%"></div></div>' +
+      '</div>' +
+      '<div class="grid2">' + summaryCards + '</div>' +
+    '</div>' +
+
+    // Diagnóstico automático
+    '<div class="section">' +
+      '<div class="section-title">🔍 Diagnóstico Automático</div>' +
+      autoFindings +
+    '</div>' +
+
+    // Análise por coleção
+    '<div class="section">' +
+      '<div class="section-title">Análise Estrutural por Coleção</div>' +
+      '<div class="tabs">' + tabBtns + '</div>' +
+      tabPanes +
+    '</div>' +
+
+    // Comparar Firestore
+    '<div class="section">' +
+      '<div class="section-title">Comparar com Firestore</div>' +
+      '<p style="font-size:0.8rem;color:#94a3b8;margin-bottom:12px">Verifica se o Firestore tem mais documentos que o localStorage — indica duplicação no servidor ou dados perdidos localmente.</p>' +
+      '<button class="btn-secondary" onclick="compararFirestore()">Consultar Firestore</button>' +
+      '<div id="fb-resultado" style="margin-top:14px"></div>' +
+    '</div>';
+
+  document.getElementById('resultado').innerHTML = html;
+}
+
+// ═══ DIAGNÓSTICO AUTOMÁTICO ════════════════════════════════════════════════
+
+function gerarDiagnosticoAutomatico(data, totalUsed) {
+  var findings = [];
+
+  data.forEach(function(d) {
+    if (!d.items.length) return;
+
+    // Coleção com média anormalmente alta
+    if (d.avgItemSize > 5120) {
+      findings.push({
+        level: 'danger',
+        title: d.label + ': ' + kb(d.avgItemSize) + ' por registro — muito alto',
+        detail: 'Com ' + d.items.length + ' registros isso representa ' + kb(d.rawSize) + '. ' +
+                'O campo mais pesado é "' + (d.fieldStats[0] ? d.fieldStats[0].field : '?') + '" (' + kb(d.fieldStats[0] ? d.fieldStats[0].totalSize : 0) + ' total).',
+      });
+    } else if (d.avgItemSize > 1024) {
+      findings.push({
+        level: 'warn',
+        title: d.label + ': ' + kb(d.avgItemSize) + ' por registro — acima do esperado',
+        detail: 'Total: ' + kb(d.rawSize) + ' para ' + d.items.length + ' registros. Investigar campos: ' +
+                d.fieldStats.slice(0, 3).map(function(f) { return '"' + f.field + '" (' + kb(f.totalSize) + ')'; }).join(', '),
+      });
+    }
+
+    // Coleção que domina o storage (> 40%)
+    if (pct(d.rawSize, totalUsed) > 40) {
+      findings.push({
+        level: 'warn',
+        title: d.label + ' ocupa ' + pct(d.rawSize, totalUsed) + '% do total do localStorage',
+        detail: kb(d.rawSize) + ' de ' + kb(totalUsed) + ' totais.',
+      });
+    }
+
+    // Campo específico dominando a coleção (> 60% da coleção)
+    if (d.fieldStats.length > 0) {
+      var top1 = d.fieldStats[0];
+      if (top1.totalSize > d.rawSize * 0.5) {
+        findings.push({
+          level: 'warn',
+          title: 'Em ' + d.label + ': campo "' + top1.field + '" representa ' + pct(top1.totalSize, d.rawSize) + '% da coleção',
+          detail: kb(top1.totalSize) + ' de ' + kb(d.rawSize) + ' totais da coleção. Média de ' + kb(top1.avgSize) + ' por registro.',
+        });
+      }
+    }
+  });
+
+  // Alerta global de 100%
+  var LIMITE = 5 * 1024 * 1024;
+  if (totalUsed > LIMITE * 0.85) {
+    findings.unshift({
+      level: 'danger',
+      title: 'localStorage crítico: ' + pct(totalUsed, LIMITE) + '% usado (' + kb(totalUsed) + ')',
+      detail: 'Acima de 100% o navegador começa a rejeitar escritas, causando falhas silenciosas de dados.',
+    });
+  }
+
+  if (!findings.length) {
+    return '<div class="alert alert-ok"><strong>✅ Nenhum problema crítico detectado no momento da análise.</strong>' +
+           '<p>Isso é esperado se o localStorage já estabilizou após o pico. Execute novamente logo após abrir o sistema para capturar o estado durante a sincronização.</p></div>';
+  }
+
+  return findings.map(function(f) {
+    return '<div class="alert alert-' + f.level + '"><strong>' + esc(f.title) + '</strong><p>' + esc(f.detail) + '</p></div>';
+  }).join('');
+}
+
+// ═══ TABS ══════════════════════════════════════════════════════════════════
+
+function switchTab(idx) {
+  document.querySelectorAll('.tab-btn').forEach(function(t, i) { t.classList.toggle('active', i === idx); });
+  document.querySelectorAll('.tab-pane').forEach(function(t, i) { t.classList.toggle('active', i === idx); });
+}
+
+// ═══ EXPORTAR JSON ═════════════════════════════════════════════════════════
+
+function exportarJSON() {
+  if (!_allData) { alert('Execute a análise primeiro.'); return; }
+
+  // Exportar apenas os metadados (sem os itens completos para não travar)
+  var exportData = _allData.map(function(d) {
+    return {
+      colName: d.colName,
+      label: d.label,
+      items: d.items.length,
+      rawSizeKB: kbNum(d.rawSize),
+      avgItemSizeKB: kbNum(d.avgItemSize),
+      fieldStats: d.fieldStats.map(function(f) {
+        return {
+          field: f.field,
+          count: f.count,
+          totalSizeKB: kbNum(f.totalSize),
+          avgSizeKB: kbNum(f.avgSize),
+          maxSizeKB: kbNum(f.maxSize),
+          isArray: f.isArray,
+          isObject: f.isObject,
+          exampleLarge: f.exampleLarge ? truncate(f.exampleLarge, 100) : undefined,
+        };
+      }),
+      top10: d.top.map(function(t) {
+        return {
+          id: t.id,
+          nome: t.nome,
+          totalSizeKB: kbNum(t.total),
+          fields: t.fields.slice(0, 8).map(function(f) { return f.key + '=' + kb(f.size); }),
+        };
+      }),
+      anomalias: d.anomalias,
+    };
+  });
+
+  var ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  var blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'diagnostico_estrutural_' + ts + '.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

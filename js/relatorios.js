@@ -47,7 +47,7 @@ const RelatoriosPage = (() => {
       const d = new Date();
       const dow = d.getDay();
       const seg = new Date(d); seg.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-      el('rel-inicio').value = seg.toISOString().substring(0, 10);
+      el('rel-inicio').value = Utils.dataLocal(seg); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
       el('rel-fim').value = hoje;
     } else if (periodo === 'mes') {
       el('rel-inicio').value = hoje.substring(0, 7) + '-01';
@@ -56,8 +56,8 @@ const RelatoriosPage = (() => {
       const d = new Date();
       const mp = new Date(d.getFullYear(), d.getMonth() - 1, 1);
       const mf = new Date(d.getFullYear(), d.getMonth(), 0);
-      el('rel-inicio').value = mp.toISOString().substring(0, 10);
-      el('rel-fim').value = mf.toISOString().substring(0, 10);
+      el('rel-inicio').value = Utils.dataLocal(mp); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
+      el('rel-fim').value = Utils.dataLocal(mf); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     }
     gerarRelatorio();
   };
@@ -181,7 +181,7 @@ const RelatoriosPage = (() => {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(hoje);
         d.setDate(hoje.getDate() - i);
-        const ds = d.toISOString().substring(0, 10);
+        const ds = Utils.dataLocal(d); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
         const label = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
         const v = todasVendas.filter(vd => vd.criadoEm && vd.criadoEm.startsWith(ds)).reduce((a, vd) => a + (parseFloat(vd.total) || 0), 0);
         dados.push({ label, v, ds });
@@ -196,8 +196,8 @@ const RelatoriosPage = (() => {
         inicioSem.setDate(hoje.getDate() - (dow === 0 ? 6 : dow - 1) - i * 7);
         const fimSem = new Date(inicioSem);
         fimSem.setDate(inicioSem.getDate() + 6);
-        const iStr = inicioSem.toISOString().substring(0, 10);
-        const fStr = fimSem.toISOString().substring(0, 10);
+        const iStr = Utils.dataLocal(inicioSem); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
+        const fStr = Utils.dataLocal(fimSem); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
         const label = String(inicioSem.getDate()).padStart(2, '0') + '/' + String(inicioSem.getMonth() + 1).padStart(2, '0');
         const v = todasVendas.filter(vd => {
           if (!vd.criadoEm) return false;

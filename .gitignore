@@ -1,2 +1,7 @@
 *.zip
 weto-cerebro.md
+
+node_modules/
+.env.local
+contas_receber_tiny.json
+src/

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corrigir Baixas — Crediário · MOVE PÉ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; min-height: 100vh; }
+    h1  { font-size: 21px; color: #f87171; margin-bottom: 3px; }
+    .sub { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+
+    /* Backup */
+    #backupBtn.nao-feito { background: #dc2626; animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 #dc262680}60%{box-shadow:0 0 0 8px #dc262600} }
+    #backupBtn.feito { background: #16a34a; animation: none; }
+    #backupLock { font-size:11px; color:#f87171; font-weight:600; }
+    #backupLock.ok { color:#86efac; }
+
+    /* Banner */
+    .banner { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px; }
+    .bc { flex:1; min-width:130px; border-radius:12px; padding:14px 18px; }
+    .bc .lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
+    .bc .val { font-size:26px; font-weight:900; }
+    .bc-red    { background:#7f1d1d; border:1px solid #b91c1c; } .bc-red .lbl{color:#fca5a5} .bc-red .val{color:#fff}
+    .bc-yellow { background:#78350f; border:1px solid #d97706; } .bc-yellow .lbl{color:#fcd34d} .bc-yellow .val{color:#fff}
+    .bc-green  { background:#14532d; border:1px solid #16a34a; } .bc-green .lbl{color:#86efac} .bc-green .val{color:#fff}
+    .bc-blue   { background:#1e3a5f; border:1px solid #3b82f6; } .bc-blue .lbl{color:#93c5fd} .bc-blue .val{color:#fff}
+
+    /* Topbar */
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:14px; margin-bottom:20px; }
+    .topbar-right { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+    /* Botões */
+    .btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:8px;
+           padding:9px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:filter .15s; }
+    .btn:hover:not(:disabled) { filter:brightness(1.15); }
+    .btn:disabled { opacity:.35; cursor:not-allowed; }
+    .btn-green  { background:#16a34a; color:#fff; }
+    .btn-blue   { background:#2563eb; color:#fff; }
+    .btn-slate  { background:#334155; color:#e2e8f0; }
+    .btn-ghost  { background:transparent; border:1px solid #475569; color:#94a3b8; }
+    .btn-red    { background:#dc2626; color:#fff; }
+    .btn-sm     { padding:6px 12px; font-size:12px; }
+    .btn-xs     { padding:4px 9px; font-size:11px; }
+
+    /* Cards de cliente */
+    .cli-card { border-radius:12px; border:1px solid #334155; background:#1e293b;
+                margin-bottom:18px; overflow:hidden; transition:border-color .3s; }
+    .cli-card.resolvido { border-color:#16a34a; background:#0b1e13; opacity:.85; }
+    .cli-header { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .cli-nome { font-size:16px; font-weight:700; }
+    .cli-sub { font-size:12px; color:#94a3b8; margin-top:2px; }
+    .cli-valor { font-size:20px; font-weight:900; color:#fcd34d; }
+    .cli-body { padding:14px 18px; border-top:1px solid #334155; }
+
+    /* Tabelas */
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { text-align:left; color:#64748b; font-size:11px; text-transform:uppercase; padding:6px 8px;
+         border-bottom:1px solid #334155; white-space:nowrap; }
+    td { padding:8px 8px; border-bottom:1px solid #1e293b; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    tr.parcela-paga td { background:#071a0e; color:#4ade80; }
+    tr.parcela-corrigida td { background:#0b2a1a; }
+
+    .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700; }
+    .pill-red    { background:#7f1d1d; color:#fca5a5; }
+    .pill-yellow { background:#78350f; color:#fcd34d; }
+    .pill-green  { background:#14532d; color:#86efac; }
+    .pill-blue   { background:#1e3a5f; color:#93c5fd; }
+    .pill-grey   { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+
+    .danger { color:#f87171; font-weight:600; }
+    .warn   { color:#fbbf24; }
+    .ok     { color:#4ade80; }
+    .muted  { color:#64748b; }
+    .mono   { font-family:monospace; font-size:11px; color:#60a5fa; }
+
+    .note  { background:#1e293b; border-left:3px solid #334155; border-radius:6px;
+             padding:10px 14px; font-size:12px; color:#94a3b8; margin-bottom:14px; }
+    .note.alerta { border-left-color:#dc2626; color:#fca5a5; background:#1a0909; }
+    .note.ok     { border-left-color:#16a34a; color:#86efac; background:#08170e; }
+
+    /* Fluxo card */
+    .fluxo-item { background:#0f172a; border:1px solid #334155; border-radius:8px;
+                  padding:10px 14px; margin-bottom:8px; font-size:12px; }
+    .fluxo-item.casado { border-color:#16a34a; }
+    .fluxo-item.suspeito { border-color:#dc2626; }
+    .fluxo-desc { color:#94a3b8; font-size:11px; margin-top:3px; }
+
+    /* Confirmação */
+    .confirm-box { background:#0f172a; border:1px solid #f59e0b; border-radius:10px;
+                   padding:14px 16px; margin:12px 18px; font-size:13px; display:none; }
+    .confirm-box p { margin-bottom:10px; line-height:1.5; }
+    .confirm-box .btns { display:flex; gap:8px; }
+
+    /* Log */
+    #logArea { border:1px solid #334155; border-radius:10px; margin-top:24px; overflow:hidden; }
+    .log-h { padding:12px 18px; background:#1e293b; font-size:13px; font-weight:700;
+             display:flex; justify-content:space-between; align-items:center; }
+    #logBody { padding:14px 18px; background:#0f172a; min-height:50px; }
+    .log-line { font-size:12px; padding:5px 0; border-bottom:1px solid #1e293b;
+                display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .log-line:last-child { border-bottom:none; }
+    .log-ts { color:#475569; font-family:monospace; flex-shrink:0; }
+    .log-empty { color:#475569; font-size:12px; font-style:italic; }
+
+    /* Progresso */
+    .prog-wrap { margin-bottom:20px; }
+    .prog-bar { height:8px; background:#1e293b; border-radius:99px; overflow:hidden; border:1px solid #334155; }
+    .prog-fill { height:100%; background:linear-gradient(90deg,#2563eb,#16a34a); border-radius:99px; transition:width .4s; }
+    .prog-labels { display:flex; justify-content:space-between; font-size:12px; color:#94a3b8; margin-bottom:6px; }
+
+    #loading { text-align:center; padding:60px; color:#64748b; }
+    #semProblemas { display:none; text-align:center; padding:50px 20px; }
+    #semProblemas .big { font-size:48px; margin-bottom:12px; }
+    #semProblemas p { color:#94a3b8; font-size:15px; }
+
+    /* Checkbox estilizado */
+    .check-parc { display:flex; align-items:center; gap:8px; padding:6px 0; cursor:pointer; }
+    .check-parc input { width:16px; height:16px; cursor:pointer; }
+    .check-parc label { cursor:pointer; flex:1; }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div>
+    <h1>🔧 Corrigir Baixas de Crediário</h1>
+    <div class="sub">Dá baixa manual em parcelas que foram pagas mas não registradas corretamente</div>
+  </div>
+  <div class="topbar-right">
+    <div style="text-align:right">
+      <button id="backupBtn" class="btn nao-feito" onclick="App.fazerBackup()">
+        💾 Backup Obrigatório — CLIQUE ANTES
+      </button>
+      <div id="backupLock">⛔ Faça o backup antes de corrigir qualquer dado</div>
+    </div>
+    <a href="analise_pagamentos_crediario.html" class="btn btn-ghost btn-sm">📊 Análise</a>
+    <a href="auditoria_crediarios.html" class="btn btn-ghost btn-sm">🔍 Auditoria</a>
+  </div>
+</div>
+
+<!-- PROGRESSO -->
+<div class="prog-wrap" id="progWrap" style="display:none">
+  <div class="prog-labels">
+    <span id="progLabel">0 de 0 clientes corrigidos</span>
+    <span id="progPct">0%</span>
+  </div>
+  <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+</div>
+
+<!-- BANNER -->
+<div class="banner" id="banner" style="display:none">
+  <div class="bc bc-red">   <div class="lbl">🚨 Casos Críticos</div><div class="val" id="banCrit">0</div></div>
+  <div class="bc bc-yellow"><div class="lbl">⏳ Pendente Revisar</div><div class="val" id="banPend">0</div></div>
+  <div class="bc bc-green"> <div class="lbl">✅ Corrigidos</div>    <div class="val" id="banOK">0</div></div>
+  <div class="bc bc-blue">  <div class="lbl">💰 Valor Total</div>   <div class="val" id="banVal" style="font-size:16px">R$ 0</div></div>
+</div>
+
+<!-- LISTA -->
+<div id="loading">⏳ Cruzando dados do FluxoCaixa com parcelas...</div>
+<div id="semProblemas">
+  <div class="big">✅</div>
+  <p>Nenhuma inconsistência encontrada!<br>Todos os pagamentos têm baixa registrada.</p>
+</div>
+<div id="lista"></div>
+
+<!-- LOG -->
+<div id="logArea" style="display:none">
+  <div class="log-h">
+    <span>📋 Log de Correções</span>
+    <button class="btn btn-ghost btn-xs" onclick="App.limparLog()">Limpar</button>
+  </div>
+  <div id="logBody"><div class="log-empty">Nenhuma correção realizada.</div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/db.js"></script>
+<script src="js/utils.js"></script>
+
+<script>
+const App = (() => {
+  let _casos    = [];   // { cliente, pagamentosFluxo, parcelasSuspeitas, resolvido }
+  let _snapshots = {};  // { clienteKey: { crediarios } }
+  let _log      = [];
+  let _backup   = false;
+
+  /* ══════════════ INIT ══════════════ */
+  function init() {
+    const run = () => {
+      try {
+        _detectar();
+        _render();
+      } catch(e) {
+        document.getElementById('loading').innerHTML =
+          '<span style="color:#f87171">Erro ao carregar: ' + _esc(e.message) + '</span>';
+      }
+    };
+    if (typeof DB !== 'undefined' && DB.Sync) DB.Sync.init();
+    if (typeof DB !== 'undefined' && DB.onReady) DB.onReady(run);
+    else setTimeout(run, 900);
+  }
+
+  /* ══════════════ DETECÇÃO ══════════════ */
+  function _detectar() {
+    const crediarios = JSON.parse(localStorage.getItem('movePe_crediario') || '[]');
+    const fluxo      = JSON.parse(localStorage.getItem('movePe_fluxo')     || '[]');
+    const hoje = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+
+    // Pagamentos de crediário no fluxo
+    const pgtos = fluxo.filter(f => f.categoria === 'crediario')
+                       .sort((a,b) => (a.data||'') < (b.data||'') ? -1 : 1);
+
+    // Agrupa por cliente (extrai nome da descrição)
+    const porCliente = {};
+    pgtos.forEach(f => {
+      const desc = f.descricao || '';
+      let nome = '';
+      // Formato menu: "Crediário - NOME - Parcela..."
+      // Formato PDV:  "Crediário (Forma) - NOME - Parcela..."
+      const m1 = desc.match(/^Crediário\s*[-–]\s*(.+?)\s*[-–]\s*(Parcela|Quitação|Abatimento)/i);
+      const m2 = desc.match(/^Crediário\s*\([^)]+\)\s*[-–]\s*(.+?)\s*[-–]\s*(Parcela|Quitação|Abatimento)/i);
+      if (m2) nome = m2[1].trim();
+      else if (m1) nome = m1[1].trim();
+      else nome = desc.substring(0, 30);
+
+      const key = nome.toLowerCase().trim();
+      if (!porCliente[key]) porCliente[key] = { nome, pagamentos: [], credsCliente: [] };
+      porCliente[key].pagamentos.push(f);
+    });
+
+    // Associa crediários a cada cliente
+    Object.entries(porCliente).forEach(([key, cli]) => {
+      const norm = s => (s||'').toLowerCase().trim();
+      cli.credsCliente = crediarios.filter(c => norm(c.clienteNome) === key);
+    });
+
+    // Para cada cliente, tenta casar pagamento ↔ parcela
+    _casos = [];
+    Object.values(porCliente).forEach(cli => {
+      if (!cli.credsCliente.length) return; // sem crediários → pula
+
+      const suspeitos = [];
+
+      cli.pagamentos.forEach(f => {
+        const desc     = f.descricao || '';
+        const valor    = parseFloat(f.valor) || 0;
+        const dataFluxo = (f.data || '').substring(0, 10);
+
+        // Extrai número da parcela da descrição
+        let parcelaNum = null;
+        const mP = desc.match(/Parcela\s+(\d+)\/\d+/i);
+        if (mP) parcelaNum = parseInt(mP[1]);
+        const eQuit = /Quitação/i.test(desc);
+
+        // Tenta achar a parcela correspondente (paga)
+        let achouPaga = false;
+        for (const c of cli.credsCliente) {
+          for (const [i, p] of (c.parcelas||[]).entries()) {
+            if (p.status !== 'pago') continue;
+            const dataPg = (p.dataPagamento||'').substring(0, 10);
+            const valP   = parseFloat(p.valor) || 0;
+            const numP   = p.numero || (i+1);
+            const valOK  = Math.abs(valP - valor) < 0.02 || Math.abs(valP - valor) <= valor * 0.06;
+            const numOK  = parcelaNum === null || numP === parcelaNum;
+            const dtOK   = !dataPg || Math.abs(new Date(dataPg) - new Date(dataFluxo)) <= 86400000 * 2;
+            if (valOK && numOK && dtOK) { achouPaga = true; break; }
+          }
+          if (achouPaga) break;
+        }
+
+        if (!achouPaga) {
+          // Encontra candidatos pendentes
+          const candidatos = [];
+          for (const c of cli.credsCliente) {
+            for (const [i, p] of (c.parcelas||[]).entries()) {
+              if (p.status === 'pago') continue;
+              const valP = parseFloat(p.valor) || 0;
+              const numP = p.numero || (i+1);
+              const valOK = Math.abs(valP - valor) < 0.02 || Math.abs(valP - valor) <= valor * 0.06;
+              const numOK = parcelaNum === null || numP === parcelaNum;
+              if (valOK && numOK) candidatos.push({ cred: c, idx: i, parcela: p });
+            }
+          }
+          suspeitos.push({ fluxo: f, valor, dataFluxo, parcelaNum, eQuit, candidatos, casado: false, origem: _detectarOrigem(desc) });
+        }
+      });
+
+      if (suspeitos.length > 0) {
+        _casos.push({
+          key: cli.nome.toLowerCase().trim(),
+          clienteNome: cli.nome,
+          pagamentos: cli.pagamentos,
+          credsCliente: cli.credsCliente,
+          suspeitos,
+          resolvido: false
+        });
+      }
+    });
+
+    console.log('[CORRIGIR] Casos detectados:', _casos.length, _casos);
+  }
+
+  function _detectarOrigem(desc) {
+    // Distingue se veio do menu crediário ou do PDV
+    if (/^Crediário\s*\(/.test(desc)) return 'PDV'; // "Crediário (Dinheiro) - ..."
+    if (/^Crediário\s*-/.test(desc))  return 'MENU'; // "Crediário - NOME - ..."
+    return '?';
+  }
+
+  /* ══════════════ RENDER ══════════════ */
+  function _render() {
+    document.getElementById('loading').style.display = 'none';
+
+    if (_casos.length === 0) {
+      document.getElementById('semProblemas').style.display = 'block';
+      document.getElementById('banner').style.display = 'none';
+      document.getElementById('progWrap').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('banner').style.display = 'flex';
+    document.getElementById('progWrap').style.display = 'block';
+    _atualizarBanner();
+    document.getElementById('lista').innerHTML = _casos.map((c, i) => _cardHtml(c, i)).join('');
+    _bloquearSemBackup();
+  }
+
+  function _cardHtml(caso, i) {
+    const resolvido = caso.resolvido;
+    const totalSusp = caso.suspeitos.reduce((s, m) => s + m.valor, 0);
+    const origens = [...new Set(caso.suspeitos.map(s => s.origem))];
+
+    const fluxoHtml = caso.suspeitos.map((m, mi) => {
+      const orig = m.origem === 'MENU'
+        ? '<span class="pill pill-red">Menu Crediário</span>'
+        : m.origem === 'PDV'
+          ? '<span class="pill pill-blue">PDV Receber</span>'
+          : '<span class="pill pill-grey">?</span>';
+
+      const candHtml = m.candidatos.length === 0
+        ? '<span class="muted" style="font-size:11px">Sem parcela pendente para casar</span>'
+        : m.candidatos.map((cand, ci) => `
+          <div class="check-parc">
+            <input type="checkbox" id="chk-${i}-${mi}-${ci}" data-caso="${i}" data-susp="${mi}" data-cand="${ci}"
+                   data-cred="${cand.cred.id}" data-idx="${cand.idx}"
+                   onchange="App.onCheckParc(this)"
+                   ${resolvido ? 'disabled' : ''}>
+            <label for="chk-${i}-${mi}-${ci}">
+              <strong>${(cand.parcela.numero||(cand.idx+1))}ª de ${cand.cred.parcelas.length}</strong>
+              — Venc <strong>${_dt(cand.parcela.vencimento)}</strong>
+              — ${_m(cand.parcela.valor)}
+              <span class="muted">(Cred: ${cand.cred.id.substring(0,8).toUpperCase()})</span>
+            </label>
+          </div>`).join('');
+
+      return `
+        <div class="fluxo-item ${m.candidatos.length > 0 ? 'suspeito' : ''}" id="fluxo-${i}-${mi}">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+            <strong style="color:#fcd34d">${_m(m.valor)}</strong>
+            <span class="muted">${_dtHr(m.fluxo.data)}</span>
+            ${orig}
+            ${m.eQuit ? '<span class="pill pill-yellow">Quitação Total</span>' : m.parcelaNum ? `<span class="pill pill-grey">${m.parcelaNum}ª parcela</span>` : ''}
+          </div>
+          <div class="fluxo-desc">${_esc(m.fluxo.descricao||'')}</div>
+          ${m.candidatos.length > 0 ? `
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid #334155">
+              <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px">
+                Parcela(s) pendente(s) correspondente(s) — marque para dar baixa:
+              </div>
+              ${candHtml}
+            </div>` : `<div style="margin-top:6px;font-size:11px;color:#64748b">ℹ️ Sem parcela pendente com valor/número correspondente</div>`}
+        </div>`;
+    }).join('');
+
+    // Todas as parcelas do crediário desse cliente (contexto)
+    const todasParcelas = [];
+    caso.credsCliente.forEach(c => {
+      (c.parcelas||[]).forEach((p,i) => {
+        todasParcelas.push({ cred:c, idx:i, parcela:p });
+      });
+    });
+    const parcelasContextoHtml = `
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12px;color:#64748b;padding:6px 0">
+          📋 Ver todas as ${todasParcelas.length} parcelas do crediário deste cliente
+        </summary>
+        <table style="margin-top:8px">
+          <thead><tr>
+            <th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Data Pagamento</th>
+          </tr></thead>
+          <tbody>
+            ${todasParcelas.map(info => {
+              const pago = info.parcela.status === 'pago';
+              return `<tr class="${pago ? 'parcela-paga' : ''}">
+                <td>${(info.parcela.numero||(info.idx+1))}ª de ${info.cred.parcelas.length}</td>
+                <td>${_dt(info.parcela.vencimento)}</td>
+                <td>${_m(info.parcela.valor)}</td>
+                <td>${pago ? '<span class="pill pill-green">✅ Pago</span>' : '<span class="pill pill-yellow">⏳ Pendente</span>'}</td>
+                <td>${_dtHr(info.parcela.dataPagamento)||'—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </details>`;
+
+    return `
+    <div class="cli-card ${resolvido ? 'resolvido' : ''}" id="card-${i}">
+      <div class="cli-header" style="${resolvido ? 'background:#0b2a1a' : caso.suspeitos.length > 0 ? 'background:#3b0e0e' : ''}">
+        <div>
+          <div class="cli-nome">${_esc(caso.clienteNome)}</div>
+          <div class="cli-sub">
+            ${caso.suspeitos.length} pagamento(s) sem baixa confirmada · origem: ${origens.join(' e ')}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="cli-valor">${_m(totalSusp)}</div>
+          ${resolvido
+            ? '<span class="pill pill-green" style="font-size:13px">✅ Corrigido</span>'
+            : '<span class="pill pill-red" style="font-size:13px">🚨 Pendente</span>'}
+        </div>
+      </div>
+      <div class="cli-body">
+        <div class="note alerta" style="margin-bottom:14px">
+          ⚠️ Esses pagamentos estão no FluxoCaixa (dinheiro foi recebido) mas as parcelas
+          correspondentes ainda estão <strong>PENDENTES</strong>. Se o cliente realmente pagou,
+          marque as parcelas abaixo e clique em confirmar.
+        </div>
+
+        ${fluxoHtml}
+        ${parcelasContextoHtml}
+
+        <div id="confirm-${i}" class="confirm-box"></div>
+
+        ${!resolvido ? `
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+            <button class="btn btn-green btn-acao" data-i="${i}" onclick="App.confirmarBaixa(${i})"
+                    ${!_backup ? 'disabled' : ''}>
+              ✅ Dar Baixa nas Marcadas
+            </button>
+            <button class="btn btn-slate btn-sm" onclick="App.pularCaso(${i})">
+              ⏭️ Pular este cliente
+            </button>
+          </div>` : `
+          <div style="padding:12px 0;color:#4ade80;font-size:13px;font-style:italic">
+            ✅ Correção aplicada para este cliente.
+            <button class="btn btn-ghost btn-xs" style="margin-left:8px" onclick="App.desfazer('${caso.key}',${i})">↩️ Desfazer</button>
+          </div>`}
+      </div>
+    </div>`;
+  }
+
+  /* ══════════════ AÇÕES ══════════════ */
+  function onCheckParc(el) {
+    // Apenas feedback visual — a decisão de baixa é feita no botão confirmar
+  }
+
+  function confirmarBaixa(i) {
+    if (!_backup) { _alertaBackup(); return; }
+    const caso = _casos[i];
+    if (!caso) return;
+
+    // Coleta parcelas marcadas
+    const marcadas = [];
+    document.querySelectorAll(`[data-caso="${i}"]`).forEach(chk => {
+      if (chk.checked) {
+        marcadas.push({ credId: chk.dataset.cred, idx: parseInt(chk.dataset.idx) });
+      }
+    });
+
+    if (marcadas.length === 0) {
+      document.getElementById('confirm-' + i).style.display = 'none';
+      _toast('Marque pelo menos uma parcela para dar baixa', 'warn');
+      return;
+    }
+
+    const box = document.getElementById('confirm-' + i);
+    box.style.display = 'block';
+    box.innerHTML = `
+      <p>
+        Confirma dar baixa em <strong>${marcadas.length}</strong> parcela(s) do cliente
+        <strong>${_esc(caso.clienteNome)}</strong>?<br>
+        <span style="font-size:12px;color:#94a3b8">
+          As parcelas serão marcadas como <strong>PAGAS</strong> com a data/hora de agora.
+          Esta ação pode ser desfeita.
+        </span>
+      </p>
+      <div class="btns">
+        <button class="btn btn-green btn-sm" onclick="App.executarBaixa(${i}, ${JSON.stringify(marcadas)})">
+          ✅ Confirmar
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('confirm-${i}').style.display='none'">
+          Cancelar
+        </button>
+      </div>`;
+  }
+
+  function executarBaixa(i, marcadas) {
+    const caso = _casos[i];
+    if (!caso) return;
+
+    // Snapshot para desfazer
+    const crediarios = JSON.parse(localStorage.getItem('movePe_crediario') || '[]');
+    _snapshots[caso.key] = {
+      crediarios: JSON.parse(JSON.stringify(crediarios.filter(c => caso.credsCliente.some(cc => cc.id === c.id))))
+    };
+
+    let erros = 0;
+    const detalhes = [];
+
+    marcadas.forEach(({ credId, idx }) => {
+      try {
+        const ok = DB.Crediario.pagarParcela(credId, idx);
+        if (ok) {
+          const cred = DB.Crediario.buscar ? DB.Crediario.buscar(credId) :
+            JSON.parse(localStorage.getItem('movePe_crediario')||'[]').find(c=>c.id===credId);
+          const p = cred && cred.parcelas && cred.parcelas[idx];
+          detalhes.push(`${p ? (p.numero||(idx+1))+'ª' : 'parcela'} — ${_m(p ? p.valor : 0)}`);
+          console.log('[CORRIGIR] Baixa dada:', credId, 'idx:', idx);
+        } else {
+          erros++;
+          console.warn('[CORRIGIR] pagarParcela retornou false:', credId, idx);
+        }
+      } catch(e) {
+        erros++;
+        console.error('[CORRIGIR] Erro:', e);
+      }
+    });
+
+    caso.resolvido = true;
+    _addLog(caso.clienteNome, `Baixa dada em ${marcadas.length - erros} parcela(s): ${detalhes.join(', ')}${erros > 0 ? ` (${erros} erro(s))` : ''}`);
+
+    // Re-renderiza o card
+    const card = document.getElementById('card-' + i);
+    const div = document.createElement('div');
+    div.innerHTML = _cardHtml(caso, i);
+    card.replaceWith(div.firstElementChild);
+    _bloquearSemBackup();
+    _atualizarBanner();
+
+    _toast(erros > 0 ? `Baixa dada com ${erros} erro(s)` : `Baixa dada com sucesso em ${marcadas.length} parcela(s)!`, erros > 0 ? 'warn' : 'ok');
+  }
+
+  function pularCaso(i) {
+    const caso = _casos[i];
+    if (!caso) return;
+    caso.resolvido = true;
+    _addLog(caso.clienteNome, 'Caso pulado (ignorado pelo usuário)');
+    const card = document.getElementById('card-' + i);
+    const div = document.createElement('div');
+    div.innerHTML = _cardHtml(caso, i);
+    card.replaceWith(div.firstElementChild);
+    _atualizarBanner();
+  }
+
+  function desfazer(key, i) {
+    const snap = _snapshots[key];
+    if (!snap) { alert('Snapshot não encontrado.'); return; }
+    if (!confirm('Desfazer a correção para este cliente? Os dados voltarão ao estado anterior.')) return;
+
+    try {
+      // Restaura crediários do cliente no localStorage
+      const lista = JSON.parse(localStorage.getItem('movePe_crediario') || '[]');
+      snap.crediarios.forEach(snapCred => {
+        const idx = lista.findIndex(c => c.id === snapCred.id);
+        if (idx >= 0) lista[idx] = snapCred;
+        // Re-envia ao Firebase
+        if (DB.Sync) DB.Sync.save('crediario', snapCred);
+      });
+      localStorage.setItem('movePe_crediario', JSON.stringify(lista));
+
+      _casos[i].resolvido = false;
+      delete _snapshots[key];
+
+      _addLog(_casos[i].clienteNome, '↩️ Desfeito — dados restaurados');
+      const card = document.getElementById('card-' + i);
+      const div = document.createElement('div');
+      div.innerHTML = _cardHtml(_casos[i], i);
+      card.replaceWith(div.firstElementChild);
+      _bloquearSemBackup();
+      _atualizarBanner();
+    } catch(e) {
+      alert('Erro ao desfazer: ' + e.message);
+    }
+  }
+
+  /* ══════════════ BACKUP ══════════════ */
+  function fazerBackup() {
+    try {
+      const dados = {
+        exportadoEm : new Date().toISOString(),
+        crediario   : JSON.parse(localStorage.getItem('movePe_crediario') || '[]'),
+        fluxo       : JSON.parse(localStorage.getItem('movePe_fluxo')     || '[]'),
+        vendas      : JSON.parse(localStorage.getItem('movePe_vendas')    || '[]'),
+        casosCriticos: _casos
+      };
+      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'backup_correcao_baixas_' + new Date().toISOString().slice(0,10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      _backup = true;
+      document.getElementById('backupBtn').className   = 'btn feito';
+      document.getElementById('backupBtn').textContent = '✅ Backup realizado';
+      document.getElementById('backupLock').textContent = '✅ Backup feito — pode corrigir';
+      document.getElementById('backupLock').className = 'ok';
+      _bloquearSemBackup();
+    } catch(e) { alert('Erro ao gerar backup: ' + e.message); }
+  }
+
+  function _bloquearSemBackup() {
+    document.querySelectorAll('.btn-acao').forEach(btn => {
+      btn.disabled = !_backup;
+    });
+  }
+
+  function _alertaBackup() {
+    const btn = document.getElementById('backupBtn');
+    btn.style.transform = 'scale(1.05)';
+    setTimeout(() => btn.style.transform = '', 300);
+  }
+
+  /* ══════════════ BANNER / LOG ══════════════ */
+  function _atualizarBanner() {
+    const crit = _casos.filter(c => !c.resolvido).length;
+    const ok   = _casos.filter(c => c.resolvido).length;
+    const total = _casos.reduce((s, c) => s + c.suspeitos.reduce((ss, m) => ss + m.valor, 0), 0);
+    document.getElementById('banCrit').textContent = crit;
+    document.getElementById('banPend').textContent = _casos.length;
+    document.getElementById('banOK').textContent   = ok;
+    document.getElementById('banVal').textContent  = _m(total);
+
+    const pct = _casos.length ? Math.round(ok / _casos.length * 100) : 0;
+    document.getElementById('progFill').style.width  = pct + '%';
+    document.getElementById('progLabel').textContent = `${ok} de ${_casos.length} clientes resolvidos`;
+    document.getElementById('progPct').textContent   = pct + '%';
+  }
+
+  function _addLog(nome, msg) {
+    const ts = new Date().toLocaleTimeString('pt-BR');
+    _log.unshift({ ts, nome, msg });
+    document.getElementById('logArea').style.display = '';
+    document.getElementById('logBody').innerHTML = _log.map(e =>
+      `<div class="log-line">
+        <span class="log-ts">[${e.ts}]</span>
+        <span><strong>${_esc(e.nome)}</strong> — ${_esc(e.msg)}</span>
+      </div>`).join('');
+  }
+
+  function limparLog() {
+    _log = [];
+    document.getElementById('logBody').innerHTML = '<div class="log-empty">Log limpo.</div>';
+  }
+
+  /* ══════════════ HELPERS ══════════════ */
+  function _m(v)  { return 'R$ '+(parseFloat(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function _dt(iso)   { if (!iso) return '—'; try { return new Date(iso+'T00:00:00').toLocaleDateString('pt-BR'); } catch(e){return iso;} }
+  function _dtHr(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){return iso;} }
+  function _esc(s)    { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _toast(msg, tipo) {
+    const cores = {ok:'#16a34a',warn:'#ca8a04',err:'#dc2626'};
+    const el = document.createElement('div');
+    el.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;
+      border-radius:8px;font-size:13px;font-weight:600;color:#fff;
+      background:${cores[tipo]||cores.ok};box-shadow:0 4px 16px rgba(0,0,0,.3)`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); }, 3500);
+  }
+
+  return { init, fazerBackup, onCheckParc, confirmarBaixa, executarBaixa, pularCaso, desfazer, limparLog };
+})();
+
+window.addEventListener('DOMContentLoaded', App.init);
+</script>
+</body>
+</html>

@@ -178,7 +178,7 @@ const WA = {
     const intervalo = WA._intervaloPorDias(diasAtraso);
     const dProximo = new Date(ultimo.data + 'T12:00:00');
     dProximo.setDate(dProximo.getDate() + intervalo);
-    const proximoContato = dProximo.toISOString().substring(0, 10);
+    const proximoContato = Utils.dataLocal(dProximo); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     return {
       ultimoContato: ultimo.data,
       proximoContato,
@@ -516,10 +516,10 @@ const WA = {
     const diaHoje = hoje.substring(5); // MM-DD
     const limite60 = new Date();
     limite60.setDate(limite60.getDate() - 60);
-    const limite60str = limite60.toISOString().substring(0, 10);
+    const limite60str = Utils.dataLocal(limite60); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     const em3dias = new Date();
     em3dias.setDate(em3dias.getDate() + 3);
-    const ate3dias = em3dias.toISOString().substring(0, 10);
+    const ate3dias = Utils.dataLocal(em3dias); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
 
     let contatos = [];
 

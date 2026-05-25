@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recuperação de Vendas — MOVE PÉ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; min-height: 100vh; }
+
+    /* ── Topbar ── */
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 20px; }
+    .topbar-title { font-size: 22px; font-weight: 900; color: #f87171; margin-bottom: 2px; }
+    .topbar-sub { font-size: 13px; color: #94a3b8; }
+    .topbar-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    /* ── Botões ── */
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 8px;
+           padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: filter .15s, opacity .15s; }
+    .btn:hover:not(:disabled) { filter: brightness(1.15); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; filter: none !important; }
+    .btn-red    { background: #dc2626; color: #fff; }
+    .btn-green  { background: #16a34a; color: #fff; }
+    .btn-blue   { background: #2563eb; color: #fff; }
+    .btn-yellow { background: #d97706; color: #fff; }
+    .btn-slate  { background: #334155; color: #e2e8f0; }
+    .btn-ghost  { background: transparent; border: 1px solid #475569; color: #94a3b8; }
+    .btn-sm     { padding: 6px 12px; font-size: 12px; }
+    .btn-xs     { padding: 4px 9px; font-size: 11px; }
+
+    /* ── Backup bloqueante ── */
+    #backupBtn.nao-feito { background: #dc2626; animation: pulse-red 1.4s infinite; }
+    @keyframes pulse-red { 0%,100% { box-shadow: 0 0 0 0 #dc262680; } 60% { box-shadow: 0 0 0 8px #dc262600; } }
+    #backupBtn.feito { background: #16a34a; animation: none; }
+    #backupLock { font-size: 11px; color: #f87171; font-weight: 600; white-space: nowrap; }
+    #backupLock.ok { color: #86efac; }
+
+    /* ── Barra de progresso ── */
+    .progress-wrap { margin-bottom: 20px; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+    .progress-bar { height: 8px; background: #1e293b; border-radius: 99px; overflow: hidden; border: 1px solid #334155; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg,#2563eb,#16a34a); border-radius: 99px; transition: width .4s ease; }
+
+    /* ── Banner ── */
+    .banner { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+    .bc { flex: 1; min-width: 130px; border-radius: 12px; padding: 14px 18px; }
+    .bc .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .bc .val { font-size: 26px; font-weight: 900; }
+    .bc-red    { background: #7f1d1d; border: 1px solid #b91c1c; }
+    .bc-red    .lbl { color: #fca5a5; } .bc-red    .val { color: #fff; }
+    .bc-yellow { background: #78350f; border: 1px solid #d97706; }
+    .bc-yellow .lbl { color: #fcd34d; } .bc-yellow .val { color: #fff; }
+    .bc-green  { background: #14532d; border: 1px solid #16a34a; }
+    .bc-green  .lbl { color: #86efac; } .bc-green  .val { color: #fff; }
+    .bc-blue   { background: #1e3a5f; border: 1px solid #3b82f6; }
+    .bc-blue   .lbl { color: #93c5fd; } .bc-blue   .val { color: #fff; }
+
+    /* ── Cards ── */
+    .card { border-radius: 12px; border: 1px solid #334155; background: #1e293b;
+            margin-bottom: 18px; overflow: hidden; transition: border-color .3s, background .3s, opacity .3s; }
+    .card.resolvida-A { border-color: #16a34a; background: #0f2e1a; }
+    .card.resolvida-B { border-color: #2563eb; background: #090f1e; }
+    .card.resolvida-C { border-color: #475569; background: #131c2e; opacity: 0.75; }
+
+    .card-header { padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; }
+    .card-num { width: 30px; height: 30px; border-radius: 50%; background: #7f1d1d; color: #fca5a5;
+                font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+                flex-shrink: 0; margin-top: 2px; }
+    .card-info { flex: 1; min-width: 0; }
+    .card-cliente { font-size: 16px; font-weight: 700; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-tel { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .card-meta { font-size: 12px; color: #94a3b8; margin-top: 5px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .card-right { text-align: right; flex-shrink: 0; }
+    .card-total { font-size: 22px; font-weight: 900; color: #fcd34d; }
+    .status-tag { display: inline-block; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; margin-top: 6px; }
+    .tag-alerta  { background: #3b0e0e; color: #fca5a5; }
+    .tag-ok-a    { background: #14532d; color: #86efac; }
+    .tag-ok-b    { background: #1e3a5f; color: #93c5fd; }
+    .tag-skip    { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+
+    /* ── Detalhes colapsáveis ── */
+    .card-detail { display: none; border-top: 1px solid #334155; padding: 14px 18px; }
+    .card-detail.open { display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+    th { text-align: left; color: #64748b; font-size: 11px; text-transform: uppercase; padding: 5px 8px;
+         border-bottom: 1px solid #334155; white-space: nowrap; }
+    td { padding: 7px 8px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .box-info { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 12px; }
+    .box-info .row { display: flex; justify-content: space-between; padding: 3px 0; }
+    .box-info .k { color: #64748b; } .box-info .v { color: #f1f5f9; font-weight: 600; }
+    .acr-box { background: #1a1408; border: 1px solid #d97706; border-radius: 8px;
+               padding: 9px 13px; font-size: 12px; margin-bottom: 12px; }
+    .acr-box strong { color: #fcd34d; }
+
+    /* ── Ações ── */
+    .card-acoes { padding: 12px 18px 14px; display: flex; gap: 10px; flex-wrap: wrap;
+                  border-top: 1px solid #334155; align-items: center; }
+    .card-done  { padding: 11px 18px 13px; border-top: 1px solid #334155;
+                  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .card-done-msg { font-size: 13px; color: #94a3b8; font-style: italic; }
+
+    /* ── Confirmação inline ── */
+    .confirm-inline { background: #0f172a; border: 1px solid #f59e0b; border-radius: 10px;
+                      padding: 14px 16px; margin: 0 18px 14px; font-size: 13px; }
+    .confirm-inline p { margin-bottom: 10px; line-height: 1.55; }
+    .confirm-inline .warn { color: #fca5a5; font-size: 12px; margin-bottom: 10px; }
+    .confirm-inline .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Modal ── */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none;
+                align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .modal-bg.open { display: flex; }
+    .modal { background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+             width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+    .modal-h { display: flex; align-items: center; justify-content: space-between;
+               padding: 16px 20px; border-bottom: 1px solid #334155; }
+    .modal-htitle { font-size: 16px; font-weight: 700; }
+    .modal-x { background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer; }
+    .modal-body { padding: 20px; }
+    .modal-foot { padding: 14px 20px; border-top: 1px solid #334155; display: flex; gap: 10px; justify-content: flex-end; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 11px; font-weight: 700; color: #64748b;
+                  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+    .form-ctrl { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+                 padding: 9px 12px; font-size: 13px; color: #e2e8f0; outline: none; }
+    .form-ctrl:focus { border-color: #3b82f6; }
+    .form-hint { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .alert-r  { background: #3b0e0e; border: 1px solid #b91c1c; color: #fca5a5;
+                border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 12px; }
+    .alert-g  { background: #0f2e1a; border: 1px solid #16a34a; color: #86efac;
+                border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 12px; }
+    /* Confirmação dentro do modal */
+    .modal-confirm { background: #0f172a; border: 1px solid #f59e0b; border-radius: 10px;
+                     padding: 14px 16px; margin-bottom: 14px; font-size: 13px; display: none; }
+    .modal-confirm p { margin-bottom: 10px; line-height: 1.5; }
+    .modal-confirm .btns { display: flex; gap: 8px; }
+
+    /* ── Log de operações ── */
+    #logSection { margin-top: 30px; border-radius: 12px; border: 1px solid #334155; overflow: hidden; }
+    .log-header { padding: 12px 18px; background: #1e293b; font-size: 13px; font-weight: 700;
+                  display: flex; justify-content: space-between; align-items: center; }
+    #logBody { padding: 14px 18px; background: #0f172a; min-height: 60px; }
+    .log-entry { font-size: 12px; padding: 6px 0; border-bottom: 1px solid #1e293b;
+                 display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-ts { color: #475569; font-family: monospace; flex-shrink: 0; }
+    .log-msg { flex: 1; }
+    .log-empty { color: #475569; font-size: 12px; font-style: italic; }
+
+    /* ── Misc ── */
+    #loading { text-align: center; padding: 40px; color: #64748b; font-size: 14px; }
+    #semOrfas { display: none; text-align: center; padding: 50px 20px; }
+    #semOrfas .big { font-size: 48px; margin-bottom: 12px; }
+    #semOrfas p { color: #94a3b8; font-size: 15px; }
+    .tag-bloqueado { font-size: 10px; background: #3b0e0e; color: #fca5a5; border-radius: 4px; padding: 2px 6px; margin-left: 6px; }
+    code { font-family: monospace; font-size: 11px; background: #0f172a; border-radius: 4px; padding: 1px 5px; }
+    .divider { border: none; border-top: 1px solid #334155; margin: 16px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════ TOPBAR ══════════════════════ -->
+<div class="topbar">
+  <div>
+    <div class="topbar-title">🔧 Recuperação de Vendas</div>
+    <div class="topbar-sub">Vendas crediário sem parcelas registradas — resolva caso a caso</div>
+  </div>
+  <div class="topbar-right">
+    <div style="text-align:right">
+      <button id="backupBtn" class="btn nao-feito" onclick="Rec.fazerBackup()">
+        💾 Backup Obrigatório — CLIQUE ANTES
+      </button>
+      <div id="backupLock">⛔ Faça o backup antes de resolver qualquer venda</div>
+    </div>
+    <a href="auditoria_crediarios.html" class="btn btn-ghost btn-sm">← Auditoria</a>
+  </div>
+</div>
+
+<!-- ══════════════════════ PROGRESSO ══════════════════════ -->
+<div class="progress-wrap" id="progressWrap" style="display:none">
+  <div class="progress-label">
+    <span id="progressLabel">0 de 0 resolvidas</span>
+    <span id="progressPct">0%</span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+</div>
+
+<!-- ══════════════════════ BANNER ══════════════════════ -->
+<div class="banner" id="banner" style="display:none">
+  <div class="bc bc-red">   <div class="lbl">Total Órfãs</div>  <div class="val" id="banTotal">0</div></div>
+  <div class="bc bc-yellow"><div class="lbl">Em Aberto</div>     <div class="val" id="banValor">R$ 0</div></div>
+  <div class="bc bc-green"> <div class="lbl">Resolvidas</div>    <div class="val" id="banResolvidas">0</div></div>
+  <div class="bc bc-blue">  <div class="lbl">Pendentes</div>     <div class="val" id="banPendentes">0</div></div>
+</div>
+
+<!-- ══════════════════════ LISTA ══════════════════════ -->
+<div id="loading">⏳ Carregando dados...</div>
+<div id="semOrfas"><div class="big">✅</div><p>Nenhuma venda órfã encontrada.<br>Crediários consistentes.</p></div>
+<div id="lista"></div>
+
+<!-- ══════════════════════ LOG ══════════════════════ -->
+<div id="logSection" style="display:none">
+  <div class="log-header">
+    <span>📋 Log de Operações</span>
+    <button class="btn btn-ghost btn-xs" onclick="Rec.limparLog()">Limpar</button>
+  </div>
+  <div id="logBody"><div class="log-empty">Nenhuma operação realizada ainda.</div></div>
+</div>
+
+<!-- ══════════════════════ MODAL AÇÃO B ══════════════════════ -->
+<div class="modal-bg" id="modalB">
+  <div class="modal">
+    <div class="modal-h">
+      <span class="modal-htitle">📋 Criar Crediário a Receber</span>
+      <button class="modal-x" onclick="Rec.fecharModalB()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="box-info" id="modalBInfo"></div>
+      <div class="alert-r" id="modalBErr" style="display:none"></div>
+
+      <!-- Formulário -->
+      <div id="modalBForm">
+        <div class="form-group">
+          <label class="form-label">Número de parcelas</label>
+          <input type="number" id="bParcelas" class="form-ctrl" min="1" max="24" value="1" oninput="Rec.previewB()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vencimento da 1ª parcela</label>
+          <input type="date" id="bVenc" class="form-ctrl" oninput="Rec.previewB()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor total a cobrar (R$)</label>
+          <input type="number" id="bValor" class="form-ctrl" step="0.01" min="0.01" oninput="Rec.previewB()">
+          <div class="form-hint">Sugerido: valor da venda com acréscimo incluído</div>
+        </div>
+        <div id="bPreview" style="display:none">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">Preview das parcelas:</div>
+          <table>
+            <thead><tr><th>#</th><th>Vencimento</th><th>Valor</th></tr></thead>
+            <tbody id="bPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Confirmação dentro do modal (2ª etapa) -->
+      <div class="modal-confirm" id="modalBConfirm">
+        <p id="modalBConfirmMsg"></p>
+        <div class="btns">
+          <button class="btn btn-blue btn-sm" onclick="Rec.executarB()">✅ Confirmar e Criar</button>
+          <button class="btn btn-ghost btn-sm" onclick="Rec.voltarFormB()">← Voltar</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" id="modalBFoot">
+      <button class="btn btn-slate" onclick="Rec.fecharModalB()">Cancelar</button>
+      <button class="btn btn-blue" id="btnBNext" onclick="Rec.pedirConfirmB()">Próximo →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SCRIPTS ══════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/db.js"></script>
+<script src="js/utils.js"></script>
+
+<script>
+const Rec = (() => {
+  /* ── estado ── */
+  let _orfas        = [];
+  let _estado       = {};   // 'pendente' | 'A' | 'B' | 'C'
+  let _snapshots    = {};   // { vendaId: { venda, crediarioId } }
+  let _backupFeito  = false;
+  let _log          = [];
+  let _modalBId     = null; // vendaId sendo processada no modal B
+  let _confirmStep  = {};   // { vendaId: 1|2 }  para ação A
+
+  /* ═══════════════════════════════════════ INIT ═══════════════════════ */
+  function init() {
+    const run = () => {
+      try {
+        const vendas     = DB.Vendas.listar();
+        const crediarios = DB.Crediario.listar();
+        const comCred    = new Set(crediarios.map(c => c.vendaId).filter(Boolean));
+
+        _orfas = vendas
+          .filter(v => v.formaPagamento === 'crediario' && v.id && !comCred.has(v.id))
+          .sort((a, b) => (a.criadoEm || '') < (b.criadoEm || '') ? -1 : 1);
+
+        _orfas.forEach(v => { _estado[v.id] = 'pendente'; });
+
+        console.log('[RECUPERACAO] Órfãs detectadas:', _orfas.length,
+          _orfas.map(v => ({ id: v.id, cliente: v.clienteNome, total: v.total })));
+
+        _render();
+      } catch(e) {
+        console.error('[RECUPERACAO] Erro ao carregar:', e);
+        document.getElementById('loading').innerHTML =
+          '<span style="color:#f87171">Erro ao carregar dados: ' + _esc(e.message) + '</span>';
+      }
+    };
+    if (typeof DB !== 'undefined' && DB.onReady) DB.onReady(run); else setTimeout(run, 800);
+  }
+
+  /* ═══════════════════════════════════════ RENDER ════════════════════ */
+  function _render() {
+    document.getElementById('loading').style.display = 'none';
+    const lista = document.getElementById('lista');
+    if (_orfas.length === 0) {
+      document.getElementById('semOrfas').style.display = 'block';
+      document.getElementById('banner').style.display = 'none';
+      document.getElementById('progressWrap').style.display = 'none';
+      lista.innerHTML = '';
+      return;
+    }
+    document.getElementById('banner').style.display = 'flex';
+    document.getElementById('progressWrap').style.display = 'block';
+    _atualizarBanner();
+    lista.innerHTML = _orfas.map((v, i) => _cardHtml(v, i)).join('');
+    _desabilitarSeSemBackup();
+  }
+
+  function _cardHtml(v, idx) {
+    const est     = _estado[v.id] || 'pendente';
+    const doneClass = est === 'A' ? 'resolvida-A' : est === 'B' ? 'resolvida-B' : est === 'C' ? 'resolvida-C' : '';
+    const data    = v.criadoEm ? new Date(v.criadoEm).toLocaleDateString('pt-BR') : '—';
+    const total   = parseFloat(v.total) || 0;
+    const acr     = v.acrescimoCrediario ? (v.acrescimoCrediario.valor || 0) : 0;
+    const taxa    = v.acrescimoCrediario ? (v.acrescimoCrediario.pct  || 0) : 0;
+
+    // telefone do cliente
+    let tel = '';
+    try {
+      if (v.clienteId) {
+        const cli = DB.Clientes.buscar(v.clienteId);
+        if (cli && cli.telefone) tel = cli.telefone;
+      }
+    } catch(e) {}
+
+    const tagHtml = est === 'pendente'
+      ? '<span class="status-tag tag-alerta">🚨 Sem crediário registrado</span>'
+      : est === 'A'
+      ? '<span class="status-tag tag-ok-a">✅ Marcada como paga</span>'
+      : est === 'B'
+      ? '<span class="status-tag tag-ok-b">📋 Crediário criado</span>'
+      : '<span class="status-tag tag-skip">⏭️ Pulada</span>';
+
+    // Itens
+    const itens = v.itens || [];
+    const itensRows = itens.length
+      ? itens.map(it => `<tr>
+          <td>${_esc(it.nomeProduto || it.produtoId || '—')}</td>
+          <td style="color:#94a3b8">${_esc(it.tamanho || '—')}</td>
+          <td style="text-align:center">${it.quantidade || 1}</td>
+          <td>R$ ${_fmt(it.precoUnitario || 0)}</td>
+          <td style="font-weight:600">R$ ${_fmt((it.precoUnitario||0)*(it.quantidade||1))}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" style="color:#64748b;text-align:center">Sem itens registrados</td></tr>';
+
+    const acrHtml = acr > 0
+      ? `<div class="acr-box">💡 Acréscimo crediário: <strong>${taxa}% = R$ ${_fmt(acr)}</strong>
+           — base sem acréscimo: <strong>R$ ${_fmt(total - acr)}</strong></div>`
+      : `<div class="acr-box" style="border-color:#334155;background:#1e293b;color:#64748b">
+           ℹ️ Sem acréscimo de crediário registrado nesta venda.</div>`;
+
+    // Seção de ações / done
+    let acaoHtml = '';
+    if (est === 'pendente') {
+      acaoHtml = `
+        <div class="card-acoes" id="acoes-${v.id}">
+          <button class="btn btn-green btn-sm btn-acao" data-id="${v.id}" onclick="Rec.iniciarA('${v.id}')">
+            ✅ Ação A — Já foi paga
+          </button>
+          <button class="btn btn-blue btn-sm btn-acao" data-id="${v.id}" onclick="Rec.abrirB('${v.id}')">
+            📋 Ação B — Criar crediário
+          </button>
+          <button class="btn btn-ghost btn-sm btn-acao" data-id="${v.id}" onclick="Rec.iniciarC('${v.id}')">
+            ⏭️ Ação C — Pular agora
+          </button>
+        </div>
+        <div id="confirm-${v.id}" style="display:none"></div>`;
+    } else {
+      const msg = est === 'A'
+        ? '✅ Marcada como paga — formaPagamento alterado para dinheiro + parcela quitada criada'
+        : est === 'B' ? '📋 Crediário criado e sincronizado com Firebase'
+        : '⏭️ Pulada — venda marcada com flagRevisaoAuditoria=true';
+      acaoHtml = `
+        <div class="card-done">
+          <span class="card-done-msg">${msg}</span>
+          <button class="btn btn-ghost btn-xs" onclick="Rec.desfazer('${v.id}')">↩️ Desfazer</button>
+        </div>`;
+    }
+
+    return `
+      <div class="card ${doneClass}" id="card-${v.id}">
+        <div class="card-header">
+          <div class="card-num">${idx + 1}</div>
+          <div class="card-info">
+            <div class="card-cliente">${_esc(v.clienteNome || 'Cliente não identificado')}</div>
+            ${tel ? `<div class="card-tel">📞 ${_esc(tel)}</div>` : ''}
+            <div class="card-meta">
+              <span>📅 ${data}</span>
+              <span style="font-size:11px;color:#475569">🆔 ${v.id}</span>
+              ${v.formaPagamento ? `<span>💳 ${v.formaPagamento}</span>` : ''}
+            </div>
+            ${tagHtml}
+          </div>
+          <div class="card-right">
+            <div class="card-total">R$ ${_fmt(total)}</div>
+            <br>
+            <button class="btn btn-ghost btn-xs" onclick="Rec.toggleDetail('${v.id}')">
+              Ver detalhes ▾
+            </button>
+          </div>
+        </div>
+
+        <div class="card-detail" id="detail-${v.id}">
+          <div class="box-info">
+            <div class="row"><span class="k">Cliente</span><span class="v">${_esc(v.clienteNome||'—')}</span></div>
+            ${tel ? `<div class="row"><span class="k">Telefone</span><span class="v">${_esc(tel)}</span></div>` : ''}
+            <div class="row"><span class="k">Data da venda</span><span class="v">${data}</span></div>
+            <div class="row"><span class="k">ID da venda</span><span class="v" style="font-size:11px;font-family:monospace">${v.id}</span></div>
+            <div class="row"><span class="k">Total</span><span class="v">R$ ${_fmt(total)}</span></div>
+            ${acr>0 ? `<div class="row"><span class="k">Acréscimo crediário</span><span class="v">R$ ${_fmt(acr)} (${taxa}%)</span></div>` : ''}
+          </div>
+          ${acrHtml}
+          <table>
+            <thead><tr><th>Produto</th><th>Tam.</th><th>Qtd</th><th>Unitário</th><th>Subtotal</th></tr></thead>
+            <tbody>${itensRows}</tbody>
+          </table>
+        </div>
+
+        ${acaoHtml}
+      </div>`;
+  }
+
+  /* ═══════════════════════════════════════ BACKUP ════════════════════ */
+  function fazerBackup() {
+    try {
+      const dados = {
+        exportadoEm   : new Date().toISOString(),
+        orfas         : _orfas,
+        todasVendas   : DB.Vendas.listar(),
+        todosCrediarios: DB.Crediario.listar()
+      };
+      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'backup_recuperacao_' + new Date().toISOString().slice(0,10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      _backupFeito = true;
+      const btn = document.getElementById('backupBtn');
+      btn.className = 'btn feito';
+      btn.textContent = '✅ Backup realizado';
+      document.getElementById('backupLock').textContent = '✅ Backup feito — pode resolver as vendas';
+      document.getElementById('backupLock').className = 'ok';
+      _desabilitarSeSemBackup();
+      console.log('[RECUPERACAO] Backup exportado.');
+    } catch(e) {
+      alert('Erro ao gerar backup: ' + e.message);
+    }
+  }
+
+  function _desabilitarSeSemBackup() {
+    document.querySelectorAll('.btn-acao').forEach(btn => {
+      btn.disabled = !_backupFeito;
+      let lock = btn.querySelector('.tag-bloqueado');
+      if (!_backupFeito) {
+        if (!lock) {
+          lock = document.createElement('span');
+          lock.className = 'tag-bloqueado';
+          lock.textContent = '🔒';
+          btn.appendChild(lock);
+        }
+      } else {
+        if (lock) lock.remove();
+      }
+    });
+  }
+
+  /* ═══════════════════════════════════════ AÇÃO A ════════════════════ */
+  function iniciarA(vendaId) {
+    if (!_backupFeito) { _avisoSemBackup(); return; }
+    const v = _orfas.find(o => o.id === vendaId);
+    if (!v) return;
+    const total = parseFloat(v.total) || 0;
+    const data  = v.criadoEm ? new Date(v.criadoEm).toLocaleDateString('pt-BR') : '?';
+
+    document.getElementById('confirm-' + vendaId).style.display = 'block';
+    document.getElementById('confirm-' + vendaId).innerHTML = `
+      <div class="confirm-inline">
+        <p>
+          <strong>⚠️ Venda já foi paga integralmente pelo cliente?</strong><br>
+          <span style="color:#94a3b8">
+            Cliente: <strong>${_esc(v.clienteNome||'—')}</strong><br>
+            Data: ${data} &nbsp;|&nbsp; Total: <strong>R$ ${_fmt(total)}</strong>
+          </span>
+        </p>
+        <div class="warn">
+          Esta ação vai: (1) alterar <code>formaPagamento</code> para <code>dinheiro</code>
+          e (2) criar uma parcela crediário já quitada para manter o histórico.
+        </div>
+        <div class="btns">
+          <button class="btn btn-green btn-sm" onclick="Rec.confirmarA('${vendaId}')">
+            ✅ Sim, marcar como paga
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="Rec.cancelarConfirm('${vendaId}')">Cancelar</button>
+        </div>
+      </div>`;
+  }
+
+  function confirmarA(vendaId) {
+    const v = _orfas.find(o => o.id === vendaId);
+    if (!v) return;
+    console.log('[RECUPERACAO] Ação A — venda:', vendaId, '|', v.clienteNome);
+
+    try {
+      const vendaOriginal = DB.Vendas.buscar(vendaId);
+      if (!vendaOriginal) throw new Error('Venda não encontrada: ' + vendaId);
+
+      // Snapshot para desfazer
+      _snapshots[vendaId] = { venda: JSON.parse(JSON.stringify(vendaOriginal)), crediarioId: null };
+
+      // 1. Atualiza venda
+      const vendaAtual = {
+        ...vendaOriginal,
+        formaPagamento    : 'dinheiro',
+        recuperadaEm      : new Date().toISOString(),
+        recuperacaoAcao   : 'A_ja_pago',
+        acrescimoCrediario: null
+      };
+      DB.Vendas.salvar(vendaAtual);
+      console.log('[RECUPERACAO] Venda atualizada → formaPagamento=dinheiro:', vendaId);
+
+      // 2. Cria crediário histórico quitado
+      const total = parseFloat(v.total) || 0;
+      const novoId = typeof DB.genId === 'function' ? DB.genId() : Date.now().toString(36);
+      const credHist = {
+        id             : novoId,
+        clienteId      : v.clienteId || null,
+        clienteNome    : v.clienteNome || '',
+        vendaId        : vendaId,
+        total          : total,
+        recuperado     : true,
+        recuperacaoAcao: 'A_ja_pago',
+        criadoEm       : new Date().toISOString(),
+        parcelas       : [{
+          numero         : 1,
+          vencimento     : (v.criadoEm||new Date().toISOString()).split('T')[0],
+          valor          : total,
+          status         : 'pago',
+          dataPagamento  : new Date().toISOString(),
+          obs            : 'Marcada como paga via ferramenta de recuperação'
+        }]
+      };
+      DB.Crediario.salvar(credHist);
+      _snapshots[vendaId].crediarioId = novoId;
+      console.log('[RECUPERACAO] Crediário histórico quitado criado:', novoId);
+
+      _estado[vendaId] = 'A';
+      _addLog(v, 'Marcada como paga (formaPagamento → dinheiro, parcela quitada criada)');
+      _reRenderCard(v, _orfas.indexOf(v));
+      _atualizarBanner();
+
+    } catch(e) {
+      console.error('[RECUPERACAO] Erro na Ação A:', e);
+      document.getElementById('confirm-' + vendaId).innerHTML +=
+        '<div class="alert-r" style="margin-top:10px">Erro: ' + _esc(e.message) + '</div>';
+    }
+  }
+
+  function cancelarConfirm(vendaId) {
+    const el = document.getElementById('confirm-' + vendaId);
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  }
+
+  /* ═══════════════════════════════════════ AÇÃO B ════════════════════ */
+  function abrirB(vendaId) {
+    if (!_backupFeito) { _avisoSemBackup(); return; }
+    const v = _orfas.find(o => o.id === vendaId);
+    if (!v) return;
+    _modalBId = vendaId;
+
+    const total = parseFloat(v.total) || 0;
+    const data  = v.criadoEm ? new Date(v.criadoEm).toLocaleDateString('pt-BR') : '?';
+
+    document.getElementById('modalBInfo').innerHTML = `
+      <div class="row"><span class="k">Cliente</span><span class="v">${_esc(v.clienteNome||'—')}</span></div>
+      <div class="row"><span class="k">Data da venda</span><span class="v">${data}</span></div>
+      <div class="row"><span class="k">Total</span><span class="v">R$ ${_fmt(total)}</span></div>
+      <div class="row"><span class="k">ID</span><span class="v" style="font-size:11px;font-family:monospace">${vendaId}</span></div>`;
+
+    document.getElementById('modalBErr').style.display = 'none';
+    document.getElementById('modalBForm').style.display = 'block';
+    document.getElementById('modalBConfirm').style.display = 'none';
+    document.getElementById('modalBFoot').style.display = 'flex';
+    document.getElementById('bParcelas').value = '1';
+    document.getElementById('bValor').value = total.toFixed(2);
+
+    const venc = new Date();
+    venc.setDate(venc.getDate() + 30);
+    document.getElementById('bVenc').value = venc.toISOString().split('T')[0];
+
+    previewB();
+    document.getElementById('modalB').classList.add('open');
+  }
+
+  function fecharModalB() {
+    document.getElementById('modalB').classList.remove('open');
+    _modalBId = null;
+  }
+
+  function previewB() {
+    const n     = parseInt(document.getElementById('bParcelas').value) || 0;
+    const vStr  = document.getElementById('bVenc').value;
+    const total = parseFloat(document.getElementById('bValor').value) || 0;
+    const prev  = document.getElementById('bPreview');
+
+    if (!n || !vStr || !total) { prev.style.display = 'none'; return; }
+
+    prev.style.display = 'block';
+    const vp    = Math.round(total / n * 100) / 100;
+    const base  = new Date(vStr + 'T12:00:00');
+    let rows = '';
+    for (let i = 0; i < n; i++) {
+      const d = new Date(base);
+      d.setMonth(d.getMonth() + i);
+      rows += `<tr><td>${i+1}</td><td>${d.toLocaleDateString('pt-BR')}</td><td>R$ ${_fmt(vp)}</td></tr>`;
+    }
+    document.getElementById('bPreviewBody').innerHTML = rows;
+  }
+
+  function pedirConfirmB() {
+    const n     = parseInt(document.getElementById('bParcelas').value) || 0;
+    const vStr  = document.getElementById('bVenc').value;
+    const total = parseFloat(document.getElementById('bValor').value) || 0;
+    const err   = document.getElementById('modalBErr');
+
+    if (n < 1) { err.textContent = 'Informe o número de parcelas.'; err.style.display='block'; return; }
+    if (!vStr) { err.textContent = 'Informe o vencimento da 1ª parcela.'; err.style.display='block'; return; }
+    if (total <= 0) { err.textContent = 'Informe o valor total a cobrar.'; err.style.display='block'; return; }
+    err.style.display = 'none';
+
+    const v = _orfas.find(o => o.id === _modalBId);
+    const vp = _fmt(Math.round(total / n * 100) / 100);
+    const confMsg = document.getElementById('modalBConfirmMsg');
+    confMsg.innerHTML = `
+      Criar crediário para <strong>${_esc(v ? v.clienteNome : '?')}</strong>:<br>
+      <strong>${n}x de R$ ${vp}</strong> — total R$ ${_fmt(total)}<br>
+      <span style="color:#94a3b8;font-size:12px">Primeira parcela vence em ${new Date(vStr+'T12:00:00').toLocaleDateString('pt-BR')}.</span>`;
+
+    document.getElementById('modalBForm').style.display = 'none';
+    document.getElementById('modalBConfirm').style.display = 'block';
+    document.getElementById('modalBFoot').style.display = 'none';
+  }
+
+  function voltarFormB() {
+    document.getElementById('modalBForm').style.display = 'block';
+    document.getElementById('modalBConfirm').style.display = 'none';
+    document.getElementById('modalBFoot').style.display = 'flex';
+  }
+
+  function executarB() {
+    if (!_modalBId) return;
+    const v = _orfas.find(o => o.id === _modalBId);
+    if (!v) return;
+
+    const n     = parseInt(document.getElementById('bParcelas').value);
+    const vStr  = document.getElementById('bVenc').value;
+    const total = parseFloat(document.getElementById('bValor').value);
+
+    console.log('[RECUPERACAO] Ação B — venda:', _modalBId, '| parcelas:', n, '| venc1:', vStr, '| total:', total);
+
+    try {
+      const vendaOriginal = DB.Vendas.buscar(_modalBId);
+      _snapshots[_modalBId] = { venda: JSON.parse(JSON.stringify(vendaOriginal || { id: _modalBId })), crediarioId: null };
+
+      const vp    = Math.round(total / n * 100) / 100;
+      const base  = new Date(vStr + 'T12:00:00');
+      const parc  = [];
+      for (let i = 0; i < n; i++) {
+        const d = new Date(base);
+        d.setMonth(d.getMonth() + i);
+        parc.push({ numero: i+1, vencimento: d.toISOString().split('T')[0], valor: vp, status: 'pendente' });
+      }
+
+      const novoId = typeof DB.genId === 'function' ? DB.genId() : Date.now().toString(36);
+      const cred = {
+        id             : novoId,
+        clienteId      : v.clienteId || null,
+        clienteNome    : v.clienteNome || '',
+        vendaId        : _modalBId,
+        total          : total,
+        recuperado     : true,
+        recuperacaoAcao: 'B_criar_crediario',
+        criadoEm       : new Date().toISOString(),
+        parcelas       : parc
+      };
+      DB.Crediario.salvar(cred);
+      _snapshots[_modalBId].crediarioId = novoId;
+      console.log('[RECUPERACAO] Crediário criado:', novoId, '| parcelas:', n);
+
+      const vendaId = _modalBId;
+      _estado[vendaId] = 'B';
+      _addLog(v, `Crediário criado (${n}x R$ ${_fmt(vp)} — total R$ ${_fmt(total)})`);
+      fecharModalB();
+      _reRenderCard(v, _orfas.indexOf(v));
+      _atualizarBanner();
+
+    } catch(e) {
+      console.error('[RECUPERACAO] Erro na Ação B:', e);
+      document.getElementById('modalBConfirm').innerHTML +=
+        '<div class="alert-r" style="margin-top:10px">Erro: ' + _esc(e.message) + '</div>';
+    }
+  }
+
+  /* ═══════════════════════════════════════ AÇÃO C ════════════════════ */
+  function iniciarC(vendaId) {
+    if (!_backupFeito) { _avisoSemBackup(); return; }
+    const v = _orfas.find(o => o.id === vendaId);
+    if (!v) return;
+
+    document.getElementById('confirm-' + vendaId).style.display = 'block';
+    document.getElementById('confirm-' + vendaId).innerHTML = `
+      <div class="confirm-inline" style="border-color:#475569">
+        <p>
+          <strong>⏭️ Pular esta venda por enquanto?</strong><br>
+          <span style="color:#94a3b8">A venda será marcada como <code>flagRevisaoAuditoria=true</code> para filtrar depois.</span>
+        </p>
+        <div class="btns">
+          <button class="btn btn-slate btn-sm" onclick="Rec.confirmarC('${vendaId}')">
+            ⏭️ Sim, pular
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="Rec.cancelarConfirm('${vendaId}')">Cancelar</button>
+        </div>
+      </div>`;
+  }
+
+  function confirmarC(vendaId) {
+    const v = _orfas.find(o => o.id === vendaId);
+    if (!v) return;
+    console.log('[RECUPERACAO] Ação C — venda pulada:', vendaId, '|', v.clienteNome);
+
+    try {
+      const vendaOriginal = DB.Vendas.buscar(vendaId);
+      if (!vendaOriginal) throw new Error('Venda não encontrada: ' + vendaId);
+
+      _snapshots[vendaId] = { venda: JSON.parse(JSON.stringify(vendaOriginal)), crediarioId: null };
+
+      const hoje = new Date().toISOString().split('T')[0];
+      const vendaAtual = {
+        ...vendaOriginal,
+        flagRevisaoAuditoria: true,
+        dataRevisaoMarcada  : hoje
+      };
+      DB.Vendas.salvar(vendaAtual);
+      console.log('[RECUPERACAO] Venda marcada flagRevisaoAuditoria=true:', vendaId);
+
+      _estado[vendaId] = 'C';
+      _addLog(v, `Pulada — flagRevisaoAuditoria=true, data ${hoje}`);
+      _reRenderCard(v, _orfas.indexOf(v));
+      _atualizarBanner();
+
+    } catch(e) {
+      console.error('[RECUPERACAO] Erro na Ação C:', e);
+      document.getElementById('confirm-' + vendaId).innerHTML +=
+        '<div class="alert-r" style="margin-top:10px">Erro: ' + _esc(e.message) + '</div>';
+    }
+  }
+
+  /* ═══════════════════════════════════════ DESFAZER ══════════════════ */
+  function desfazer(vendaId) {
+    const snap = _snapshots[vendaId];
+    if (!snap) { alert('Snapshot não encontrado. Não é possível desfazer.'); return; }
+    if (!confirm('Desfazer a ação para esta venda? O banco voltará ao estado anterior.')) return;
+
+    console.log('[RECUPERACAO] Desfazer — venda:', vendaId, '| snap:', snap);
+
+    try {
+      // Restaura venda original
+      DB.Vendas.salvar(snap.venda);
+      console.log('[RECUPERACAO] Venda restaurada:', vendaId);
+
+      // Remove crediário criado (se existir)
+      if (snap.crediarioId) {
+        // Remove do localStorage diretamente
+        const lista = JSON.parse(localStorage.getItem('movePe_crediario') || '[]');
+        const nova  = lista.filter(c => c.id !== snap.crediarioId);
+        localStorage.setItem('movePe_crediario', JSON.stringify(nova));
+        // Remove do Firebase
+        if (DB.Sync) DB.Sync.delete('crediario', snap.crediarioId);
+        console.log('[RECUPERACAO] Crediário removido:', snap.crediarioId);
+      }
+
+      delete _estado[vendaId];
+      delete _snapshots[vendaId];
+      _estado[vendaId] = 'pendente';
+
+      const v = _orfas.find(o => o.id === vendaId);
+      _addLog(v, '↩️ Ação desfeita — banco restaurado ao estado anterior');
+      _reRenderCard(v, _orfas.indexOf(v));
+      _desabilitarSeSemBackup();
+      _atualizarBanner();
+
+    } catch(e) {
+      console.error('[RECUPERACAO] Erro ao desfazer:', e);
+      alert('Erro ao desfazer: ' + e.message);
+    }
+  }
+
+  /* ═══════════════════════════════════════ HELPERS ═══════════════════ */
+  function toggleDetail(vendaId) {
+    const el = document.getElementById('detail-' + vendaId);
+    if (el) el.classList.toggle('open');
+  }
+
+  function _reRenderCard(v, idx) {
+    const card = document.getElementById('card-' + v.id);
+    if (!card) return;
+    const div = document.createElement('div');
+    div.innerHTML = _cardHtml(v, idx);
+    card.replaceWith(div.firstElementChild);
+    _desabilitarSeSemBackup();
+  }
+
+  function _atualizarBanner() {
+    const resolvidas = _orfas.filter(v => _estado[v.id] !== 'pendente' && _estado[v.id] !== 'C').length;
+    const pendentes  = _orfas.filter(v => _estado[v.id] === 'pendente').length;
+    const total      = _orfas.reduce((s, v) => s + (parseFloat(v.total)||0), 0);
+    document.getElementById('banTotal').textContent     = _orfas.length;
+    document.getElementById('banValor').textContent     = 'R$ ' + _fmt(total);
+    document.getElementById('banResolvidas').textContent= resolvidas;
+    document.getElementById('banPendentes').textContent = pendentes;
+
+    // Progresso
+    const pct = _orfas.length ? Math.round(resolvidas / _orfas.length * 100) : 0;
+    document.getElementById('progressFill').style.width  = pct + '%';
+    document.getElementById('progressLabel').textContent = `${resolvidas} de ${_orfas.length} resolvidas`;
+    document.getElementById('progressPct').textContent   = pct + '%';
+  }
+
+  /* ─── Log ─── */
+  function _addLog(v, msg) {
+    const ts  = new Date().toLocaleTimeString('pt-BR');
+    const nome = v ? _esc(v.clienteNome || v.id) : '?';
+    _log.unshift({ ts, nome, msg, vendaId: v ? v.id : '' });
+
+    document.getElementById('logSection').style.display = 'block';
+    const body = document.getElementById('logBody');
+    body.innerHTML = _log.map(e => `
+      <div class="log-entry">
+        <span class="log-ts">[${e.ts}]</span>
+        <span class="log-msg"><strong>${e.nome}</strong> — ${_esc(e.msg)}</span>
+        ${e.vendaId ? `<button class="btn btn-ghost btn-xs" onclick="Rec.desfazer('${e.vendaId}')">↩️ Desfazer</button>` : ''}
+      </div>`).join('');
+  }
+
+  function limparLog() {
+    _log = [];
+    document.getElementById('logBody').innerHTML = '<div class="log-empty">Log limpo.</div>';
+  }
+
+  function _avisoSemBackup() {
+    const btn = document.getElementById('backupBtn');
+    btn.style.transform = 'scale(1.05)';
+    setTimeout(() => btn.style.transform = '', 300);
+  }
+
+  function _fmt(n) {
+    return parseFloat(n||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  function _esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  return {
+    init, fazerBackup, toggleDetail,
+    iniciarA, confirmarA, cancelarConfirm,
+    abrirB, fecharModalB, previewB, pedirConfirmB, voltarFormB, executarB,
+    iniciarC, confirmarC,
+    desfazer, limparLog
+  };
+})();
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof DB !== 'undefined' && DB.Sync) DB.Sync.init();
+  Rec.init();
+});
+</script>
+</body>
+</html>

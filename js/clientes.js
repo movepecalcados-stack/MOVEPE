@@ -118,28 +118,38 @@ const ClientesModule = {
 
   trocarAba: (aba) => {
     const form = document.getElementById('formCliente');
-    const painel = document.getElementById('painelCompras');
-    const btnDados = document.getElementById('abaDados');
-    const btnCompras = document.getElementById('abaCompras');
+    const painelCompras = document.getElementById('painelCompras');
+    const painelPagamentos = document.getElementById('painelPagamentos');
+    const btns = {
+      dados: document.getElementById('abaDados'),
+      compras: document.getElementById('abaCompras'),
+      pagamentos: document.getElementById('abaPagamentos'),
+    };
+
+    form.style.display = 'none';
+    painelCompras.style.display = 'none';
+    painelPagamentos.style.display = 'none';
+    Object.values(btns).forEach(b => {
+      if (!b) return;
+      b.style.borderBottomColor = 'transparent';
+      b.style.color = 'var(--text-muted)';
+      b.style.fontWeight = '';
+    });
+
+    const ativar = (btn, painel) => {
+      if (btn) { btn.style.borderBottomColor = 'var(--primary)'; btn.style.color = 'var(--primary)'; btn.style.fontWeight = '600'; }
+      if (painel) painel.style.display = '';
+    };
+
     if (aba === 'dados') {
       form.style.display = '';
-      painel.style.display = 'none';
-      btnDados.style.borderBottomColor = 'var(--primary)';
-      btnDados.style.color = 'var(--primary)';
-      btnDados.style.fontWeight = '600';
-      btnCompras.style.borderBottomColor = 'transparent';
-      btnCompras.style.color = 'var(--text-muted)';
-      btnCompras.style.fontWeight = '';
-    } else {
-      form.style.display = 'none';
-      painel.style.display = '';
-      btnDados.style.borderBottomColor = 'transparent';
-      btnDados.style.color = 'var(--text-muted)';
-      btnDados.style.fontWeight = '';
-      btnCompras.style.borderBottomColor = 'var(--primary)';
-      btnCompras.style.color = 'var(--primary)';
-      btnCompras.style.fontWeight = '600';
+      ativar(btns.dados, null);
+    } else if (aba === 'compras') {
+      ativar(btns.compras, painelCompras);
       if (_clienteEditando) ClientesModule.renderCompras(_clienteEditando.id);
+    } else if (aba === 'pagamentos') {
+      ativar(btns.pagamentos, painelPagamentos);
+      if (_clienteEditando) ClientesModule.renderPagamentos(_clienteEditando.id);
     }
   },
 
@@ -308,6 +318,91 @@ const ClientesModule = {
     cont.innerHTML = statsHtml + cardsHtml + ClientesModule._botoesAcaoCliente(cliente);
   },
 
+  renderPagamentos: (clienteId) => {
+    const crediarios = DB.Crediario.listar().filter(c => c.clienteId === clienteId);
+
+    const pagamentos = [];
+    crediarios.forEach(cred => {
+      const total = (cred.parcelas || []).length;
+      (cred.parcelas || []).forEach(p => {
+        if (p.status === 'pago' && p.dataPagamento) {
+          const venc = p.vencimento || '';
+          const pago = Utils.dataLocal(new Date(p.dataPagamento)); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
+          pagamentos.push({
+            dataPagamento: pago,
+            vencimento: venc,
+            valor: parseFloat(p.valor) || 0,
+            numero: p.numero,
+            total,
+            pontual: pago <= venc,
+            credId: cred.id,
+          });
+        }
+      });
+    });
+
+    pagamentos.sort((a, b) => b.dataPagamento.localeCompare(a.dataPagamento));
+
+    const cont = document.getElementById('listaPagamentosCliente');
+
+    if (pagamentos.length === 0) {
+      cont.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">💳</div>
+          <div class="empty-title">Nenhum pagamento registrado</div>
+          <div class="empty-sub">Os pagamentos do crediário aparecerão aqui</div>
+        </div>`;
+      return;
+    }
+
+    const totalPago = pagamentos.reduce((s, p) => s + p.valor, 0);
+    const nPontual = pagamentos.filter(p => p.pontual).length;
+    const pct = Math.round(nPontual / pagamentos.length * 100);
+    const corPct = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    const ultimo = pagamentos[0];
+
+    const statsHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">PAGAMENTOS</div>
+          <div style="font-size:20px;font-weight:700;color:var(--primary)">${pagamentos.length}</div>
+        </div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">TOTAL PAGO</div>
+          <div style="font-size:15px;font-weight:700;color:var(--success)">${Utils.moeda(totalPago)}</div>
+        </div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">PONTUALIDADE</div>
+          <div style="font-size:20px;font-weight:700;color:${corPct}">${pct}%</div>
+        </div>
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:4px">ÚLTIMO PAGTO</div>
+          <div style="font-size:14px;font-weight:700">${Utils.data(ultimo.dataPagamento)}</div>
+        </div>
+      </div>`;
+
+    const listHtml = pagamentos.map(p => {
+      const badge = p.pontual
+        ? `<span style="font-size:10px;background:#d4edda;color:#155724;padding:2px 7px;border-radius:10px;font-weight:600">✅ Pontual</span>`
+        : `<span style="font-size:10px;background:#f8d7da;color:#721c24;padding:2px 7px;border-radius:10px;font-weight:600">🔴 Atrasado</span>`;
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--card-bg)">
+          <div>
+            <div style="font-weight:600;font-size:14px">Parcela ${p.numero}/${p.total}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">
+              Pago em ${Utils.data(p.dataPagamento)} &nbsp;·&nbsp; Vencimento ${Utils.data(p.vencimento)}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;font-size:16px;color:var(--success)">${Utils.moeda(p.valor)}</div>
+            <div style="margin-top:5px">${badge}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    cont.innerHTML = statsHtml + listHtml;
+  },
+
   _botoesAcaoCliente: (cliente) => {
     if (!cliente) return '';
     const tel = (cliente.telefone || '').replace(/\D/g, '');
@@ -434,10 +529,13 @@ const ClientesModule = {
     set('inputCidade', end.cidade || '');
     set('inputEstado', end.estado || '');
 
-    // Aba Compras só disponível para clientes existentes
+    // Abas Compras e Pagamentos só disponíveis para clientes existentes
     const btnCompras = document.getElementById('abaCompras');
     btnCompras.disabled = !id;
     btnCompras.style.opacity = id ? '1' : '0.4';
+    const btnPagamentos = document.getElementById('abaPagamentos');
+    btnPagamentos.disabled = !id;
+    btnPagamentos.style.opacity = id ? '1' : '0.4';
 
     // Sempre abre na aba Dados
     ClientesModule.trocarAba('dados');

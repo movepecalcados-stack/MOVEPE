@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MOVE PÉ - Crediário v2.0
  */
 
@@ -136,7 +136,7 @@ const CrediarioModule = {
     });
 
     const inad = DB.Crediario.inadimplentes();
-    const clientesUnicos = [...new Set(inad.map(i => i.clienteNome))];
+    const clientesUnicos = [...new Set(inad.map(i => i.clienteId || i.clienteNome))];
 
     document.getElementById('statPendente').textContent = Utils.moeda(totalPendente);
     document.getElementById('statAtrasado').textContent = Utils.moeda(totalAtrasado);
@@ -168,13 +168,13 @@ const CrediarioModule = {
     if (_filtroStatus !== 'todos') {
       lista = lista.filter(cred => {
         if (_filtroStatus === 'atrasado') {
-          return cred.parcelas.some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
+          return (cred.parcelas || []).some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
         }
         if (_filtroStatus === 'pendente') {
-          return cred.parcelas.some(p => p.status !== 'pago');
+          return (cred.parcelas || []).some(p => p.status !== 'pago');
         }
         if (_filtroStatus === 'quitado') {
-          return cred.parcelas.every(p => p.status === 'pago');
+          return (cred.parcelas || []).every(p => p.status === 'pago');
         }
         return true;
       });
@@ -192,8 +192,8 @@ const CrediarioModule = {
 
     // Ordenar: atrasados primeiro
     lista.sort((a, b) => {
-      const aAt = a.parcelas.some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
-      const bAt = b.parcelas.some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
+      const aAt = (a.parcelas || []).some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
+      const bAt = (b.parcelas || []).some(p => Utils.statusParcela(p.vencimento, p.status) === 'atrasado');
       if (aAt && !bAt) return -1;
       if (!aAt && bAt) return 1;
       return new Date(b.criadoEm || 0) - new Date(a.criadoEm || 0);
@@ -623,7 +623,7 @@ const CrediarioModule = {
       if (!credObj) return;
       idxs.forEach(idx => {
         credObj.parcelas[idx].status = 'pago';
-        credObj.parcelas[idx].dataPagamento = hoje;
+        credObj.parcelas[idx].dataPagamento = new Date().toISOString();
       });
       DB.Crediario.salvar(credObj);
     });
@@ -1181,7 +1181,7 @@ ${linhaH}
     // Pré-preenche data: 30 dias a partir de hoje
     const venc1 = new Date();
     venc1.setDate(venc1.getDate() + 30);
-    document.getElementById('renegVencimento').value = venc1.toISOString().substring(0, 10);
+    document.getElementById('renegVencimento').value = Utils.dataLocal(venc1); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     document.getElementById('renegParcelas').value = pendentes.length;
     document.getElementById('renegIncluirJuros').checked = true;
 
@@ -1289,7 +1289,7 @@ ${linhaH}
     const novasParcelas = [];
     for (let i = 0; i < qtd; i++) {
       novasParcelas.push({
-        numero: i + 1,
+        numero: pagas.length + i + 1,
         valor: i < qtd - 1 ? valorParcela : Math.max(0.01, Math.round((totalRenegociado - valorParcela * (qtd - 1)) * 100) / 100),
         vencimento: Utils.adicionarMeses(venc1Str, i),
         status: 'pendente',
@@ -1610,7 +1610,7 @@ Queremos muito evitar isso e resolver de forma tranquila! Entre em contato *hoje
       if (!credObj) return;
       idxs.forEach(idx => {
         credObj.parcelas[idx].status = 'pago';
-        credObj.parcelas[idx].dataPagamento = hoje;
+        credObj.parcelas[idx].dataPagamento = new Date().toISOString();
       });
       DB.Crediario.salvar(credObj);
     });
@@ -1747,6 +1747,7 @@ Queremos muito evitar isso e resolver de forma tranquila! Entre em contato *hoje
 
     Utils.abrirModal('modalInadimplencia');
   }
+
 };
 
 document.addEventListener('DOMContentLoaded', CrediarioModule.init);

@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Move Pé — Central de Agentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --laranja: #FF6B00;
+    --laranja-vivo: #FF8C00;
+    --laranja-suave: rgba(255,107,0,0.12);
+    --laranja-borda: rgba(255,107,0,0.3);
+    --preto: #0C0C0C;
+    --preto2: #141414;
+    --preto3: #1C1C1C;
+    --preto4: #242424;
+    --cinza: #888;
+    --cinza-claro: #BBB;
+    --branco: #F5F5F5;
+    --verde: #22C55E;
+    --vermelho: #EF4444;
+    --amarelo: #FBBF24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--preto);
+    color: var(--branco);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    background: var(--preto2);
+    border-bottom: 1px solid #222;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--laranja);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .logo-text span {
+    color: var(--laranja);
+  }
+
+  .logo-badge {
+    font-size: 10px;
+    background: var(--laranja-suave);
+    border: 1px solid var(--laranja-borda);
+    color: var(--laranja);
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .status-online {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--verde);
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--verde);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .hora {
+    font-size: 13px;
+    color: var(--cinza);
+    font-weight: 500;
+  }
+
+  /* LAYOUT PRINCIPAL */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    background: var(--preto2);
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 16px 12px 8px;
+  }
+
+  .sidebar-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--cinza);
+    text-transform: uppercase;
+    padding: 0 8px;
+    margin-bottom: 8px;
+  }
+
+  .agente-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+    width: 100%;
+    background: none;
+    text-align: left;
+    color: var(--cinza-claro);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    font-weight: 400;
+    margin-bottom: 2px;
+    position: relative;
+  }
+
+  .agente-btn:hover {
+    background: var(--preto3);
+    color: var(--branco);
+  }
+
+  .agente-btn.ativo {
+    background: var(--laranja-suave);
+    border-color: var(--laranja-borda);
+    color: var(--branco);
+  }
+
+  .agente-btn.ativo .agente-emoji {
+    filter: none;
+  }
+
+  .agente-emoji {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .agente-nome {
+    flex: 1;
+    line-height: 1.2;
+  }
+
+  .badge-notif {
+    background: var(--laranja);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .sidebar-divider {
+    height: 1px;
+    background: #222;
+    margin: 8px 16px;
+  }
+
+  /* ÁREA CENTRAL */
+  .centro {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--preto);
+  }
+
+  .agente-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #1E1E1E;
+    background: var(--preto);
+    flex-shrink: 0;
+  }
+
+  .agente-titulo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .agente-icone-grande {
+    width: 40px;
+    height: 40px;
+    background: var(--laranja-suave);
+    border: 1px solid var(--laranja-borda);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .agente-titulo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .agente-subtitulo {
+    font-size: 12.5px;
+    color: var(--cinza);
+    margin-left: 52px;
+    margin-top: -2px;
+  }
+
+  /* CHIPS DE SUGESTÃO */
+  .sugestoes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .chip {
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid #2A2A2A;
+    background: var(--preto3);
+    font-size: 12px;
+    color: var(--cinza-claro);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .chip:hover {
+    border-color: var(--laranja-borda);
+    color: var(--laranja);
+    background: var(--laranja-suave);
+  }
+
+  /* CHAT AREA */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    display: flex;
+    gap: 10px;
+    animation: fadein 0.3s ease;
+  }
+
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg.usuario {
+    flex-direction: row-reverse;
+  }
+
+  .msg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .msg.agente .msg-avatar {
+    background: var(--laranja-suave);
+    border: 1px solid var(--laranja-borda);
+  }
+
+  .msg.usuario .msg-avatar {
+    background: var(--preto4);
+    border: 1px solid #2A2A2A;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cinza-claro);
+    font-family: 'Barlow Condensed', sans-serif;
+  }
+
+  .msg-balao {
+    max-width: 75%;
+    padding: 12px 15px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .msg.agente .msg-balao {
+    background: var(--preto3);
+    border: 1px solid #242424;
+    border-radius: 4px 12px 12px 12px;
+  }
+
+  .msg.usuario .msg-balao {
+    background: var(--laranja);
+    color: white;
+    border-radius: 12px 4px 12px 12px;
+  }
+
+  .msg-balao strong {
+    color: var(--laranja);
+    font-weight: 600;
+  }
+
+  .msg.usuario .msg-balao strong {
+    color: white;
+  }
+
+  .msg-hora {
+    font-size: 10px;
+    color: var(--cinza);
+    margin-top: 5px;
+    text-align: right;
+  }
+
+  .msg.agente .msg-hora {
+    text-align: left;
+    margin-left: 42px;
+  }
+
+  /* LEGENDA GERADA */
+  .legenda-card {
+    background: var(--preto4);
+    border: 1px solid var(--laranja-borda);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--cinza-claro);
+  }
+
+  .legenda-card .tag {
+    color: var(--laranja);
+    font-weight: 500;
+  }
+
+  .legenda-acoes {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .btn-acao {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+    border: none;
+  }
+
+  .btn-acao.primario {
+    background: var(--laranja);
+    color: white;
+  }
+
+  .btn-acao.primario:hover { background: var(--laranja-vivo); }
+
+  .btn-acao.secundario {
+    background: var(--preto3);
+    color: var(--cinza-claro);
+    border: 1px solid #2A2A2A;
+  }
+
+  .btn-acao.secundario:hover {
+    border-color: var(--laranja-borda);
+    color: var(--branco);
+  }
+
+  /* INPUT DE CHAT */
+  .chat-input-area {
+    padding: 16px 24px 20px;
+    background: var(--preto);
+    border-top: 1px solid #1E1E1E;
+    flex-shrink: 0;
+  }
+
+  .chat-input-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    background: var(--preto3);
+    border: 1px solid #2A2A2A;
+    border-radius: 12px;
+    padding: 10px 14px;
+    transition: border-color 0.2s;
+  }
+
+  .chat-input-wrap:focus-within {
+    border-color: var(--laranja-borda);
+  }
+
+  .chat-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--branco);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    resize: none;
+    max-height: 100px;
+    line-height: 1.5;
+    min-height: 22px;
+  }
+
+  .chat-input::placeholder { color: var(--cinza); }
+
+  .btn-enviar {
+    width: 34px;
+    height: 34px;
+    background: var(--laranja);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .btn-enviar:hover { background: var(--laranja-vivo); }
+
+  .btn-enviar svg { width: 16px; height: 16px; fill: white; }
+
+  /* PAINEL DIREITO — ALERTAS */
+  .painel-direito {
+    width: 280px;
+    background: var(--preto2);
+    border-left: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .painel-titulo {
+    padding: 18px 16px 12px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--cinza);
+    border-bottom: 1px solid #1E1E1E;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .painel-titulo span {
+    background: var(--laranja);
+    color: white;
+    font-size: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .alertas-lista {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .alerta-card {
+    padding: 12px 13px;
+    border-radius: 10px;
+    border: 1px solid #222;
+    background: var(--preto3);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .alerta-card:hover {
+    border-color: #333;
+    background: var(--preto4);
+  }
+
+  .alerta-card.urgente {
+    border-color: rgba(239,68,68,0.3);
+    background: rgba(239,68,68,0.05);
+  }
+
+  .alerta-card.atencao {
+    border-color: rgba(251,191,36,0.3);
+    background: rgba(251,191,36,0.05);
+  }
+
+  .alerta-card.info {
+    border-color: rgba(255,107,0,0.2);
+    background: var(--laranja-suave);
+  }
+
+  .alerta-tipo {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .alerta-card.urgente .alerta-tipo { color: var(--vermelho); }
+  .alerta-card.atencao .alerta-tipo { color: var(--amarelo); }
+  .alerta-card.info .alerta-tipo { color: var(--laranja); }
+
+  .alerta-texto {
+    font-size: 13px;
+    color: var(--branco);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .alerta-sub {
+    font-size: 11.5px;
+    color: var(--cinza);
+    margin-top: 3px;
+  }
+
+  .alerta-acao {
+    margin-top: 9px;
+    font-size: 11.5px;
+    color: var(--laranja);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* SEÇÃO RESUMO DO DIA */
+  .resumo-dia {
+    padding: 12px;
+    border-top: 1px solid #1E1E1E;
+    margin-top: 4px;
+  }
+
+  .resumo-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--cinza);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .resumo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .resumo-item {
+    background: var(--preto3);
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 10px 11px;
+  }
+
+  .resumo-valor {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--branco);
+    line-height: 1;
+    margin-bottom: 3px;
+  }
+
+  .resumo-valor.laranja { color: var(--laranja); }
+  .resumo-valor.verde { color: var(--verde); }
+
+  .resumo-desc {
+    font-size: 10.5px;
+    color: var(--cinza);
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 2px; }
+
+  /* TYPING INDICATOR */
+  .typing {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+    align-items: center;
+  }
+
+  .typing span {
+    width: 6px;
+    height: 6px;
+    background: var(--cinza);
+    border-radius: 50%;
+    animation: typing 1.2s infinite;
+  }
+
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typing {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-3px); }
+  }
+
+  /* TELA DE BOAS-VINDAS quando nenhum agente ativo */
+  .boas-vindas {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    opacity: 0.6;
+  }
+
+  .boas-vindas-emoji { font-size: 48px; margin-bottom: 16px; }
+  .boas-vindas-titulo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .boas-vindas-sub { font-size: 13px; color: var(--cinza); }
+
+  /* RESPONSIVO */
+  @media (max-width: 900px) {
+    .painel-direito { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .sidebar { width: 60px; }
+    .agente-nome, .sidebar-label, .badge-notif { display: none; }
+    .agente-btn { justify-content: center; padding: 12px; }
+    .logo-text, .logo-badge { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icone" style="font-size:22px;">👟</div>
+    <div class="logo-text">MOVE <span>PÉ</span></div>
+    <div class="logo-badge">AGENTES IA</div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-online"><div class="dot"></div> Todos os agentes ativos</div>
+    <div class="hora" id="hora">--:--</div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Agentes</div>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'whatsapp')">
+        <span class="agente-emoji">💬</span>
+        <span class="agente-nome">Atendimento WhatsApp</span>
+        <span class="badge-notif">3</span>
+      </button>
+
+      <button class="agente-btn ativo" onclick="ativarAgente(this, 'instagram')">
+        <span class="agente-emoji">📸</span>
+        <span class="agente-nome">Conteúdo Instagram</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'estoque')">
+        <span class="agente-emoji">📦</span>
+        <span class="agente-nome">Reposição de Estoque</span>
+        <span class="badge-notif">3</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'financeiro')">
+        <span class="agente-emoji">💰</span>
+        <span class="agente-nome">Financeiro</span>
+        <span class="badge-notif">2</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'trafego')">
+        <span class="agente-emoji">🎯</span>
+        <span class="agente-nome">Tráfego Pago</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'analise')">
+        <span class="agente-emoji">📊</span>
+        <span class="agente-nome">Análise de Vendas</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'fornecedores')">
+        <span class="agente-emoji">🤝</span>
+        <span class="agente-nome">Fornecedores</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'agenda')">
+        <span class="agente-emoji">🗓️</span>
+        <span class="agente-nome">Agenda do Dia</span>
+      </button>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Outros</div>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'precificacao')">
+        <span class="agente-emoji">🏷️</span>
+        <span class="agente-nome">Precificação</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'clientes')">
+        <span class="agente-emoji">👥</span>
+        <span class="agente-nome">Relacionamento</span>
+      </button>
+
+      <button class="agente-btn" onclick="ativarAgente(this, 'fiscal')">
+        <span class="agente-emoji">📋</span>
+        <span class="agente-nome">Fiscal / NF-e</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- CENTRO -->
+  <div class="centro">
+
+    <!-- HEADER DO AGENTE ATIVO -->
+    <div class="agente-header" id="agenteHeader">
+      <div class="agente-titulo-row">
+        <div class="agente-icone-grande" id="agenteIcone">📸</div>
+        <div>
+          <div class="agente-titulo" id="agenteTitulo">Conteúdo Instagram</div>
+        </div>
+      </div>
+      <div class="agente-subtitulo" id="agenteSubtitulo">Cria legendas, ideias de posts e roteiros de Stories para a sua loja</div>
+      <div class="sugestoes" id="sugestoes">
+        <div class="chip" onclick="enviarMsg(this.textContent)">✍️ Criar legenda para produto</div>
+        <div class="chip" onclick="enviarMsg(this.textContent)">📅 Sugerir pauta da semana</div>
+        <div class="chip" onclick="enviarMsg(this.textContent)">🎬 Roteiro de Stories</div>
+        <div class="chip" onclick="enviarMsg(this.textContent)">🏷️ Promoção para Stories</div>
+      </div>
+    </div>
+
+    <!-- MENSAGENS -->
+    <div class="chat-area" id="chatArea">
+
+      <div class="msg agente">
+        <div class="msg-avatar">📸</div>
+        <div>
+          <div class="msg-balao">
+            Olá! Sou seu agente de <strong>Conteúdo Instagram</strong>. Posso criar legendas, roteiros de Stories, ideias de posts e textos para promoções — tudo pensado para a Move Pé. Por onde quer começar?
+          </div>
+          <div class="msg-hora">agora</div>
+        </div>
+      </div>
+
+      <div class="msg usuario">
+        <div class="msg-avatar">MP</div>
+        <div>
+          <div class="msg-balao">Cria uma legenda para um tênis Nike Air Max que acabou de chegar, cor branco, R$ 299</div>
+          <div class="msg-hora">agora</div>
+        </div>
+      </div>
+
+      <div class="msg agente">
+        <div class="msg-avatar">📸</div>
+        <div>
+          <div class="msg-balao">
+            Pronto! Aqui estão 2 opções de legenda para você escolher:
+
+            <div class="legenda-card">
+              <strong>Opção 1 — Energia e estilo:</strong><br><br>
+              Chegou o novo <strong>Nike Air Max</strong> branquinho aqui na Move Pé! 👟✨<br><br>
+              Conforto do início ao fim do dia — do trabalho ao rolê. Disponível em todas as numerações, por apenas <strong>R$ 299</strong>.<br><br>
+              Vem buscar o seu ou chama no direct! 📩<br><br>
+              <span class="tag">#MovePé #NikeAirMax #TênisNike #CalçadosParaíba #NovaColeção #TênisNovo #NikeWhite</span>
+
+              <div class="legenda-acoes">
+                <button class="btn-acao primario" onclick="copiarTexto(this)">📋 Copiar</button>
+                <button class="btn-acao secundario" onclick="enviarMsg('Gera outra versão mais curta')">Versão curta</button>
+                <button class="btn-acao secundario" onclick="enviarMsg('Gera versão para Stories')">Para Stories</button>
+              </div>
+            </div>
+
+            <div class="legenda-card" style="margin-top:10px">
+              <strong>Opção 2 — Direta e objetiva:</strong><br><br>
+              🔥 <strong>NOVIDADE NA LOJA!</strong><br><br>
+              Nike Air Max Branco — R$ 299<br>
+              Conforto Nike + estilo que combina com tudo.<br><br>
+              Parcela em até 5x no cartão ou no crediário! Chama pra saber mais 👇<br><br>
+              <span class="tag">#MovePé #Calçados #NikeAirMax #Novidade</span>
+
+              <div class="legenda-acoes">
+                <button class="btn-acao primario" onclick="copiarTexto(this)">📋 Copiar</button>
+                <button class="btn-acao secundario" onclick="enviarMsg('Gera outra versão mais curta')">Versão curta</button>
+              </div>
+            </div>
+          </div>
+          <div class="msg-hora">agora</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- INPUT -->
+    <div class="chat-input-area">
+      <div class="chat-input-wrap">
+        <textarea class="chat-input" id="chatInput" placeholder="Peça algo ao agente... (ex: cria legenda para tênis Nike R$ 299)" rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMsgInput()}"
+          oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+        <button class="btn-enviar" onclick="enviarMsgInput()">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAINEL DIREITO -->
+  <div class="painel-direito">
+
+    <div class="painel-titulo">
+      Alertas de hoje
+      <span>4</span>
+    </div>
+
+    <div class="alertas-lista">
+
+      <div class="alerta-card urgente" onclick="ativarAgenteDirecto('estoque')">
+        <div class="alerta-tipo">⚠️ Estoque crítico</div>
+        <div class="alerta-texto">3 produtos acabando</div>
+        <div class="alerta-sub">Sandália Moleca nº38, Tênis infantil nº30, Chinelo Havaianas nº37</div>
+        <div class="alerta-acao">Ver reposição →</div>
+      </div>
+
+      <div class="alerta-card urgente" onclick="ativarAgenteDirecto('financeiro')">
+        <div class="alerta-tipo">🔴 Crediário vencendo</div>
+        <div class="alerta-texto">2 parcelas vencem hoje</div>
+        <div class="alerta-sub">Maria Silva — R$ 120 · João Souza — R$ 85</div>
+        <div class="alerta-acao">Enviar cobrança →</div>
+      </div>
+
+      <div class="alerta-card atencao" onclick="ativarAgenteDirecto('clientes')">
+        <div class="alerta-tipo">⏰ Reativação</div>
+        <div class="alerta-texto">1 cliente sem comprar há 30 dias</div>
+        <div class="alerta-sub">Ana Paula — última compra em 21/04</div>
+        <div class="alerta-acao">Mandar mensagem →</div>
+      </div>
+
+      <div class="alerta-card atencao" onclick="ativarAgenteDirecto('fiscal')">
+        <div class="alerta-tipo">📋 DAS MEI</div>
+        <div class="alerta-texto">Vence em 5 dias</div>
+        <div class="alerta-sub">Maio/2026 — vencimento 20/06/2026</div>
+        <div class="alerta-acao">Ver detalhes →</div>
+      </div>
+
+    </div>
+
+    <!-- RESUMO DO DIA -->
+    <div class="resumo-dia">
+      <div class="resumo-label">Resumo de hoje</div>
+      <div class="resumo-grid">
+        <div class="resumo-item">
+          <div class="resumo-valor verde">R$ 847</div>
+          <div class="resumo-desc">Faturamento</div>
+        </div>
+        <div class="resumo-item">
+          <div class="resumo-valor laranja">6</div>
+          <div class="resumo-desc">Vendas hoje</div>
+        </div>
+        <div class="resumo-item">
+          <div class="resumo-valor">R$ 141</div>
+          <div class="resumo-desc">Ticket médio</div>
+        </div>
+        <div class="resumo-item">
+          <div class="resumo-valor laranja">3</div>
+          <div class="resumo-desc">Alertas ativos</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// HORA EM TEMPO REAL
+function atualizarHora() {
+  const agora = new Date();
+  document.getElementById('hora').textContent =
+    agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+atualizarHora();
+setInterval(atualizarHora, 1000);
+
+// DADOS DOS AGENTES
+const agentes = {
+  whatsapp: {
+    emoji: '💬',
+    titulo: 'Atendimento WhatsApp',
+    subtitulo: 'Responde clientes automaticamente, verifica estoque em tempo real e avisa sobre parcelas',
+    chips: ['💬 Ver mensagens pendentes', '🔍 Verificar produto no estoque', '📅 Resposta de horário', '💳 Info sobre crediário'],
+    boasVindas: 'Olá! Sou o agente de <strong>Atendimento WhatsApp</strong>. Posso responder clientes, verificar disponibilidade de produtos e criar mensagens de cobrança. O que precisa?'
+  },
+  instagram: {
+    emoji: '📸',
+    titulo: 'Conteúdo Instagram',
+    subtitulo: 'Cria legendas, ideias de posts e roteiros de Stories para a sua loja',
+    chips: ['✍️ Criar legenda para produto', '📅 Sugerir pauta da semana', '🎬 Roteiro de Stories', '🏷️ Promoção para Stories'],
+    boasVindas: 'Olá! Sou seu agente de <strong>Conteúdo Instagram</strong>. Posso criar legendas, roteiros de Stories, ideias de posts e textos para promoções — tudo pensado para a Move Pé. Por onde quer começar?'
+  },
+  estoque: {
+    emoji: '📦',
+    titulo: 'Reposição de Estoque',
+    subtitulo: 'Analisa o que está acabando e sugere o que comprar com base nas vendas',
+    chips: ['📊 Ver produtos críticos', '🛒 Lista de reposição', '📈 O que mais vende?', '✉️ Mensagem pro fornecedor'],
+    boasVindas: 'Olá! Sou o agente de <strong>Reposição de Estoque</strong>. Analiso suas vendas e estoque para te dizer o que precisa ser reposto. Tenho <strong>3 alertas</strong> de estoque crítico hoje. Quer ver?'
+  },
+  financeiro: {
+    emoji: '💰',
+    titulo: 'Financeiro',
+    subtitulo: 'Controla caixa, parcelas do crediário e alertas de contas a pagar',
+    chips: ['💵 Resumo do caixa', '📋 Parcelas vencendo', '📊 Fluxo do mês', '🔔 Cobranças pendentes'],
+    boasVindas: 'Olá! Sou o agente <strong>Financeiro</strong>. Acompanho seu caixa, crediário e contas a pagar. Hoje tem <strong>2 parcelas vencendo</strong> — quer que eu crie as mensagens de cobrança?'
+  },
+  trafego: {
+    emoji: '🎯',
+    titulo: 'Tráfego Pago',
+    subtitulo: 'Cria textos de anúncios e sugere campanhas para Facebook e Instagram Ads',
+    chips: ['📝 Criar texto de anúncio', '🎯 Sugerir público-alvo', '💡 Ideia de campanha', '📈 Qual produto anunciar?'],
+    boasVindas: 'Olá! Sou o agente de <strong>Tráfego Pago</strong>. Crio textos de anúncios, sugiro públicos-alvo e ajudo a planejar campanhas no Facebook e Instagram Ads. O que quer anunciar?'
+  },
+  analise: {
+    emoji: '📊',
+    titulo: 'Análise de Vendas',
+    subtitulo: 'Mostra o que mais vende, tendências e comparativos de períodos',
+    chips: ['🏆 Produtos mais vendidos', '📅 Comparar semanas', '📉 O que não vende?', '🎄 Sazonalidade'],
+    boasVindas: 'Olá! Sou o agente de <strong>Análise de Vendas</strong>. Com base nos seus dados, consigo mostrar o que mais vende, tendências por período e comparar com meses anteriores. O que quer analisar?'
+  },
+  fornecedores: {
+    emoji: '🤝',
+    titulo: 'Fornecedores',
+    subtitulo: 'Cria pedidos, mensagens de negociação e acompanha entregas pendentes',
+    chips: ['📝 Fazer pedido', '💬 Negociar preço', '📦 Status de entrega', '📋 Lista de pendências'],
+    boasVindas: 'Olá! Sou o agente de <strong>Fornecedores</strong>. Crio mensagens de pedido, negociação e acompanho entregas. Com qual fornecedor precisa falar hoje?'
+  },
+  agenda: {
+    emoji: '🗓️',
+    titulo: 'Agenda do Dia',
+    subtitulo: 'Organiza suas tarefas por prioridade e lembra do que precisa ser feito',
+    chips: ['📋 Ver tarefas de hoje', '⭐ O que é mais urgente?', '📅 Planejar a semana', '✅ Marcar concluído'],
+    boasVindas: 'Bom dia! Sou seu agente de <strong>Agenda</strong>. Hoje você tem <strong>4 alertas</strong> importantes. Quer ver as tarefas organizadas por prioridade?'
+  },
+  precificacao: {
+    emoji: '🏷️',
+    titulo: 'Precificação',
+    subtitulo: 'Calcula preço de venda, margem de lucro e desconto máximo sem prejuízo',
+    chips: ['💰 Calcular preço de venda', '📉 Desconto máximo', '📊 Analisar margem', '🔄 Comparar concorrente'],
+    boasVindas: 'Olá! Sou o agente de <strong>Precificação</strong>. Me diga o custo de um produto e eu calculo o preço ideal, a margem e o desconto máximo que você pode dar sem ter prejuízo.'
+  },
+  clientes: {
+    emoji: '👥',
+    titulo: 'Relacionamento',
+    subtitulo: 'Reativa clientes sumidos, lembra aniversários e sugere mensagens personalizadas',
+    chips: ['💌 Clientes inativos', '🎂 Aniversários do mês', '🛍️ Sugerir novidade', '⭐ Pedir avaliação'],
+    boasVindas: 'Olá! Sou o agente de <strong>Relacionamento</strong>. Acompanho seus clientes e sugiro quando e como entrar em contato para aumentar as vendas. Tem 1 cliente sem comprar há 30 dias — quer ver?'
+  },
+  fiscal: {
+    emoji: '📋',
+    titulo: 'Fiscal / NF-e',
+    subtitulo: 'Lembra obrigações fiscais, DAS MEI e ajuda com notas fiscais',
+    chips: ['📋 DAS do mês', '🧾 Emitir NF-e', '📅 Calendário fiscal', '⚠️ Obrigações pendentes'],
+    boasVindas: 'Olá! Sou o agente <strong>Fiscal</strong>. Acompanho suas obrigações tributárias e lembro dos vencimentos. O <strong>DAS de maio/2026</strong> vence em 5 dias — quer o link para pagar?'
+  }
+};
+
+let agenteAtivo = 'instagram';
+
+function ativarAgente(btn, id) {
+  document.querySelectorAll('.agente-btn').forEach(b => b.classList.remove('ativo'));
+  btn.classList.add('ativo');
+  agenteAtivo = id;
+  carregarAgente(id);
+}
+
+function ativarAgenteDirecto(id) {
+  const btns = document.querySelectorAll('.agente-btn');
+  const mapa = {
+    whatsapp: 0, instagram: 1, estoque: 2, financeiro: 3,
+    trafego: 4, analise: 5, fornecedores: 6, agenda: 7,
+    precificacao: 8, clientes: 9, fiscal: 10
+  };
+  btns.forEach(b => b.classList.remove('ativo'));
+  if (mapa[id] !== undefined) btns[mapa[id]].classList.add('ativo');
+  agenteAtivo = id;
+  carregarAgente(id);
+}
+
+function carregarAgente(id) {
+  const a = agentes[id];
+  if (!a) return;
+
+  document.getElementById('agenteIcone').textContent = a.emoji;
+  document.getElementById('agenteTitulo').textContent = a.titulo;
+  document.getElementById('agenteSubtitulo').textContent = a.subtitulo;
+
+  const sugestoesEl = document.getElementById('sugestoes');
+  sugestoesEl.innerHTML = a.chips.map(c =>
+    `<div class="chip" onclick="enviarMsg('${c.replace(/'/g,"&#39;")}')">${c}</div>`
+  ).join('');
+
+  const chat = document.getElementById('chatArea');
+  chat.innerHTML = `
+    <div class="msg agente" style="animation:fadein 0.3s ease">
+      <div class="msg-avatar">${a.emoji}</div>
+      <div>
+        <div class="msg-balao">${a.boasVindas}</div>
+        <div class="msg-hora">agora</div>
+      </div>
+    </div>
+  `;
+}
+
+function enviarMsg(texto) {
+  const chat = document.getElementById('chatArea');
+  const agente = agentes[agenteAtivo];
+
+  // Mensagem do usuário
+  const msgUser = document.createElement('div');
+  msgUser.className = 'msg usuario';
+  msgUser.innerHTML = `
+    <div class="msg-avatar">MP</div>
+    <div>
+      <div class="msg-balao">${texto}</div>
+      <div class="msg-hora">agora</div>
+    </div>
+  `;
+  chat.appendChild(msgUser);
+  chat.scrollTop = chat.scrollHeight;
+
+  // Typing indicator
+  const typing = document.createElement('div');
+  typing.className = 'msg agente';
+  typing.id = 'typing';
+  typing.innerHTML = `
+    <div class="msg-avatar">${agente.emoji}</div>
+    <div>
+      <div class="msg-balao">
+        <div class="typing"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  `;
+  chat.appendChild(typing);
+  chat.scrollTop = chat.scrollHeight;
+
+  // Resposta simulada
+  setTimeout(() => {
+    typing.remove();
+    const resp = document.createElement('div');
+    resp.className = 'msg agente';
+    resp.innerHTML = `
+      <div class="msg-avatar">${agente.emoji}</div>
+      <div>
+        <div class="msg-balao">Entendido! Estou processando sua solicitação: <strong>${texto}</strong>.<br><br>Em um sistema real, eu já estaria conectado aos seus dados da Move Pé para te dar uma resposta personalizada. Quer ver uma demonstração completa?</div>
+        <div class="msg-hora">agora</div>
+      </div>
+    `;
+    chat.appendChild(resp);
+    chat.scrollTop = chat.scrollHeight;
+  }, 1500);
+}
+
+function enviarMsgInput() {
+  const input = document.getElementById('chatInput');
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = '';
+  input.style.height = 'auto';
+  enviarMsg(texto);
+}
+
+function copiarTexto(btn) {
+  const card = btn.closest('.legenda-card');
+  const texto = card.innerText.replace('📋 Copiar', '').replace('Versão curta', '').replace('Para Stories', '').trim();
+  navigator.clipboard.writeText(texto).then(() => {
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = '📋 Copiar', 2000);
+  });
+}
+</script>
+
+</body>
+</html>

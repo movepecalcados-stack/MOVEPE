@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Migração de Fotos v2 — MovePe</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+
+    header { background: #1e293b; border-bottom: 2px solid #f59e0b; padding: 14px 22px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    header h1 { font-size: 1.15rem; font-weight: 700; color: #f8fafc; }
+    header p { font-size: 0.76rem; color: #94a3b8; margin-top: 2px; }
+    .badge-v2 { background: #f59e0b; color: #000; font-size: 0.65rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+
+    main { max-width: 980px; margin: 0 auto; padding: 18px 22px; }
+
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+    .card-title { font-size: 0.9rem; font-weight: 700; color: #f1f5f9; margin-bottom: 10px; }
+
+    button { cursor: pointer; font-size: 0.8rem; font-weight: 600; padding: 8px 15px; border-radius: 7px; border: none; }
+    .btn-backup { background: #dc2626; color: #fff; font-size: 0.85rem; padding: 10px 18px; }
+    .btn-backup.done { background: #16a34a; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-primary:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
+    .btn-success:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn-outline { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-outline:hover { background: #334155; color: #f1f5f9; }
+    .btn-sm { padding: 5px 11px; font-size: 0.73rem; }
+
+    .alert { border-radius: 7px; padding: 10px 13px; margin-bottom: 10px; border-left: 3px solid; }
+    .alert-danger { background: #7f1d1d18; border-color: #ef4444; }
+    .alert-warn   { background: #78350f18; border-color: #f59e0b; }
+    .alert-ok     { background: #14532d18; border-color: #22c55e; }
+    .alert-info   { background: #1e3a5f18; border-color: #6366f1; }
+    .alert strong { font-size: 0.82rem; }
+    .alert p { font-size: 0.76rem; color: #94a3b8; margin-top: 3px; }
+
+    .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .stat { background: #0f172a; border: 1px solid #334155; border-radius: 7px; padding: 10px 13px; flex: 1; min-width: 120px; }
+    .stat-lbl { font-size: 0.66rem; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+    .stat-val { font-size: 1.15rem; font-weight: 700; color: #f1f5f9; margin-top: 2px; }
+    .stat-sub { font-size: 0.68rem; color: #94a3b8; }
+
+    /* Card de produto */
+    .prod-card { background: #0f172a; border: 1px solid #334155; border-radius: 9px; padding: 14px; margin-bottom: 12px; }
+    .prod-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .prod-nome { font-weight: 700; font-size: 0.9rem; color: #f1f5f9; }
+    .prod-id { font-size: 0.66rem; color: #64748b; font-family: monospace; }
+    .prod-size { font-size: 1.05rem; font-weight: 700; }
+    .size-red { color: #ef4444; }
+    .size-green { color: #22c55e; }
+
+    /* Chips de peso */
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .chip { font-size: 0.7rem; padding: 3px 9px; border-radius: 4px; font-weight: 600; }
+    .chip-r { background: #7f1d1d; color: #fca5a5; }
+    .chip-a { background: #78350f; color: #fcd34d; }
+    .chip-g { background: #14532d; color: #86efac; }
+    .chip-b { background: #1e3a5f; color: #93c5fd; }
+
+    /* Preview de fotos */
+    .preview-grid { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+    .foto-group { background: #1e293b; border: 1px solid #334155; border-radius: 7px; padding: 10px; min-width: 160px; flex: 1; }
+    .foto-group-title { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 7px; }
+    .foto-thumbs { display: flex; flex-wrap: wrap; gap: 5px; }
+    .foto-thumb { position: relative; width: 60px; height: 60px; }
+    .foto-thumb img { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; background: #0f172a; }
+    .foto-thumb .thumb-size { position: absolute; bottom: 0; left: 0; right: 0; font-size: 0.6rem; background: rgba(0,0,0,.75); color: #fff; text-align: center; border-radius: 0 0 4px 4px; padding: 1px 0; }
+    .foto-thumb .thumb-dup { position: absolute; top: 2px; right: 2px; font-size: 0.6rem; background: #f59e0b; color: #000; padding: 1px 4px; border-radius: 3px; font-weight: 700; }
+
+    /* Log */
+    #log-wrap { display: none; }
+    #log { background: #0f172a; border: 1px solid #334155; border-radius: 7px; padding: 10px 12px; font-family: monospace; font-size: 0.7rem; max-height: 240px; overflow-y: auto; color: #94a3b8; }
+    .log-ok   { color: #86efac; }
+    .log-err  { color: #fca5a5; }
+    .log-info { color: #93c5fd; }
+    .log-sub  { color: #64748b; padding-left: 12px; }
+
+    .badge { font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; display: inline-block; }
+    .badge-green  { background: #14532d; color: #86efac; }
+    .badge-amber  { background: #78350f; color: #fcd34d; }
+    .badge-gray   { background: #334155; color: #94a3b8; }
+
+    .divider { border: none; border-top: 1px solid #334155; margin: 14px 0; }
+    .btn-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🖼️ Migração de Fotos — Compressão + Deduplicação</h1>
+    <p>Galeria + Variações de produtos · 800px · JPEG 75%</p>
+  </div>
+  <span class="badge-v2">v2</span>
+</header>
+
+<main>
+
+<!-- PASSO 1: BACKUP -->
+<div class="card">
+  <div class="card-title">Passo 1 — Backup obrigatório</div>
+  <div id="backup-banner" class="alert alert-danger" style="margin-bottom:10px">
+    <strong>⛔ Backup não realizado — faça o backup antes de continuar</strong>
+    <p>Exporta todos os dados do sistema como arquivo JSON. Se algo der errado, é possível restaurar.</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <button class="btn-backup" id="btnBackup" onclick="fazerBackup()">💾 Fazer Backup ANTES (obrigatório)</button>
+    <span id="backup-status" style="font-size:0.78rem;color:#64748b"></span>
+  </div>
+</div>
+
+<!-- PASSO 2: ANÁLISE -->
+<div class="card">
+  <div class="card-title">Passo 2 — Analisar produtos</div>
+  <button class="btn-primary" onclick="analisar()">🔍 Analisar Produtos</button>
+  <div id="analise-result" style="margin-top:12px"></div>
+</div>
+
+<!-- PASSO 3: PRODUTOS -->
+<div class="card" id="card-produtos" style="display:none">
+  <div class="card-title">Passo 3 — Comprimir e salvar</div>
+  <div class="btn-row" style="margin-bottom:14px">
+    <button class="btn-success" id="btn-todos" onclick="aplicarTodos()" disabled>✅ Aplicar em TODOS</button>
+    <span id="dica-todos" style="font-size:0.74rem;color:#64748b">Pré-visualize ao menos 1 produto primeiro</span>
+  </div>
+  <div id="lista-produtos"></div>
+</div>
+
+<!-- LOG -->
+<div class="card" id="log-wrap">
+  <div class="card-title">Log de operações</div>
+  <div id="log"></div>
+  <div id="resumo-final" style="margin-top:12px"></div>
+</div>
+
+</main>
+
+<script>
+// ─── Estado global ─────────────────────────────────────────────────────────
+
+var backupOk = false;
+var previewCount = 0;
+var items = []; // [{prod, fotoBytes, fotoUnicas, resultado, status}]
+
+// ─── Utilitários ───────────────────────────────────────────────────────────
+
+function kb(b) { return b < 1024 ? b + ' B' : (b / 1024).toFixed(1) + ' KB'; }
+function kbn(b) { return (b / 1024).toFixed(1); }
+function ts() { return new Date().toLocaleTimeString('pt-BR'); }
+
+function fotoBytes(prod) {
+  var f = (prod.foto || '').length * 2;
+  var g = JSON.stringify(prod.fotos || []).length * 2;
+  var v = JSON.stringify(prod.fotosVariacoes || {}).length * 2;
+  return { foto: f, galeria: g, variacoes: v, total: f + g + v };
+}
+
+function storageKb() {
+  return Object.keys(localStorage)
+    .filter(function(k) { return k.startsWith('movePe_'); })
+    .reduce(function(s, k) { return s + (localStorage.getItem(k) || '').length * 2; }, 0);
+}
+
+// ─── Log ───────────────────────────────────────────────────────────────────
+
+function addLog(msg, tipo) {
+  document.getElementById('log-wrap').style.display = '';
+  var el = document.getElementById('log');
+  var d = document.createElement('div');
+  d.className = tipo === 'ok' ? 'log-ok' : tipo === 'err' ? 'log-err' : tipo === 'sub' ? 'log-sub' : 'log-info';
+  d.textContent = '[' + ts() + '] ' + msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ─── Backup ────────────────────────────────────────────────────────────────
+
+function fazerBackup() {
+  var dados = {};
+  Object.keys(localStorage).forEach(function(k) {
+    if (!k.startsWith('movePe_')) return;
+    try { dados[k] = JSON.parse(localStorage.getItem(k)); } catch(e) { dados[k] = localStorage.getItem(k); }
+  });
+  var nome = 'backup_movepe_v2_' + new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19) + '.json';
+  var blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome; a.click();
+  URL.revokeObjectURL(a.href);
+
+  backupOk = true;
+  document.getElementById('btnBackup').textContent = '✅ Backup realizado';
+  document.getElementById('btnBackup').className = 'btn-backup done';
+  document.getElementById('backup-banner').className = 'alert alert-ok';
+  document.getElementById('backup-banner').innerHTML = '<strong>✅ Backup realizado — pode continuar com segurança</strong>';
+  document.getElementById('backup-status').textContent = 'Arquivo salvo às ' + ts();
+  addLog('Backup exportado: ' + nome, 'ok');
+}
+
+// ─── Análise ───────────────────────────────────────────────────────────────
+
+function analisar() {
+  if (!backupOk && !confirm('Backup não realizado. Continuar sem backup?')) return;
+
+  var produtos;
+  try { produtos = JSON.parse(localStorage.getItem('movePe_produtos') || '[]'); }
+  catch(e) { document.getElementById('analise-result').innerHTML = '<div class="alert alert-danger"><strong>Erro ao ler localStorage: ' + e.message + '</strong></div>'; return; }
+
+  var LIMITE = 200 * 1024; // 200 KB em bytes
+  items = [];
+
+  produtos.forEach(function(p) {
+    if (!p) return;
+    var sz = fotoBytes(p);
+    if (sz.total < LIMITE) return;
+
+    // Coletar TODAS as fotos base64 com suas origens (campo foto + galeria + variações)
+    var colecao = [];
+
+    // Campo foto principal
+    if (p.foto && typeof p.foto === 'string' && p.foto.startsWith('data:')) {
+      colecao.push({ src: p.foto, campo: 'foto' });
+    }
+
+    // Galeria (fotos[]) — usar índice separado para não colidir com variáveis externas
+    var arrFotos = p.fotos || [];
+    for (var fi = 0; fi < arrFotos.length; fi++) {
+      var fv = arrFotos[fi];
+      if (fv && typeof fv === 'string' && fv.startsWith('data:')) {
+        colecao.push({ src: fv, campo: 'fotos[' + fi + ']' });
+      }
+    }
+
+    // Variações (fotosVariacoes{})
+    var fVar = p.fotosVariacoes || {};
+    var fVarKeys = Object.keys(fVar);
+    for (var vi = 0; vi < fVarKeys.length; vi++) {
+      var vk = fVarKeys[vi];
+      var vv = fVar[vk];
+      if (vv && typeof vv === 'string' && vv.startsWith('data:')) {
+        colecao.push({ src: vv, campo: 'var:' + vk });
+      }
+    }
+
+    // Calcular hashes e agrupar únicas (deduplicação)
+    var hashMap = {};
+    for (var ci = 0; ci < colecao.length; ci++) {
+      var cf = colecao[ci];
+      var h = Utils.hashFoto(cf.src);
+      if (!h) continue;
+      if (!hashMap[h]) hashMap[h] = { src: cf.src, campos: [], hash: h };
+      hashMap[h].campos.push(cf.campo);
+    }
+
+    var unicas = Object.values(hashMap);
+    var totalFotos = colecao.length;
+    var duplicatas = totalFotos - unicas.length;
+
+    // Contagem por campo para exibição no log
+    var nFotoPrincipal = colecao.filter(function(f) { return f.campo === 'foto'; }).length;
+    var nGaleria       = colecao.filter(function(f) { return f.campo.startsWith('fotos['); }).length;
+    var nVariacoes     = colecao.filter(function(f) { return f.campo.startsWith('var:'); }).length;
+
+    items.push({
+      prod: p,
+      sz: sz,
+      colecao: colecao,
+      unicas: unicas,
+      totalFotos: totalFotos,
+      duplicatas: duplicatas,
+      nFotoPrincipal: nFotoPrincipal,
+      nGaleria: nGaleria,
+      nVariacoes: nVariacoes,
+      resultado: null,
+      status: 'pending',
+    });
+  });
+
+  var storageAntes = storageKb();
+  var totalFotoBytes = items.reduce(function(s, it) { return s + it.sz.total; }, 0);
+
+  var html = '<div class="stats-row">' +
+    mkStat('Total produtos', produtos.length, '') +
+    mkStat('Precisam migrar', items.length, items.length > 0 ? 'color:#ef4444' : 'color:#22c55e') +
+    mkStat('Fotos (bytes totais)', kb(totalFotoBytes), 'color:#f59e0b') +
+    mkStat('Storage usado', kbn(storageAntes) + ' KB', '') +
+    '</div>';
+
+  if (items.length === 0) {
+    html += '<div class="alert alert-ok"><strong>✅ Nenhum produto com fotos grandes encontrado!</strong><p>Todos estão dentro do limite de 200 KB.</p></div>';
+  } else {
+    html += '<div class="alert alert-warn"><strong>⚠️ ' + items.length + ' produto(s) com fotos grandes — ' + kb(totalFotoBytes) + ' de fotos</strong><p>Use o Passo 3 para comprimir e deduplificar.</p></div>';
+    document.getElementById('card-produtos').style.display = '';
+    renderLista();
+  }
+  document.getElementById('analise-result').innerHTML = html;
+}
+
+function mkStat(label, val, style) {
+  return '<div class="stat"><div class="stat-lbl">' + label + '</div><div class="stat-val" style="' + (style || '') + '">' + val + '</div></div>';
+}
+
+// ─── Render lista de produtos ───────────────────────────────────────────────
+
+function renderLista() {
+  document.getElementById('lista-produtos').innerHTML = items.map(function(it, i) {
+    var statusBadge = it.status === 'done' ? '<span class="badge badge-green">✅ Concluído</span>'
+      : it.status === 'preview' ? '<span class="badge badge-amber">👁 Pré-visualizado</span>'
+      : it.status === 'err'     ? '<span class="badge" style="background:#7f1d1d;color:#fca5a5">❌ Erro</span>'
+      : '<span class="badge badge-gray">⏳ Pendente</span>';
+
+    var chips = '<div class="chips">' +
+      (it.sz.foto    > 0 ? '<span class="chip chip-r">Principal: ' + kb(it.sz.foto)    + '</span>' : '') +
+      (it.sz.galeria > 0 ? '<span class="chip chip-a">Galeria: '   + kb(it.sz.galeria) + '</span>' : '') +
+      (it.sz.variacoes>0 ? '<span class="chip chip-b">Variações: ' + kb(it.sz.variacoes)+'</span>' : '') +
+      '<span class="chip chip-b">' + it.totalFotos + ' fotos · ' + it.unicas.length + ' únicas' +
+        (it.duplicatas > 0 ? ' · ' + it.duplicatas + ' duplicatas' : '') + '</span>' +
+    '</div>';
+
+    var previewHtml = '';
+    if (it.resultado) {
+      previewHtml = renderPreview(it);
+    }
+
+    var btnPreview = it.status === 'done' ? '' :
+      '<button class="btn-outline btn-sm" onclick="preVisualizarItem(' + i + ')">👁 Pré-visualizar</button>';
+    var btnAplicar = it.status === 'done'
+      ? '<span style="font-size:0.75rem;color:#86efac">✅ Aplicado e salvo</span>'
+      : it.resultado
+        ? '<button class="btn-success btn-sm" onclick="aplicarItem(' + i + ')">💾 Aplicar e Salvar</button>'
+        : '';
+
+    return '<div class="prod-card" id="pc-' + i + '">' +
+      '<div class="prod-head">' +
+        '<div><div class="prod-nome">' + esc(it.prod.nome || '?') + '</div>' +
+        '<div class="prod-id">ID: ' + esc(it.prod.id || '') + '</div></div>' +
+        '<div style="text-align:right">' +
+          '<div class="prod-size ' + (it.status === 'done' ? 'size-green' : 'size-red') + '">' + kb(it.sz.total) + '</div>' +
+          statusBadge +
+        '</div>' +
+      '</div>' +
+      chips +
+      previewHtml +
+      '<div class="btn-row">' + btnPreview + ' ' + btnAplicar + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── Render preview ─────────────────────────────────────────────────────────
+
+function renderPreview(it) {
+  var r = it.resultado;
+
+  function thumbs(fotos, label) {
+    if (!fotos || !fotos.length) return '';
+    var html = '<div class="foto-group"><div class="foto-group-title">' + label + '</div><div class="foto-thumbs">';
+    fotos.forEach(function(f) {
+      html += '<div class="foto-thumb">' +
+        '<img src="' + f.src + '">' +
+        '<div class="thumb-size">' + kb(f.src.length * 2) + '</div>' +
+        (f.dup ? '<div class="thumb-dup">DUP</div>' : '') +
+        '</div>';
+    });
+    return html + '</div></div>';
+  }
+
+  var antesThumbsFoto = it.colecao.filter(function(f) { return f.campo === 'foto'; }).map(function(f) { return { src: f.src }; });
+  var antesThumbsGal  = it.colecao.filter(function(f) { return f.campo.startsWith('fotos['); }).map(function(f) { return { src: f.src }; });
+  var antesThumbsVar  = it.unicas.map(function(u) { return { src: u.src, dup: u.campos.length > 1 }; });
+
+  var depoisThumbsFoto = r.foto ? [{ src: r.foto }] : [];
+  var depoisThumbsGal  = (r.fotos || []).filter(function(f) { return f; }).map(function(f) { return { src: f }; });
+  // Fotos únicas comprimidas:
+  var depoisUnicas = r.uniqueCompressed ? Object.values(r.uniqueCompressed).map(function(f) { return { src: f }; }) : [];
+
+  var bytesAntes = it.sz.total;
+  var bytesDepois = r.bytesDepois;
+  var economia = bytesAntes - bytesDepois;
+  var pct = Math.round((1 - bytesDepois / bytesAntes) * 100);
+
+  var alertClass = pct >= 80 ? 'alert-ok' : pct >= 50 ? 'alert-warn' : 'alert-info';
+
+  return '<div class="alert ' + alertClass + '" style="margin:8px 0">' +
+    '<strong>Estimativa: ' + kb(bytesAntes) + ' → ' + kb(bytesDepois) + ' (−' + pct + '% · economia de ' + kb(economia) + ')</strong>' +
+    '<p>' + it.unicas.length + ' foto(s) única(s) processada(s) · ' + it.duplicatas + ' duplicata(s) removida(s)</p>' +
+    '</div>' +
+    '<div class="preview-grid">' +
+    '<div style="flex:1;min-width:200px">' +
+      '<div style="font-size:0.72rem;color:#64748b;margin-bottom:6px;text-transform:uppercase">ANTES</div>' +
+      thumbs(antesThumbsFoto, '📷 Principal') +
+      thumbs(antesThumbsGal, '🖼 Galeria') +
+      (antesThumbsVar.length ? thumbs(antesThumbsVar, '🎨 Variações únicas (com DUP = usada em múltiplos tamanhos)') : '') +
+    '</div>' +
+    '<div style="flex:1;min-width:200px">' +
+      '<div style="font-size:0.72rem;color:#22c55e;margin-bottom:6px;text-transform:uppercase">DEPOIS</div>' +
+      thumbs(depoisThumbsFoto, '📷 Principal') +
+      thumbs(depoisThumbsGal, '🖼 Galeria') +
+      (depoisUnicas.length ? thumbs(depoisUnicas, '🎨 Variações únicas (comprimidas)') : '') +
+    '</div>' +
+    '</div>';
+}
+
+// ─── Compressão + deduplicação de um produto ───────────────────────────────
+
+async function comprimirProduto(it) {
+  var prod = it.prod;
+  addLog('Analisando: "' + prod.nome + '"', 'info');
+
+  // Log detalhado por campo
+  var detCampos = [];
+  if (it.nFotoPrincipal > 0) detCampos.push(it.nFotoPrincipal + ' principal');
+  if (it.nGaleria       > 0) detCampos.push(it.nGaleria       + ' galeria');
+  if (it.nVariacoes     > 0) detCampos.push(it.nVariacoes     + ' variação');
+  addLog('  Fotos base64: ' + it.totalFotos + ' (' + (detCampos.join(', ') || 'nenhuma') + ') · ' + it.unicas.length + ' únicas · ' + it.duplicatas + ' duplicatas', 'sub');
+
+  if (it.totalFotos === 0) {
+    addLog('  ⚠️ Nenhuma foto base64 encontrada — produto pesado por outros dados (variações/texto)', 'sub');
+  }
+
+  // Comprimir cada foto ÚNICA uma vez
+  var uniqueCompressed = {};
+
+  for (var ui = 0; ui < it.unicas.length; ui++) {
+    var u = it.unicas[ui];
+    var kbOrig = Math.round(u.src.length / 1024);
+    addLog('  Foto única ' + (ui + 1) + '/' + it.unicas.length + ' · ' + kbOrig + ' KB · campos: ' + u.campos.join(', '), 'sub');
+    try {
+      var comp = await Utils.comprimirFoto(u.src);
+      uniqueCompressed[u.hash] = comp;
+      var kbFinal = Math.round(comp.length / 1024);
+      addLog('    → ' + kbOrig + ' KB → ' + kbFinal + ' KB (−' + Math.round((1 - kbFinal / kbOrig) * 100) + '%)', 'sub');
+    } catch(e) {
+      addLog('    ❌ Erro ao comprimir: ' + e.message + ' — mantendo original', 'err');
+      uniqueCompressed[u.hash] = u.src;
+    }
+  }
+
+  // Substituir cada foto pelo correspondente comprimido (via hash)
+  function getComp(src) {
+    if (!src || typeof src !== 'string' || !src.startsWith('data:')) return src;
+    var h = Utils.hashFoto(src);
+    return (h && uniqueCompressed[h]) ? uniqueCompressed[h] : src;
+  }
+
+  // Foto principal: comprimir se base64, preservar se URL, null se ausente
+  var fotoNova = prod.foto && typeof prod.foto === 'string'
+    ? getComp(prod.foto)
+    : (prod.foto || null);
+
+  // Galeria: comprimir cada base64, preservar URLs
+  var fotosNovas = (prod.fotos || []).map(function(f) {
+    return f ? getComp(f) : null;
+  });
+
+  // Variações: comprimir cada base64, preservar URLs
+  var fotosVarNovas = {};
+  var fvKeys = Object.keys(prod.fotosVariacoes || {});
+  for (var fvi = 0; fvi < fvKeys.length; fvi++) {
+    var fvk = fvKeys[fvi];
+    var fvv = prod.fotosVariacoes[fvk];
+    fotosVarNovas[fvk] = fvv ? getComp(fvv) : null;
+  }
+
+  // Garantir que foto principal espelha fotos[0] quando ausente
+  // (o sistema sempre mantém foto === fotos[0] para exibição no PDV)
+  if ((!fotoNova || !fotoNova.startsWith('data:')) && fotosNovas[0] && fotosNovas[0].startsWith('data:')) {
+    fotoNova = fotosNovas[0];
+    addLog('  ↩ foto principal restaurada a partir de fotos[0]', 'sub');
+  }
+
+  var prodTemp = Object.assign({}, prod, { foto: fotoNova, fotos: fotosNovas, fotosVariacoes: fotosVarNovas });
+  var szDepois = fotoBytes(prodTemp);
+
+  it.resultado = {
+    foto: fotoNova,
+    fotos: fotosNovas,
+    fotosVariacoes: fotosVarNovas,
+    uniqueCompressed: uniqueCompressed,
+    bytesDepois: szDepois.total,
+  };
+
+  return it.resultado;
+}
+
+// ─── Pré-visualizar ────────────────────────────────────────────────────────
+
+async function preVisualizarItem(i) {
+  var it = items[i];
+  if (it.status === 'done') return;
+  document.getElementById('pc-' + i).style.opacity = '0.6';
+  try {
+    await comprimirProduto(it);
+    if (it.status !== 'done') {
+      it.status = 'preview';
+      previewCount++;
+      if (previewCount >= 1) {
+        document.getElementById('btn-todos').disabled = false;
+        document.getElementById('dica-todos').textContent = 'Pronto para aplicar em todos';
+      }
+    }
+  } catch(e) {
+    it.status = 'err';
+    addLog('❌ Erro no preview de "' + it.prod.nome + '": ' + e.message, 'err');
+  }
+  document.getElementById('pc-' + i).style.opacity = '';
+  renderLista();
+}
+
+// ─── Aplicar um item ────────────────────────────────────────────────────────
+
+async function aplicarItem(i) {
+  var it = items[i];
+  if (!it.resultado) {
+    await comprimirProduto(it);
+    if (!it.resultado) return;
+  }
+  try {
+    var r = it.resultado;
+    var prodSalvar = Object.assign({}, it.prod, {
+      foto: r.foto,
+      fotos: r.fotos,
+      fotosVariacoes: r.fotosVariacoes,
+    });
+    DB.Produtos.salvar(prodSalvar);
+    var economia = it.sz.total - r.bytesDepois;
+    it.status = 'done';
+    addLog('✅ Salvo: "' + it.prod.nome + '" — economizou ' + kb(economia) + ' (de ' + kb(it.sz.total) + ' → ' + kb(r.bytesDepois) + ')', 'ok');
+    renderLista();
+    atualizarResumo();
+  } catch(e) {
+    it.status = 'err';
+    addLog('❌ Erro ao salvar "' + it.prod.nome + '": ' + e.message, 'err');
+    renderLista();
+  }
+}
+
+// ─── Aplicar todos ──────────────────────────────────────────────────────────
+
+async function aplicarTodos() {
+  if (!backupOk && !confirm('Backup não realizado. Continuar mesmo assim?')) return;
+  var pendentes = items.filter(function(it) { return it.status !== 'done'; });
+  if (!pendentes.length) { alert('Todos os produtos já foram processados!'); return; }
+  if (!confirm('Comprimir e salvar ' + pendentes.length + ' produto(s)?\n\nEssa operação sobrescreve as fotos originais.\n\nConfirmar?')) return;
+
+  document.getElementById('btn-todos').disabled = true;
+  document.getElementById('btn-todos').textContent = 'Processando...';
+  addLog('=== Iniciando migração em massa: ' + pendentes.length + ' produto(s) ===', 'info');
+
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].status === 'done') continue;
+    await aplicarItem(i);
+    await new Promise(function(r) { setTimeout(r, 60); });
+  }
+
+  document.getElementById('btn-todos').textContent = '✅ Concluído';
+  addLog('=== Migração concluída ===', 'ok');
+  atualizarResumo();
+}
+
+// ─── Resumo final ───────────────────────────────────────────────────────────
+
+function atualizarResumo() {
+  var done = items.filter(function(it) { return it.status === 'done'; });
+  var erros = items.filter(function(it) { return it.status === 'err'; });
+  var economiaTotal = done.reduce(function(s, it) {
+    return s + (it.sz.total - (it.resultado ? it.resultado.bytesDepois : it.sz.total));
+  }, 0);
+  var storageAgora = storageKb();
+  var pct = Math.round(storageAgora / (5 * 1024 * 1024) * 100);
+
+  document.getElementById('resumo-final').innerHTML =
+    '<div class="stats-row">' +
+    mkStat('Comprimidos', done.length, done.length > 0 ? 'color:#86efac' : '') +
+    mkStat('Erros', erros.length, erros.length > 0 ? 'color:#ef4444' : '') +
+    mkStat('KB economizados', kb(economiaTotal), 'color:#86efac') +
+    mkStat('Storage agora', kbn(storageAgora) + ' KB (' + pct + '%)', pct > 80 ? 'color:#ef4444' : 'color:#f1f5f9') +
+    '</div>' +
+    (erros.length > 0 ? '<div class="alert alert-warn"><strong>⚠️ ' + erros.length + ' produto(s) com erro — fotos originais preservadas.</strong></div>' : '');
+}
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ let _dataInicio = '';
 let _dataFim = '';
 let _devTrocaAtual = null;
 let _devTrocaNovoItem = null; // { produtoId, nome, tamanho, precoUnitario }
+let _devTrocaEstado = 'perfeito'; // 'perfeito' | 'defeito'
 
 const Historico = {
 
@@ -321,9 +322,22 @@ const Historico = {
             </div>`;
         }).join('');
 
-    // Reset tipo e reembolso
+    // Reset tipo, estado e campos
     document.querySelector('input[name="devTrocaTipo"][value="devolucao"]').checked = true;
+    document.querySelector('input[name="devTrocaEstado"][value="perfeito"]').checked = true;
+    _devTrocaEstado = 'perfeito';
+    document.getElementById('devTrocaEstadoObs').value = '';
+    document.getElementById('devTrocaEstadoSecao').style.display = 'none';
     document.getElementById('devTrocaReembolsoSecao').style.display = '';
+    document.getElementById('devTrocaNovoItemSecao').style.display = 'none';
+    document.getElementById('devTrocaDiferencaSecao').style.display = 'none';
+    document.getElementById('devTrocaCrediarioOpts').style.display = 'none';
+    document.getElementById('devTrocaFormaDiferenca').value = 'dinheiro';
+    document.getElementById('devTrocaCredParcelas').value = '1';
+    // Vencimento padrão = hoje + 30 dias
+    const _d30 = new Date(); _d30.setDate(_d30.getDate() + 30);
+    document.getElementById('devTrocaCredVenc').value =
+      `${_d30.getFullYear()}-${String(_d30.getMonth()+1).padStart(2,'0')}-${String(_d30.getDate()).padStart(2,'0')}`;
     document.getElementById('devTrocaResumo').style.display = 'none';
 
     Utils.abrirModal('modalDevTroca');
@@ -334,6 +348,9 @@ const Historico = {
     const qtdInput = document.getElementById(`devQtd${idx}`);
     qtdInput.disabled = !cb.checked;
     if (cb.checked) qtdInput.focus();
+    // Mostrar seção estado se houver ao menos 1 item selecionado
+    const algumSelecionado = document.querySelectorAll('[id^="devItem"]:checked').length > 0;
+    document.getElementById('devTrocaEstadoSecao').style.display = algumSelecionado ? '' : 'none';
     Historico.devTrocaAtualizarResumo();
   },
 
@@ -346,7 +363,8 @@ const Historico = {
       document.getElementById('devTrocaBuscaProd').value = '';
       document.getElementById('devTrocaProdGrid').innerHTML = '';
       document.getElementById('devTrocaNovoItemSel').style.display = 'none';
-      // Pré-busca com produto do item devolvido
+      document.getElementById('devTrocaDiferencaSecao').style.display = 'none';
+      document.getElementById('devTrocaCrediarioOpts').style.display = 'none';
       const venda = _devTrocaAtual ? DB.Vendas.buscar(_devTrocaAtual.vendaId) : null;
       if (venda) {
         const primeiroSel = (venda.itens || []).find((_, idx) => {
@@ -399,12 +417,21 @@ const Historico = {
     document.getElementById('devTrocaNovoItemSel').style.display = '';
     document.getElementById('devTrocaProdGrid').innerHTML = '';
     document.getElementById('devTrocaBuscaProd').value = '';
+    document.getElementById('devTrocaDiferencaSecao').style.display = '';
     Historico.devTrocaAtualizarResumo();
   },
 
   devTrocaLimparNovoItem: () => {
     _devTrocaNovoItem = null;
     document.getElementById('devTrocaNovoItemSel').style.display = 'none';
+    document.getElementById('devTrocaDiferencaSecao').style.display = 'none';
+    document.getElementById('devTrocaCrediarioOpts').style.display = 'none';
+    Historico.devTrocaAtualizarResumo();
+  },
+
+  devTrocaFormaChanged: () => {
+    const forma = document.getElementById('devTrocaFormaDiferenca').value;
+    document.getElementById('devTrocaCrediarioOpts').style.display = forma === 'crediario' ? '' : 'none';
     Historico.devTrocaAtualizarResumo();
   },
 
@@ -413,36 +440,136 @@ const Historico = {
     const venda = DB.Vendas.buscar(_devTrocaAtual.vendaId);
     const itens = venda ? venda.itens || [] : [];
     const tipo = document.querySelector('input[name="devTrocaTipo"]:checked').value;
+    _devTrocaEstado = (document.querySelector('input[name="devTrocaEstado"]:checked') || {}).value || 'perfeito';
 
+    // ── Identificação da venda original e taxa configurada ──
+    const vendaFoiCrediario = venda && venda.formaPagamento === 'crediario';
+    const taxa = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const fator = 1 + taxa / 100;
+
+    // totalDev = quanto o cliente REALMENTE pagou pelos itens devolvidos
     let totalDev = 0;
     let countItens = 0;
+    const itensSel = [];
     itens.forEach((item, idx) => {
       const cb = document.getElementById(`devItem${idx}`);
       if (cb && cb.checked) {
         const qtd = parseInt(document.getElementById(`devQtd${idx}`).value) || 1;
-        totalDev += (item.precoUnitario || 0) * qtd;
+        const precoBase = item.precoUnitario || 0;
+        const precoEfetivo = vendaFoiCrediario ? precoBase * fator : precoBase;
+        const sub = Math.round(precoEfetivo * qtd * 100) / 100;
+        totalDev += sub;
         countItens += qtd;
+        itensSel.push({ nome: item.nome, tamanho: item.tamanho, qtd, precoBase, precoEfetivo, sub });
       }
     });
 
     const resumo = document.getElementById('devTrocaResumo');
     if (countItens === 0) { resumo.style.display = 'none'; return; }
 
-    resumo.style.display = '';
     if (tipo === 'devolucao') {
-      resumo.innerHTML = `<strong>${countItens} item(s)</strong> · Reembolso: <strong style="color:var(--danger)">${Utils.moeda(totalDev)}</strong>`;
-    } else {
-      const novoVal = _devTrocaNovoItem ? _devTrocaNovoItem.precoUnitario : 0;
-      const diff = novoVal - totalDev;
-      const diffHtml = novoVal > 0
-        ? diff > 0
-          ? ` · <span style="color:var(--danger)">Cliente paga mais: ${Utils.moeda(diff)}</span>`
-          : diff < 0
-            ? ` · <span style="color:var(--success)">Loja devolve: ${Utils.moeda(-diff)}</span>`
-            : ` · <span style="color:var(--success)">Mesmo valor ✓</span>`
-        : '';
-      resumo.innerHTML = `Devolvendo: <strong>${Utils.moeda(totalDev)}</strong>${_devTrocaNovoItem ? ` → Novo: <strong>${Utils.moeda(novoVal)}</strong>${diffHtml}` : ' · <span class="text-muted">Selecione o novo item acima</span>'}`;
+      const formaReemb = document.getElementById('devTrocaFormaReembolso').value;
+      const formaLabels = { dinheiro: 'Dinheiro', pix: 'PIX', credito_loja: 'Crédito na Loja' };
+      const notaCrediario = vendaFoiCrediario
+        ? `<div style="font-size:11px;color:var(--warning);margin-top:2px">⚠️ Inclui ${taxa}% de acréscimo (compra original no crediário)</div>` : '';
+      resumo.style.display = '';
+      resumo.innerHTML = `
+        <div style="font-weight:700;margin-bottom:6px">📋 RESUMO DA DEVOLUÇÃO</div>
+        <div style="border-top:1px solid var(--border);padding-top:6px">
+          ${itensSel.map(i => `
+            <div style="display:flex;justify-content:space-between">
+              <span>${i.nome}${i.tamanho ? ' · Tam '+i.tamanho.split('||').join(' ') : ''} × ${i.qtd}</span>
+              <span>${Utils.moeda(i.sub)}</span>
+            </div>
+            ${vendaFoiCrediario ? `<div style="font-size:11px;color:var(--text-muted);text-align:right">Preço normal ${Utils.moeda(i.precoBase)} + ${taxa}% = ${Utils.moeda(i.precoEfetivo)}</div>` : ''}`).join('')}
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
+          <div style="display:flex;justify-content:space-between"><span>Estado:</span><span style="font-weight:600;color:${_devTrocaEstado === 'perfeito' ? 'var(--success)' : 'var(--danger)'}">${_devTrocaEstado === 'perfeito' ? '✅ Perfeito — volta ao estoque' : '⚠️ Defeito — NÃO volta ao estoque'}</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px"><span>Total a reembolsar:</span><span style="color:var(--danger)">${Utils.moeda(totalDev)}</span></div>
+          ${notaCrediario}
+          <div style="display:flex;justify-content:space-between"><span>Forma:</span><span>${formaLabels[formaReemb] || formaReemb}</span></div>
+        </div>`;
+      return;
     }
+
+    // ── Troca ──
+    if (!_devTrocaNovoItem) {
+      resumo.style.display = '';
+      resumo.innerHTML = `Devolvendo: <strong>${Utils.moeda(totalDev)}</strong> · <span class="text-muted">Selecione o novo item acima</span>`;
+      return;
+    }
+
+    const formaDif = document.getElementById('devTrocaFormaDiferenca').value;
+    const precoNormalNovo = _devTrocaNovoItem.precoUnitario || 0;
+    // Valor que o cliente vai pagar pelo produto novo (com ou sem 7% conforme forma)
+    const valorAPagarNovo = formaDif === 'crediario'
+      ? Math.round(precoNormalNovo * fator * 100) / 100
+      : precoNormalNovo;
+    // Diferença final = o que vai pagar pelo novo - o que já pagou pelo devolvido
+    const diffFinal = Math.round((valorAPagarNovo - totalDev) * 100) / 100;
+
+    // Acréscimo a mostrar explicitamente só quando forma = crediário E venda original NÃO foi crediário
+    const acrescimoExplicito = formaDif === 'crediario' && !vendaFoiCrediario
+      ? Math.round(precoNormalNovo * (taxa / 100) * 100) / 100 : 0;
+
+    const numParc = parseInt(document.getElementById('devTrocaCredParcelas').value) || 1;
+    const vencCred = document.getElementById('devTrocaCredVenc').value;
+
+    const diffColor = diffFinal > 0 ? 'var(--danger)' : diffFinal < 0 ? 'var(--success)' : 'var(--text)';
+    const diffLabel = diffFinal > 0 ? 'Total a pagar pelo cliente' : diffFinal < 0 ? 'Total a devolver ao cliente' : 'Mesmo valor ✓';
+
+    const formaLabels2 = { dinheiro: '💵 Dinheiro', pix: '📱 PIX', cartao_credito: '💳 Cartão Crédito', cartao_debito: '💳 Cartão Débito', crediario: '📋 Crediário' };
+
+    const estoqueDevol = _devTrocaEstado === 'perfeito'
+      ? `<div style="display:flex;justify-content:space-between"><span>• ${itensSel.map(i=>i.nome).join(', ')} (devolvido):</span><span style="color:var(--success)">+${countItens} un</span></div>`
+      : `<div style="display:flex;justify-content:space-between"><span>• ${itensSel.map(i=>i.nome).join(', ')} (defeito):</span><span style="color:var(--warning)">sem alteração</span></div>`;
+
+    // Nota sobre 7% conforme os 4 casos
+    let notaCrediarioHtml = '';
+    if (formaDif === 'crediario' && vendaFoiCrediario) {
+      notaCrediarioHtml = `<div style="font-size:11px;color:var(--warning);margin-top:4px">⚠️ ${taxa}% NÃO cobrado novamente — já estava na compra original (crediário)</div>`;
+    } else if (formaDif === 'crediario' && !vendaFoiCrediario) {
+      notaCrediarioHtml = `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Preço normal do novo (${Utils.moeda(precoNormalNovo)}) + ${taxa}% = ${Utils.moeda(valorAPagarNovo)}</div>`;
+    } else if (formaDif !== 'crediario' && vendaFoiCrediario) {
+      notaCrediarioHtml = `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Compra original foi crediário (${taxa}% já pago). Novo item cobrado em ${formaLabels2[formaDif]||formaDif} sem acréscimo.</div>`;
+    }
+
+    const credParcsHtml = formaDif === 'crediario' && diffFinal > 0 ? `
+      <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
+        <div style="font-weight:600;margin-bottom:4px">📋 IMPACTO NO CREDIÁRIO:</div>
+        <div>Adicionar ${numParc}x de ${Utils.moeda(Math.abs(diffFinal) / numParc)} vencendo a partir de ${vencCred ? Utils.data(vencCred) : '—'}</div>
+      </div>` : '';
+
+    resumo.style.display = '';
+    resumo.innerHTML = `
+      <div style="font-weight:700;margin-bottom:6px">📋 RESUMO DA TROCA</div>
+      <div style="border-top:1px solid var(--border);padding-top:6px">
+        <div style="display:flex;justify-content:space-between">
+          <span>Produto devolvido:</span>
+          <span>${itensSel.map(i=>`${i.nome}${i.tamanho?' · Tam '+i.tamanho.split('||').join(' '):''}`).join(' / ')} — ${Utils.moeda(totalDev)}${vendaFoiCrediario ? ` <span style="font-size:11px;color:var(--text-muted)">(c/ ${taxa}%)</span>` : ''}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between"><span>Estado:</span><span style="color:${_devTrocaEstado==='perfeito'?'var(--success)':'var(--danger)'}">${_devTrocaEstado==='perfeito'?'✅ Perfeito':'⚠️ Defeito'}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span>Produto novo:</span>
+          <span>${_devTrocaNovoItem.nome}${_devTrocaNovoItem.tamanho?' · Tam '+_devTrocaNovoItem.tamanho.split('||').join(' '):''} — ${Utils.moeda(valorAPagarNovo)}${formaDif==='crediario'?` <span style="font-size:11px;color:var(--text-muted)">(c/ ${taxa}%)</span>`:''}</span>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
+        ${acrescimoExplicito > 0 ? `
+          <div style="display:flex;justify-content:space-between"><span>Preço normal do novo:</span><span>${Utils.moeda(precoNormalNovo)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Acréscimo crediário (${taxa}%):</span><span style="color:var(--warning)">+ ${Utils.moeda(acrescimoExplicito)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Valor do novo no crediário:</span><span>${Utils.moeda(valorAPagarNovo)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Crédito do devolvido:</span><span>− ${Utils.moeda(totalDev)}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px"><span>${diffLabel}:</span><span style="color:${diffColor}">${Utils.moeda(Math.abs(diffFinal))}</span></div>
+        ${notaCrediarioHtml}
+        <div style="display:flex;justify-content:space-between"><span>Forma:</span><span>${formaLabels2[formaDif] || formaDif}</span></div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
+        <div style="font-weight:600;margin-bottom:4px">📦 IMPACTO NO ESTOQUE:</div>
+        ${estoqueDevol}
+        <div style="display:flex;justify-content:space-between"><span>• ${_devTrocaNovoItem.nome}${_devTrocaNovoItem.tamanho?' Tam '+_devTrocaNovoItem.tamanho.split('||').join(' '):''} (saída):</span><span style="color:var(--danger)">−1 un</span></div>
+      </div>
+      ${credParcsHtml}`;
   },
 
   confirmarDevTroca: () => {
@@ -453,48 +580,207 @@ const Historico = {
     const itens = venda.itens || [];
     const tipo = document.querySelector('input[name="devTrocaTipo"]:checked').value;
     const formaReembolso = document.getElementById('devTrocaFormaReembolso').value;
+    const estadoProd = (document.querySelector('input[name="devTrocaEstado"]:checked') || {}).value || 'perfeito';
+    const estadoObs = (document.getElementById('devTrocaEstadoObs').value || '').trim();
 
     const itensDev = [];
     itens.forEach((item, idx) => {
       const cb = document.getElementById(`devItem${idx}`);
       if (cb && cb.checked) {
         const qtd = Math.min(parseInt(document.getElementById(`devQtd${idx}`).value) || 1, item.quantidade || 1);
-        itensDev.push({ idx, nome: item.nome, tamanho: item.tamanho, qtd, precoUnitario: item.precoUnitario || 0 });
+        itensDev.push({ idx, nome: item.nome, tamanho: item.tamanho, qtd, precoUnitario: item.precoUnitario || 0, produtoId: item.produtoId });
       }
     });
 
     if (itensDev.length === 0) { Utils.toast('Selecione ao menos um item', 'warning'); return; }
     if (tipo === 'troca' && !_devTrocaNovoItem) { Utils.toast('Selecione o novo produto/tamanho para troca', 'warning'); return; }
 
-    const valorDevolvido = itensDev.reduce((s, i) => s + i.precoUnitario * i.qtd, 0);
-    const valorNovoItem = tipo === 'troca' ? (_devTrocaNovoItem.precoUnitario || 0) : 0;
-    const diferenca = valorNovoItem - valorDevolvido;
+    // Verificar estoque do produto novo ANTES de qualquer alteração
+    if (tipo === 'troca' && _devTrocaNovoItem) {
+      const prodNovo = DB.Produtos.buscar(_devTrocaNovoItem.produtoId);
+      const tamNovo = _devTrocaNovoItem.tamanho || '';
+      const estoqueNovo = tamNovo
+        ? ((prodNovo && prodNovo.variacoes) ? (prodNovo.variacoes[tamNovo] || 0) : 0)
+        : DB.Produtos.estoqueTotal(prodNovo);
+      if (estoqueNovo <= 0) {
+        Utils.toast(`⚠️ ${_devTrocaNovoItem.nome}${tamNovo ? ' tamanho ' + tamNovo : ''} não tem em estoque. Cadastre o estoque antes de fazer a troca.`, 'error');
+        console.warn('[TROCA] Bloqueado: produto novo sem estoque —', _devTrocaNovoItem);
+        return;
+      }
+    }
 
-    // Restaurar estoque dos itens devolvidos
+    // ── Identificação da venda original (nunca cobrar 7% duas vezes) ──
+    const vendaFoiCrediario = venda.formaPagamento === 'crediario';
+    const taxa = parseFloat(DB.Config.get('taxaCrediario', 10)) || 10;
+    const fator = 1 + taxa / 100;
+    const formaDif = tipo === 'troca' ? document.getElementById('devTrocaFormaDiferenca').value : formaReembolso;
+
+    console.log('[TROCA-CALC] Venda original foi:', vendaFoiCrediario ? 'crediário' : 'à vista');
+    console.log('[TROCA-CALC] Taxa configurada:', taxa, '%');
+
+    // valorDevolvido = quanto o cliente realmente pagou pelos itens devolvidos
+    const valorDevolvido = Math.round(
+      itensDev.reduce((s, i) => {
+        const precoEfetivo = vendaFoiCrediario ? i.precoUnitario * fator : i.precoUnitario;
+        console.log('[TROCA-CALC] Preço normal devolvido:', i.precoUnitario, '— Valor pago devolvido:', Math.round(precoEfetivo * i.qtd * 100) / 100);
+        return s + precoEfetivo * i.qtd;
+      }, 0) * 100) / 100;
+
+    // Preço normal do produto novo (sem acréscimo — sempre base)
+    const precoNormalNovo = tipo === 'troca' ? (_devTrocaNovoItem.precoUnitario || 0) : 0;
+    // Valor que o cliente vai pagar pelo novo conforme forma de pagamento
+    const valorAPagarNovo = tipo === 'troca'
+      ? (formaDif === 'crediario' ? Math.round(precoNormalNovo * fator * 100) / 100 : precoNormalNovo)
+      : 0;
+    // Acréscimo explícito: só existe quando forma = crediário E venda original NÃO foi crediário
+    const acrescimo = tipo === 'troca' && formaDif === 'crediario' && !vendaFoiCrediario
+      ? Math.round(precoNormalNovo * (taxa / 100) * 100) / 100 : 0;
+    // Diferença final = o que vai pagar pelo novo - o que já pagou pelo devolvido
+    const diferenca = Math.round((valorAPagarNovo - valorDevolvido) * 100) / 100;
+
+    console.log('[TROCA-CALC] Forma diferença:', formaDif);
+    console.log('[TROCA-CALC] Preço normal novo:', precoNormalNovo);
+    console.log('[TROCA-CALC] Valor a pagar novo:', valorAPagarNovo);
+    console.log('[TROCA-CALC] Valor pago devolvido (total):', valorDevolvido);
+    console.log('[TROCA-CALC] Diferença final:', diferenca, '| Acréscimo explícito:', acrescimo);
+    console.log('[TROCA] Iniciando —', { tipo, estadoProd, vendaFoiCrediario, valorDevolvido, valorAPagarNovo, diferenca, formaDif });
+
+    // 1. Estoque: produto devolvido volta ao estoque só se "perfeito"
     itensDev.forEach(d => {
       const itemOriginal = itens[d.idx];
       if (itemOriginal && itemOriginal.produtoId) {
-        DB.Produtos.atualizarEstoque(itemOriginal.produtoId, d.tamanho || '', d.qtd);
+        if (estadoProd === 'perfeito') {
+          DB.Produtos.atualizarEstoque(itemOriginal.produtoId, d.tamanho || '', d.qtd);
+          console.log('[TROCA] Estoque restaurado —', itemOriginal.produtoId, d.tamanho, '+' + d.qtd);
+        } else {
+          console.log('[TROCA] Produto com defeito — estoque NÃO restaurado —', itemOriginal.produtoId);
+        }
       }
     });
 
-    // Descontar estoque do novo item (troca)
+    // 2. Estoque: produto novo sai
     if (tipo === 'troca' && _devTrocaNovoItem) {
       DB.Produtos.atualizarEstoque(_devTrocaNovoItem.produtoId, _devTrocaNovoItem.tamanho || '', -1);
+      console.log('[TROCA] Estoque descontado —', _devTrocaNovoItem.produtoId, _devTrocaNovoItem.tamanho, '-1');
     }
 
-    // Registrar devolução na venda
+    // 3. Crediário da diferença (apenas troca com forma crediário e diff positiva)
+    if (tipo === 'troca' && formaDif === 'crediario' && diferenca > 0) {
+      const numParc = Math.max(1, parseInt(document.getElementById('devTrocaCredParcelas').value) || 1);
+      const venc1 = document.getElementById('devTrocaCredVenc').value || Utils.adicionarMeses(Utils.hoje(), 1);
+      const valorParc = parseFloat((diferenca / numParc).toFixed(2));
+
+      // Busca crediário existente da venda original
+      let credExistente = null;
+      if (venda.clienteId) {
+        const creds = DB.Crediario.listar().filter(c => c.vendaId === venda.id);
+        if (creds.length > 0) credExistente = DB.Crediario.buscar(creds[0].id);
+      }
+
+      if (credExistente) {
+        // Adiciona parcelas ao crediário existente
+        const baseNum = credExistente.parcelas.length;
+        let soma = 0;
+        for (let i = 0; i < numParc; i++) {
+          const isUltima = i === numParc - 1;
+          const val = isUltima ? parseFloat((diferenca - soma).toFixed(2)) : valorParc;
+          soma += val;
+          credExistente.parcelas.push({
+            numero: baseNum + i + 1,
+            vencimento: Utils.adicionarMeses(venc1, i),
+            valor: val,
+            status: 'pendente',
+            observacao: 'Adicionada por troca'
+          });
+        }
+        credExistente.total = (credExistente.total || 0) + diferenca;
+        DB.Crediario.salvar(credExistente);
+        console.log('[TROCA] Parcelas adicionadas ao crediário existente —', credExistente.id, numParc, 'parcelas');
+      } else if (venda.clienteId) {
+        // Cria novo crediário
+        const parcelas = [];
+        let soma = 0;
+        for (let i = 0; i < numParc; i++) {
+          const isUltima = i === numParc - 1;
+          const val = isUltima ? parseFloat((diferenca - soma).toFixed(2)) : valorParc;
+          soma += val;
+          parcelas.push({
+            numero: i + 1,
+            vencimento: Utils.adicionarMeses(venc1, i),
+            valor: val,
+            status: 'pendente',
+            observacao: 'Gerada por troca'
+          });
+        }
+        DB.Crediario.salvar({
+          clienteId: venda.clienteId,
+          clienteNome: venda.clienteNome,
+          vendaId: venda.id,
+          total: diferenca,
+          parcelas,
+          origem: 'troca'
+        });
+        console.log('[TROCA] Novo crediário criado para diferença —', venda.clienteId, numParc, 'parcelas');
+      } else {
+        Utils.toast('Cliente não vinculado — diferença em crediário não foi registrada', 'warning');
+        console.warn('[TROCA] Crediário não criado: venda sem clienteId');
+      }
+    }
+
+    // 4. Atualizar histórico: substituir item na venda (guarda trocaDe)
+    if (tipo === 'troca' && _devTrocaNovoItem) {
+      itensDev.forEach(d => {
+        const itemOrig = venda.itens[d.idx];
+        if (!itemOrig) return;
+        const trocaDe = {
+          produtoId: itemOrig.produtoId,
+          nome: itemOrig.nome,
+          tamanho: itemOrig.tamanho,
+          precoUnitario: itemOrig.precoUnitario,
+          dataTroca: new Date().toISOString()
+        };
+        venda.itens[d.idx] = {
+          ...itemOrig,
+          produtoId: _devTrocaNovoItem.produtoId,
+          nome: _devTrocaNovoItem.nome,
+          tamanho: _devTrocaNovoItem.tamanho,
+          precoUnitario: _devTrocaNovoItem.precoUnitario,
+          total: _devTrocaNovoItem.precoUnitario * (itemOrig.quantidade || 1),
+          trocaDe
+        };
+      });
+      // Recalcular subtotal e total da venda
+      const novoSubtotal = Math.round(venda.itens.reduce((s, i) => s + (i.total || 0), 0) * 100) / 100;
+      venda.subtotal = novoSubtotal;
+      if (vendaFoiCrediario) {
+        // Recalcula acréscimo crediário com base no novo subtotal
+        const novoAcrescimo = Math.round(novoSubtotal * (taxa / 100) * 100) / 100;
+        venda.acrescimoCrediario = { pct: taxa, valor: novoAcrescimo };
+        venda.total = Math.round((novoSubtotal + novoAcrescimo) * 100) / 100;
+        console.log('[TROCA] AcrescimoCrediario recalculado — subtotal:', novoSubtotal, '| acrescimo:', novoAcrescimo, '| total:', venda.total);
+      } else {
+        venda.total = novoSubtotal;
+      }
+      console.log('[TROCA] Itens da venda atualizados — novo subtotal:', venda.subtotal);
+    }
+
+    // 5. Registrar devolução na venda
     venda.devolucoes = venda.devolucoes || [];
     venda.devolucoes.push({
       data: new Date().toISOString(),
       tipo,
-      formaReembolso: tipo === 'devolucao' ? formaReembolso : 'vale_troca',
+      formaReembolso: tipo === 'devolucao' ? formaReembolso : formaDif,
       itens: itensDev,
-      valorDevolvido
+      valorDevolvido,
+      estado: estadoProd,
+      observacao: estadoObs || null,
+      novoItem: tipo === 'troca' ? _devTrocaNovoItem : null,
+      diferenca: tipo === 'troca' ? diferenca : null
     });
     DB.Vendas.salvar(venda);
+    console.log('[TROCA] Devolução registrada na venda —', venda.id);
 
-    // Registrar no fluxo de caixa
+    // 6. Registrar no fluxo de caixa
     if (tipo === 'devolucao' && formaReembolso !== 'credito_loja') {
       DB.FluxoCaixa.salvar({
         tipo: 'saida',
@@ -503,39 +789,57 @@ const Historico = {
         categoria: 'devolucao'
       });
     }
+    if (tipo === 'troca' && diferenca < 0) {
+      // Loja deve devolver dinheiro (novo mais barato que devolvido)
+      DB.FluxoCaixa.salvar({
+        tipo: 'saida',
+        descricao: `Troca - Venda #${(venda.id || '').substring(0, 8).toUpperCase()} - devolução diferença`,
+        valor: Math.abs(diferenca),
+        categoria: 'devolucao'
+      });
+    }
 
     Utils.fecharModal('modalDevTroca');
     Historico.render();
 
-    // Imprimir comprovante
-    Historico.imprimirDevTroca(venda, itensDev, tipo, formaReembolso, valorDevolvido, _devTrocaNovoItem, diferenca);
+    Historico.imprimirDevTroca(venda, itensDev, tipo, tipo === 'devolucao' ? formaReembolso : formaDif, valorDevolvido, _devTrocaNovoItem, diferenca, acrescimo, taxa, estadoProd);
 
     Utils.toast(tipo === 'devolucao'
       ? `Devolução de ${Utils.moeda(valorDevolvido)} registrada!`
-      : `Vale-troca de ${Utils.moeda(valorDevolvido)} gerado!`, 'success');
+      : `Troca efetuada!`, 'success');
     _devTrocaAtual = null;
+    _devTrocaNovoItem = null;
   },
 
-  imprimirDevTroca: (venda, itensDev, tipo, formaReembolso, valorDevolvido, novoItem, diferenca) => {
+  imprimirDevTroca: (venda, itensDev, tipo, formaReembolso, valorDevolvido, novoItem, diferenca, acrescimo, taxa, estadoProd) => {
     const linhaH = '='.repeat(40);
     const linhaL = '-'.repeat(40);
     const agora = new Date();
     const dataStr = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    const formas = { dinheiro: 'Dinheiro', pix: 'PIX', credito_loja: 'Crédito na Loja', vale_troca: 'Vale-Troca' };
-    const titulo = tipo === 'devolucao' ? 'COMPROVANTE DE DEVOLUÇÃO' : 'VALE-TROCA';
+    const formas = { dinheiro: 'Dinheiro', pix: 'PIX', credito_loja: 'Crédito na Loja', cartao_credito: 'Cartão Crédito', cartao_debito: 'Cartão Débito', crediario: 'Crediário' };
+    const titulo = tipo === 'devolucao' ? 'COMPROVANTE DE DEVOLUÇÃO' : 'COMPROVANTE DE TROCA';
 
     const linhasItens = itensDev.map(i =>
       `  ${i.nome}${i.tamanho ? ' Tam.'+i.tamanho.split('||').join(' ') : ''}\n  ${i.qtd}x ${Utils.moeda(i.precoUnitario)} = ${Utils.moeda(i.precoUnitario * i.qtd)}`
     ).join('\n');
 
+    const estadoLinha = estadoProd === 'defeito' ? '\n  Estado: COM DEFEITO (não voltou ao estoque)' : '\n  Estado: Perfeito (voltou ao estoque)';
+
     const novoItemLinha = novoItem
       ? `\nNOVO ITEM:\n  ${novoItem.nome}${novoItem.tamanho ? ' Tam.'+novoItem.tamanho.split('||').join(' ') : ''} = ${Utils.moeda(novoItem.precoUnitario)}`
       : '';
 
-    const diferencaLinha = novoItem && diferenca !== 0
-      ? `\n${diferenca > 0 ? `VALOR ADICIONAL COBRADO: ${Utils.moeda(diferenca)}` : `VALOR DEVOLVIDO AO CLIENTE: ${Utils.moeda(-diferenca)}`}`
-      : '';
+    let diferencaLinha = '';
+    if (novoItem && diferenca !== 0) {
+      const diffBase = diferenca - (acrescimo || 0);
+      diferencaLinha = `\nDiferença base: ${Utils.moeda(diffBase)}`;
+      if (acrescimo > 0) diferencaLinha += `\nAcréscimo crediário (${taxa || 10}%): ${Utils.moeda(acrescimo)}`;
+      diferencaLinha += `\n${diferenca > 0 ? `VALOR COBRADO DO CLIENTE: ${Utils.moeda(diferenca)}` : `VALOR DEVOLVIDO AO CLIENTE: ${Utils.moeda(-diferenca)}` }`;
+      diferencaLinha += `\nForma: ${formas[formaReembolso] || formaReembolso}`;
+    } else if (novoItem) {
+      diferencaLinha = '\nMESMO VALOR — sem diferença';
+    }
 
     const texto = `
 ${linhaH}
@@ -547,7 +851,7 @@ Venda Orig.: #${(venda.id || '').toUpperCase().substring(0, 8)}
 ${venda.clienteNome ? `Cliente: ${venda.clienteNome}` : ''}
 ${linhaL}
 ITENS DEVOLVIDOS:
-${linhasItens}
+${linhasItens}${estadoLinha}
 ${novoItemLinha}
 ${linhaL}
 ${tipo === 'devolucao'

@@ -446,32 +446,34 @@ const Estoque = {
     el.innerHTML = html;
   },
 
-  adicionarFotoGaleria: (input) => {
+  adicionarFotoGaleria: async (input) => {
     const file = input.files[0];
     if (!file) return;
     const slot = input.dataset.slot;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxW = 900;
-        const scale = img.width > maxW ? maxW / img.width : 1;
-        const canvas = document.createElement('canvas');
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const b64 = canvas.toDataURL('image/jpeg', 0.80);
+    try {
+      // [COMPRESSAO] Comprime para 800px / 75% JPEG antes de salvar na galeria
+      const b64 = await Utils.comprimirFoto(file);
+      if (slot === 'new') {
+        if (_fotosGaleria.length < 7) _fotosGaleria.push(b64);
+      } else {
+        _fotosGaleria[parseInt(slot)] = b64;
+      }
+      input.value = '';
+      Estoque.renderGaleria();
+    } catch (e) {
+      console.error('[COMPRESSAO] Falha ao comprimir foto da galeria, usando original:', e);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
         if (slot === 'new') {
-          if (_fotosGaleria.length < 7) _fotosGaleria.push(b64);
+          if (_fotosGaleria.length < 7) _fotosGaleria.push(ev.target.result);
         } else {
-          _fotosGaleria[parseInt(slot)] = b64;
+          _fotosGaleria[parseInt(slot)] = ev.target.result;
         }
         input.value = '';
         Estoque.renderGaleria();
       };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    }
   },
 
   removerFotoGaleria: (idx) => {

@@ -485,7 +485,7 @@ const Dashboard = {
     const hoje = Utils.hoje();
     const em7dias = new Date();
     em7dias.setDate(em7dias.getDate() + 7);
-    const ate7dias = em7dias.toISOString().substring(0, 10);
+    const ate7dias = Utils.dataLocal(em7dias); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
 
     const vencendo = [];
     DB.Crediario.listar().forEach(cred => {

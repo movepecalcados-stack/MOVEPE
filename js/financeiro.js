@@ -3315,7 +3315,7 @@ const Fin = {
     for (let i = 1; i <= 3; i++) {
       const d = new Date(hoje + '-01');
       d.setMonth(d.getMonth() + i);
-      const mesProj = d.toISOString().substring(0, 7);
+      const mesProj = Utils.mesLocal(d); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
       // Se o mesmo mês existir no histórico do ano anterior, usa como base
       const mesAnoAnterior = (parseInt(mesProj.substring(0, 4)) - 1) + mesProj.substring(4);
       const baseHistorico = mensal[mesAnoAnterior] ? mensal[mesAnoAnterior].total : mediaUlt3;
@@ -3389,7 +3389,7 @@ const Fin = {
     const sazonalidadeHtml = [1, 2, 3].map(i => {
       const d = new Date(_hoje3 + '-01');
       d.setMonth(d.getMonth() + i);
-      const mesProx = d.toISOString().substring(0, 7);
+      const mesProx = Utils.mesLocal(d); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
       const mesAnoAnt = (parseInt(mesProx.substring(0, 4)) - 1) + mesProx.substring(4);
       const hist = mensal[mesAnoAnt];
       const nomeProx = nomeMes(mesProx);

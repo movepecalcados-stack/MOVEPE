@@ -1005,27 +1005,30 @@ const PDV = {
     Utils.abrirModal('modalFotoPdv');
   },
 
-  selecionarFotoPdv: (input) => {
+  selecionarFotoPdv: async (input) => {
     const file = input.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxW = 900;
-        const scale = img.width > maxW ? maxW / img.width : 1;
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        PDV._fotoPdvBase64 = canvas.toDataURL('image/jpeg', 0.80);
-        document.getElementById('fotoPdvPreviewImg').src = PDV._fotoPdvBase64;
+    try {
+      // [COMPRESSAO] Comprime para 800px / 75% JPEG antes de salvar
+      const comprimida = await Utils.comprimirFoto(file);
+      PDV._fotoPdvBase64 = comprimida;
+      document.getElementById('fotoPdvPreviewImg').src = comprimida;
+      document.getElementById('fotoPdvPreviewBox').style.display = 'block';
+      document.getElementById('fotoPdvUploadZone').style.display = 'none';
+    } catch (e) {
+      console.error('[COMPRESSAO] Falha ao comprimir foto, usando original:', e);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        PDV._fotoPdvBase64 = ev.target.result;
+        document.getElementById('fotoPdvPreviewImg').src = ev.target.result;
         document.getElementById('fotoPdvPreviewBox').style.display = 'block';
         document.getElementById('fotoPdvUploadZone').style.display = 'none';
+        if (ev.target.result.length > 200000) {
+          alert('Atenção: foto muito grande não pôde ser comprimida. Considere usar uma foto menor.');
+        }
       };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    }
   },
 
   removerFotoPdv: () => {
@@ -1068,7 +1071,7 @@ const PDV = {
     // Data padrão do 1º vencimento: próximo mês, mesmo dia de hoje
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    document.getElementById('inputVencimento1').value = nextMonth.toISOString().substring(0, 10);
+    document.getElementById('inputVencimento1').value = Utils.dataLocal(nextMonth); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
 
     _formaPagamento = '';
     document.querySelectorAll('.forma-btn').forEach(b => b.classList.remove('ativo'));
@@ -1135,7 +1138,7 @@ const PDV = {
     if (forma === 'crediario' && !document.getElementById('inputSplitVencimento').value) {
       const nextMonth = new Date();
       nextMonth.setMonth(nextMonth.getMonth() + 1);
-      document.getElementById('inputSplitVencimento').value = nextMonth.toISOString().substring(0, 10);
+      document.getElementById('inputSplitVencimento').value = Utils.dataLocal(nextMonth); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     }
   },
 

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <script>if(localStorage.getItem('movePe_senha')&&!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
+  <script>if(!sessionStorage.getItem('movePe_auth'))location.replace('login.html');</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Clientes — MOVE PÉ</title>
   <link rel="stylesheet" href="css/style.css">
@@ -45,6 +45,7 @@
       <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px" id="clienteAbas">
         <button type="button" class="aba-btn aba-ativa" onclick="ClientesModule.trocarAba('dados')" id="abaDados" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid var(--primary);color:var(--primary);font-weight:600;cursor:pointer">📋 Dados</button>
         <button type="button" class="aba-btn" onclick="ClientesModule.trocarAba('compras')" id="abaCompras" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer" disabled>🛍️ Compras</button>
+        <button type="button" class="aba-btn" onclick="ClientesModule.trocarAba('pagamentos')" id="abaPagamentos" style="padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer" disabled>💳 Pagamentos</button>
       </div>
       <form id="formCliente">
         <div class="form-row">
@@ -153,6 +154,11 @@
       <!-- PAINEL COMPRAS -->
       <div id="painelCompras" style="display:none">
         <div id="listaComprasCliente"></div>
+      </div>
+
+      <!-- PAINEL PAGAMENTOS -->
+      <div id="painelPagamentos" style="display:none">
+        <div id="listaPagamentosCliente"></div>
       </div>
     </div>
   </div>

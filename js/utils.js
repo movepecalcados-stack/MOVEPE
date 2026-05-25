@@ -26,6 +26,38 @@ const Utils = {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   },
 
+  dataLocal: (data) => {
+    if (!data) return '';
+    const d = data instanceof Date ? data : new Date(data);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  },
+
+  mesLocal: (data) => {
+    if (!data) return '';
+    const d = data instanceof Date ? data : new Date(data);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  },
+
+  testarTimezone: () => {
+    const agora = new Date();
+    const local = Utils.hoje();
+    const utc = agora.toISOString().substring(0,10);
+    const localM = Utils.mesLocal(agora);
+    const utcM = agora.toISOString().substring(0,7);
+    console.log('═══ TESTE TIMEZONE ═══');
+    console.log('Hora local:', agora.toLocaleString('pt-BR'));
+    console.log('Hora UTC:  ', agora.toISOString());
+    console.log('Utils.hoje() (local):', local);
+    console.log('toISOString  (UTC):  ', utc);
+    console.log('Match dia? ', local === utc ? '✅ SIM' : '⚠️ DIFERENTE (era o bug)');
+    console.log('Utils.mesLocal:', localM);
+    console.log('toISOString mês:', utcM);
+    console.log('Match mês?', localM === utcM ? '✅ SIM' : '⚠️ DIFERENTE');
+    return { local, utc, match: local === utc };
+  },
+
   fimMes: (mesStr) => {
     // Retorna o último dia do mês no formato YYYY-MM-DD a partir de "YYYY-MM"
     const [ano, mes] = mesStr.split('-').map(Number);
@@ -52,7 +84,7 @@ const Utils = {
   adicionarMeses: (dataStr, meses) => {
     const d = new Date(dataStr + 'T12:00:00');
     d.setMonth(d.getMonth() + meses);
-    return d.toISOString().substring(0, 10);
+    return Utils.dataLocal(d); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
   },
 
   statusParcela: (vencimento, status) => {
@@ -243,7 +275,7 @@ const Utils = {
     const hoje = Utils.hoje();
     const em3dias = new Date();
     em3dias.setDate(em3dias.getDate() + 3);
-    const ate3dias = em3dias.toISOString().substring(0, 10);
+    const ate3dias = Utils.dataLocal(em3dias); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
 
     let count = 0;
     DB.Crediario.listar().forEach(cred => {
@@ -284,7 +316,7 @@ const Utils = {
     const hoje = Utils.hoje();
     const em3dias = new Date();
     em3dias.setDate(em3dias.getDate() + 3);
-    const ate3dias = em3dias.toISOString().substring(0, 10);
+    const ate3dias = Utils.dataLocal(em3dias); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
 
     const atrasadas = [], hoje_ = [], proximas = [];
 
@@ -845,5 +877,74 @@ ${H}
           <div class="chart-value">${Utils.moeda(d.v)}</div>
         </div>`;
     }).join('');
+  },
+
+  // ---- HASH DE FOTO (para deduplicação) ----
+  // Gera impressão digital rápida de uma string base64.
+  // Amostra início + meio + fim para velocidade (não lê tudo).
+  // Retorna "hash_tamanho" — colisão praticamente impossível.
+  hashFoto: (base64) => {
+    if (!base64 || typeof base64 !== 'string' || !base64.startsWith('data:')) return null;
+    const len = base64.length;
+    const mid = Math.floor(len / 2);
+    const amostra = base64.substring(0, 100)
+                  + base64.substring(mid, mid + 100)
+                  + base64.substring(len - 100);
+    let hash = 0;
+    for (let i = 0; i < amostra.length; i++) {
+      hash = ((hash << 5) - hash) + amostra.charCodeAt(i);
+      hash = hash & hash; // 32-bit
+    }
+    return `${hash}_${len}`;
+  },
+
+  // ---- COMPRESSÃO DE FOTO ----
+  // Redimensiona e comprime foto antes de salvar no localStorage.
+  // Aceita base64 (string) ou File/Blob. Retorna Promise<base64>.
+  comprimirFoto: (entrada, opcoes = {}) => {
+    return new Promise((resolve, reject) => {
+      const maxLado   = opcoes.maxLado   || 800;
+      const qualidade = opcoes.qualidade || 0.75;
+      const formato   = opcoes.formato   || 'image/jpeg';
+
+      const processar = (src) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            if (width > height && width > maxLado) {
+              height = Math.round(height * (maxLado / width));
+              width  = maxLado;
+            } else if (height > maxLado) {
+              width  = Math.round(width * (maxLado / height));
+              height = maxLado;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width  = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            const comprimida = canvas.toDataURL(formato, qualidade);
+            const kbOrig  = Math.round((typeof entrada === 'string' ? entrada.length : 0) / 1024);
+            const kbFinal = Math.round(comprimida.length / 1024);
+            const red = kbOrig > 0 ? Math.round((1 - kbFinal / kbOrig) * 100) : 0;
+            console.log(`[COMPRESSAO] ${kbOrig}KB → ${kbFinal}KB (${red}% menor, ${width}×${height}px)`);
+            resolve(comprimida);
+          } catch (e) { reject(e); }
+        };
+        img.onerror = () => reject(new Error('Falha ao carregar imagem'));
+        img.src = src;
+      };
+
+      if (typeof entrada === 'string') {
+        processar(entrada);
+      } else if (entrada instanceof File || entrada instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload  = (e) => processar(e.target.result);
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+        reader.readAsDataURL(entrada);
+      } else {
+        reject(new Error('Formato não suportado'));
+      }
+    });
   }
 };

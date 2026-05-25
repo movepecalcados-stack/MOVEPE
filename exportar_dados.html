@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exportar Dados — Move Pé</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="js/db.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1e3a5f, #2563eb);
+    padding: 20px 30px;
+    display: flex; align-items: center; gap: 15px;
+  }
+  header h1 { font-size: 1.4rem; color: #fff; }
+  header p { font-size: 0.85rem; color: #93c5fd; margin-top: 2px; }
+  .back-btn {
+    background: rgba(255,255,255,0.15); border: none; color: #fff;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.25); }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
+
+  .sync-bar {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 16px 20px; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .sync-dot { width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; }
+  .sync-dot.ok { background: #22c55e; }
+  .sync-dot.err { background: #ef4444; }
+  .sync-dot.pulse { animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  #syncMsg { font-size: 0.9rem; color: #94a3b8; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px; }
+  .card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+    padding: 20px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; align-items: center; gap: 10px; }
+  .card-icon { font-size: 1.5rem; }
+  .card-title { font-size: 0.95rem; font-weight: 600; color: #f1f5f9; }
+  .card-desc { font-size: 0.8rem; color: #64748b; line-height: 1.5; }
+  .card-count { font-size: 0.78rem; color: #38bdf8; background: #0c2340; padding: 3px 8px; border-radius: 6px; display: inline-block; }
+  .btn-download {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border: none; color: #fff; padding: 10px 16px; border-radius: 8px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: all 0.2s; margin-top: auto;
+  }
+  .btn-download:hover { background: linear-gradient(135deg, #1d4ed8, #1e40af); transform: translateY(-1px); }
+  .btn-download:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-all {
+    background: linear-gradient(135deg, #059669, #047857);
+    border: none; color: #fff; padding: 14px 28px; border-radius: 10px;
+    cursor: pointer; font-size: 1rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin: 0 auto 30px; transition: all 0.2s;
+  }
+  .btn-all:hover { background: linear-gradient(135deg, #047857, #065f46); transform: translateY(-1px); }
+  .btn-all:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .info-box {
+    background: #0c2340; border: 1px solid #1e40af; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 24px; font-size: 0.83rem; color: #93c5fd; line-height: 1.7;
+  }
+  .info-box strong { color: #60a5fa; }
+
+  .log-box {
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 14px; font-family: monospace; font-size: 0.78rem; color: #4ade80;
+    max-height: 200px; overflow-y: auto; display: none;
+  }
+  .log-box.show { display: block; }
+  .log-line { margin-bottom: 3px; }
+  .log-line.err { color: #f87171; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-item {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 14px; text-align: center;
+  }
+  .stat-num { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
+  .stat-label { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="dashboard.html" class="back-btn">← Voltar</a>
+  <div>
+    <h1>📤 Exportar Dados — Move Pé Calçados</h1>
+    <p>Todos os dados em CSV separado por ponto-e-vírgula (;) — compatível com Excel</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="sync-bar" style="flex-wrap:wrap; gap:10px;">
+    <div class="sync-dot ok" id="syncDot"></div>
+    <span id="syncMsg" style="flex:1;">✅ Dados locais carregados — prontos para exportar!</span>
+    <button onclick="sincronizarFirebase()" id="btnSync"
+      style="background:#1e40af;border:none;color:#fff;padding:7px 14px;border-radius:7px;cursor:pointer;font-size:0.8rem;white-space:nowrap;">
+      🔄 Atualizar do Firebase
+    </button>
+  </div>
+
+  <div class="info-box">
+    <strong>📋 Formato:</strong> CSV com separador <strong>;</strong> (ponto-e-vírgula) · Codificação UTF-8 BOM (abre direto no Excel)<br>
+    <strong>💡 Dica:</strong> Clique em <em>"Baixar Tudo"</em> para exportar todos os arquivos de uma vez, ou baixe individualmente abaixo.<br>
+    <strong>⚠️ Importante:</strong> Aguarde a sincronização ficar verde antes de exportar.
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-item"><div class="stat-num" id="stClientes">—</div><div class="stat-label">Clientes</div></div>
+    <div class="stat-item"><div class="stat-num" id="stVendas">—</div><div class="stat-label">Vendas</div></div>
+    <div class="stat-item"><div class="stat-num" id="stCrediarios">—</div><div class="stat-label">Crediários</div></div>
+    <div class="stat-item"><div class="stat-num" id="stParcelas">—</div><div class="stat-label">Parcelas Pendentes</div></div>
+    <div class="stat-item"><div class="stat-num" id="stPendente">—</div><div class="stat-label">Valor Pendente</div></div>
+    <div class="stat-item"><div class="stat-num" id="stProdutos">—</div><div class="stat-label">Produtos</div></div>
+  </div>
+
+  <button class="btn-all" id="btnTudo" disabled onclick="baixarTudo()">
+    📦 Baixar Tudo (todos os CSVs)
+  </button>
+
+  <div class="cards" id="cardsArea">
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">👥</span><span class="card-title">Clientes</span></div>
+      <div class="card-desc">Nome, CPF, telefone, e-mail, endereço, data de cadastro, total gasto e número de compras.</div>
+      <span class="card-count" id="cnt-clientes">Carregando...</span>
+      <button class="btn-download" id="btn-clientes" disabled onclick="baixar('clientes')">⬇ Baixar clientes.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">💳</span><span class="card-title">Crediário Pendente</span></div>
+      <div class="card-desc">Apenas parcelas em aberto ou atrasadas — com vencimento, juros acumulados e valor atualizado.</div>
+      <span class="card-count" id="cnt-crediario-pend">Carregando...</span>
+      <button class="btn-download" id="btn-crediario-pend" disabled onclick="baixar('crediario-pend')">⬇ Baixar crediario_pendente.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">📋</span><span class="card-title">Histórico Crediário Completo</span></div>
+      <div class="card-desc">Todas as parcelas (pagas e pendentes) de todos os crediários, com data de pagamento.</div>
+      <span class="card-count" id="cnt-crediario-hist">Carregando...</span>
+      <button class="btn-download" id="btn-crediario-hist" disabled onclick="baixar('crediario-hist')">⬇ Baixar crediario_historico.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">🛒</span><span class="card-title">Vendas (cabeçalho)</span></div>
+      <div class="card-desc">Cada venda com data, cliente, forma de pagamento e total. Uma linha por venda.</div>
+      <span class="card-count" id="cnt-vendas">Carregando...</span>
+      <button class="btn-download" id="btn-vendas" disabled onclick="baixar('vendas')">⬇ Baixar vendas.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">👟</span><span class="card-title">Itens Vendidos (produtos)</span></div>
+      <div class="card-desc">Uma linha por produto vendido: data, cliente, produto, cor, tamanho, quantidade e preço.</div>
+      <span class="card-count" id="cnt-itens">Carregando...</span>
+      <button class="btn-download" id="btn-itens" disabled onclick="baixar('itens')">⬇ Baixar itens_vendidos.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">📅</span><span class="card-title">Vendas por Mês</span></div>
+      <div class="card-desc">Resumo mensal: total de vendas, valor total, por forma de pagamento (dinheiro, cartão, crediário, PIX).</div>
+      <span class="card-count" id="cnt-mes">Carregando...</span>
+      <button class="btn-download" id="btn-mes" disabled onclick="baixar('mes')">⬇ Baixar vendas_por_mes.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">🧾</span><span class="card-title">Relatório por Cliente</span></div>
+      <div class="card-desc">O que cada cliente comprou: produtos, datas, valores pagos e saldo devedor no crediário.</div>
+      <span class="card-count" id="cnt-relatorio">Carregando...</span>
+      <button class="btn-download" id="btn-relatorio" disabled onclick="baixar('relatorio')">⬇ Baixar relatorio_clientes.csv</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-icon">📦</span><span class="card-title">Produtos / Estoque</span></div>
+      <div class="card-desc">Todos os produtos com preço de custo, preço de venda, estoque por cor e tamanho.</div>
+      <span class="card-count" id="cnt-produtos">Carregando...</span>
+      <button class="btn-download" id="btn-produtos" disabled onclick="baixar('produtos')">⬇ Baixar produtos_estoque.csv</button>
+    </div>
+
+  </div>
+
+  <div class="log-box" id="logBox"></div>
+
+</div>
+
+<script>
+// ─── Utilidades CSV ───────────────────────────────────────────────
+const esc = v => {
+  if (v === null || v === undefined) return '';
+  const s = String(v).replace(/"/g, '""');
+  if (s.includes(';') || s.includes('"') || s.includes('\n')) return `"${s}"`;
+  return s;
+};
+const row = arr => arr.map(esc).join(';');
+
+const fmtData = iso => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  } catch(e) { return iso; }
+};
+const fmtDataHora = iso => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  } catch(e) { return iso; }
+};
+const fmtMoeda = v => {
+  const n = parseFloat(v) || 0;
+  return n.toFixed(2).replace('.', ',');
+};
+const mesLabel = iso => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${meses[d.getMonth()]}/${d.getFullYear()}`;
+};
+
+const log = (msg, tipo='ok') => {
+  const box = document.getElementById('logBox');
+  box.classList.add('show');
+  const line = document.createElement('div');
+  line.className = `log-line${tipo==='err'?' err':''}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+};
+
+// ─── Download CSV ─────────────────────────────────────────────────
+const downloadCsv = (filename, csvContent) => {
+  // BOM UTF-8 para o Excel abrir corretamente com acentos
+  const bom = '﻿';
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  log(`✅ Arquivo baixado: ${filename}`);
+};
+
+// ─── Calculadora de Juros (igual ao sistema) ──────────────────────
+const calcJuros = (valorBase, vencimento, carencia = 5, taxaDia = 0.004) => {
+  const hoje = new Date();
+  const venc = new Date(vencimento + 'T00:00:00');
+  const diffMs = hoje - venc;
+  if (diffMs <= 0) return 0;
+  const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (dias <= carencia) return 0;
+  const diasComJuros = dias - carencia;
+  return parseFloat(valorBase) * taxaDia * diasComJuros;
+};
+
+// ─── Geradores de CSV ─────────────────────────────────────────────
+
+// 1. CLIENTES
+function gerarClientes() {
+  const clientes = DB.Clientes.listar();
+  const vendas = DB.Vendas.listar();
+  const crediarios = DB.Crediario.listar();
+
+  const headers = ['ID','Nome','CPF','Telefone','Email','Endereco','Bairro','Cidade','Estado','CEP','Data Cadastro','Total Compras (R$)','Numero de Compras','Ultima Compra','Saldo Devedor Crediario (R$)'];
+  const linhas = [row(headers)];
+
+  clientes.forEach(c => {
+    const vendasCli = vendas.filter(v => v.clienteId === c.id);
+    const totalGasto = vendasCli.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+    const ultimaCompra = vendasCli.length ? vendasCli.sort((a,b)=>b.criadoEm>a.criadoEm?1:-1)[0].criadoEm : '';
+    const creds = crediarios.filter(cr => cr.clienteId === c.id);
+    let saldoDevedor = 0;
+    creds.forEach(cr => {
+      (cr.parcelas || []).forEach(p => {
+        if (p.status !== 'pago') saldoDevedor += parseFloat(p.valor) || 0;
+      });
+    });
+    linhas.push(row([
+      c.id, c.nome, c.cpf||'', c.telefone||'', c.email||'',
+      c.endereco||'', c.bairro||'', c.cidade||'', c.estado||'', c.cep||'',
+      fmtData(c.criadoEm), fmtMoeda(totalGasto),
+      vendasCli.length, fmtData(ultimaCompra), fmtMoeda(saldoDevedor)
+    ]));
+  });
+  return linhas.join('\n');
+}
+
+// 2. CREDIÁRIO PENDENTE
+function gerarCrediarioPendente() {
+  const crediarios = DB.Crediario.listar();
+  const clientes = DB.Clientes.listar();
+  const hoje = new Date().toISOString().split('T')[0];
+
+  const headers = ['ID Crediario','ID Cliente','Cliente','CPF','Telefone','Data da Venda','Total da Venda (R$)','Parcela Num','Total de Parcelas','Vencimento','Dias em Atraso','Valor Original (R$)','Juros (R$)','Valor Atualizado (R$)','Status'];
+  const linhas = [row(headers)];
+
+  crediarios.forEach(cred => {
+    const cli = clientes.find(c => c.id === cred.clienteId);
+    const nParcelas = (cred.parcelas || []).length;
+    (cred.parcelas || []).forEach((p, idx) => {
+      if (p.status === 'pago') return;
+      const diasAtraso = (() => {
+        if (p.vencimento >= hoje) return 0;
+        return Math.floor((new Date() - new Date(p.vencimento + 'T00:00:00')) / (1000 * 60 * 60 * 24));
+      })();
+      const juros = calcJuros(p.valor, p.vencimento);
+      const total = (parseFloat(p.valor) || 0) + juros;
+      const status = diasAtraso === 0 ? 'A vencer' : (diasAtraso <= 5 ? 'Carência' : 'Atrasada');
+      linhas.push(row([
+        cred.id, cred.clienteId||'',
+        cli ? cli.nome : (cred.clienteNome||''),
+        cli ? (cli.cpf||'') : '',
+        cli ? (cli.telefone||'') : '',
+        fmtData(cred.criadoEm), fmtMoeda(cred.total),
+        idx + 1, nParcelas, fmtData(p.vencimento + 'T00:00:00'),
+        diasAtraso, fmtMoeda(p.valor), fmtMoeda(juros), fmtMoeda(total), status
+      ]));
+    });
+  });
+  return linhas.join('\n');
+}
+
+// 3. HISTÓRICO CREDIÁRIO COMPLETO
+function gerarCrediarioHistorico() {
+  const crediarios = DB.Crediario.listar();
+  const clientes = DB.Clientes.listar();
+
+  const headers = ['ID Crediario','ID Venda','Cliente','CPF','Telefone','Data Crediario','Total Venda (R$)','Num Parcelas','Parcela Num','Vencimento','Status','Data Pagamento','Valor (R$)'];
+  const linhas = [row(headers)];
+
+  crediarios.forEach(cred => {
+    const cli = clientes.find(c => c.id === cred.clienteId);
+    const nParcelas = (cred.parcelas || []).length;
+    (cred.parcelas || []).forEach((p, idx) => {
+      linhas.push(row([
+        cred.id, cred.vendaId||'',
+        cli ? cli.nome : (cred.clienteNome||''),
+        cli ? (cli.cpf||'') : '',
+        cli ? (cli.telefone||'') : '',
+        fmtData(cred.criadoEm), fmtMoeda(cred.total),
+        nParcelas, idx + 1,
+        fmtData(p.vencimento + 'T00:00:00'),
+        p.status === 'pago' ? 'Pago' : 'Pendente',
+        p.dataPagamento ? fmtData(p.dataPagamento) : '',
+        fmtMoeda(p.valor)
+      ]));
+    });
+  });
+  return linhas.join('\n');
+}
+
+// 4. VENDAS (cabeçalho)
+function gerarVendas() {
+  const vendas = DB.Vendas.listar();
+  const clientes = DB.Clientes.listar();
+
+  const headers = ['ID Venda','Data','Data Hora','Cliente','CPF','Forma Pagamento','Subtotal (R$)','Desconto (R$)','Total (R$)','Num Itens','Observacao'];
+  const linhas = [row(headers)];
+
+  const sorted = [...vendas].sort((a,b)=> a.criadoEm > b.criadoEm ? -1 : 1);
+  sorted.forEach(v => {
+    const cli = clientes.find(c => c.id === v.clienteId);
+    const numItens = (v.itens || []).reduce((s, i) => s + (parseInt(i.quantidade) || 1), 0);
+    const formaLabel = {
+      dinheiro:'Dinheiro', pix:'PIX', cartao_debito:'Cartão Débito',
+      cartao_credito:'Cartão Crédito', crediario:'Crediário'
+    }[v.formaPagamento] || v.formaPagamento || '';
+    linhas.push(row([
+      v.id, fmtData(v.criadoEm), fmtDataHora(v.criadoEm),
+      cli ? cli.nome : (v.clienteNome||'Sem cliente'),
+      cli ? (cli.cpf||'') : '',
+      formaLabel,
+      fmtMoeda(v.subtotal || v.total),
+      fmtMoeda(v.desconto || 0),
+      fmtMoeda(v.total),
+      numItens,
+      v.observacao || ''
+    ]));
+  });
+  return linhas.join('\n');
+}
+
+// 5. ITENS VENDIDOS
+function gerarItens() {
+  const vendas = DB.Vendas.listar();
+  const clientes = DB.Clientes.listar();
+  const produtos = DB.Produtos.listar();
+
+  const headers = ['ID Venda','Data','Cliente','Produto','Referencia','Cor','Tamanho','Quantidade','Preco Unitario (R$)','Subtotal (R$)','Forma Pagamento'];
+  const linhas = [row(headers)];
+
+  const sorted = [...vendas].sort((a,b)=> a.criadoEm > b.criadoEm ? -1 : 1);
+  sorted.forEach(v => {
+    const cli = clientes.find(c => c.id === v.clienteId);
+    const formaLabel = {
+      dinheiro:'Dinheiro', pix:'PIX', cartao_debito:'Cartão Débito',
+      cartao_credito:'Cartão Crédito', crediario:'Crediário'
+    }[v.formaPagamento] || v.formaPagamento || '';
+    (v.itens || []).forEach(item => {
+      const prod = produtos.find(p => p.id === item.produtoId);
+      const qtd = parseInt(item.quantidade) || 1;
+      const preco = parseFloat(item.precoUnitario || item.preco || 0);
+      linhas.push(row([
+        v.id, fmtData(v.criadoEm),
+        cli ? cli.nome : (v.clienteNome||'Sem cliente'),
+        prod ? prod.nome : (item.nome||item.produtoNome||''),
+        prod ? (prod.referencia||prod.codigo||'') : '',
+        item.cor || '',
+        item.tamanho || '',
+        qtd,
+        fmtMoeda(preco),
+        fmtMoeda(preco * qtd),
+        formaLabel
+      ]));
+    });
+  });
+  return linhas.join('\n');
+}
+
+// 6. VENDAS POR MÊS
+function gerarVendasMes() {
+  const vendas = DB.Vendas.listar();
+  if (!vendas.length) return row(['Mes','Ano','Num Vendas','Total (R$)']);
+
+  const mapa = {};
+  vendas.forEach(v => {
+    if (!v.criadoEm) return;
+    const d = new Date(v.criadoEm);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if (!mapa[key]) mapa[key] = {
+      mes: String(d.getMonth()+1).padStart(2,'0'),
+      ano: d.getFullYear(),
+      label: mesLabel(v.criadoEm),
+      num: 0, total: 0,
+      dinheiro: 0, pix: 0, cartao_debito: 0, cartao_credito: 0, crediario: 0, outros: 0
+    };
+    const m = mapa[key];
+    m.num++;
+    m.total += parseFloat(v.total) || 0;
+    const fp = v.formaPagamento || 'outros';
+    if (fp in m) m[fp] += parseFloat(v.total) || 0;
+    else m.outros += parseFloat(v.total) || 0;
+  });
+
+  const headers = ['Mês','Mês Num','Ano','Num Vendas','Total (R$)','Dinheiro (R$)','PIX (R$)','Cartão Débito (R$)','Cartão Crédito (R$)','Crediário (R$)','Outros (R$)'];
+  const linhas = [row(headers)];
+
+  Object.keys(mapa).sort().forEach(key => {
+    const m = mapa[key];
+    linhas.push(row([
+      m.label, m.mes, m.ano, m.num,
+      fmtMoeda(m.total), fmtMoeda(m.dinheiro), fmtMoeda(m.pix),
+      fmtMoeda(m.cartao_debito), fmtMoeda(m.cartao_credito),
+      fmtMoeda(m.crediario), fmtMoeda(m.outros)
+    ]));
+  });
+  return linhas.join('\n');
+}
+
+// 7. RELATÓRIO POR CLIENTE
+function gerarRelatorioClientes() {
+  const clientes = DB.Clientes.listar();
+  const vendas = DB.Vendas.listar();
+  const crediarios = DB.Crediario.listar();
+
+  const headers = [
+    'Cliente','CPF','Telefone','Email',
+    'Num Compras','Total Compras (R$)','Ticket Medio (R$)','Primeira Compra','Ultima Compra',
+    'Num Crediarios','Parcelas Pagas','Parcelas Pendentes',
+    'Total Pago Crediario (R$)','Saldo Devedor (R$)','Valor com Juros (R$)',
+    'Produto Mais Comprado','Formas Pagamento Usadas'
+  ];
+  const linhas = [row(headers)];
+
+  clientes.forEach(c => {
+    const vendasCli = vendas.filter(v => v.clienteId === c.id);
+    const totalGasto = vendasCli.reduce((s,v)=>s+(parseFloat(v.total)||0), 0);
+    const ticket = vendasCli.length ? totalGasto / vendasCli.length : 0;
+
+    const sorted = [...vendasCli].sort((a,b)=> a.criadoEm < b.criadoEm ? -1 : 1);
+    const primeira = sorted.length ? sorted[0].criadoEm : '';
+    const ultima   = sorted.length ? sorted[sorted.length-1].criadoEm : '';
+
+    // Contagem de produtos
+    const contaProd = {};
+    vendasCli.forEach(v => {
+      (v.itens || []).forEach(item => {
+        const nome = item.nome || item.produtoNome || item.produtoId || '';
+        if (nome) contaProd[nome] = (contaProd[nome] || 0) + (parseInt(item.quantidade) || 1);
+      });
+    });
+    let maisProd = '';
+    let maxQtd = 0;
+    Object.entries(contaProd).forEach(([n,q])=>{ if(q>maxQtd){maxQtd=q;maisProd=n;} });
+
+    // Formas de pagamento
+    const formas = [...new Set(vendasCli.map(v => ({
+      dinheiro:'Dinheiro', pix:'PIX', cartao_debito:'Débito',
+      cartao_credito:'Crédito', crediario:'Crediário'
+    }[v.formaPagamento] || v.formaPagamento || ''))].filter(Boolean)];
+
+    // Crediários
+    const credsCli = crediarios.filter(cr => cr.clienteId === c.id);
+    let parcelasPagas = 0, parcelasPend = 0, totalPago = 0, saldoDevedor = 0, saldoComJuros = 0;
+    credsCli.forEach(cr => {
+      (cr.parcelas || []).forEach(p => {
+        if (p.status === 'pago') {
+          parcelasPagas++;
+          totalPago += parseFloat(p.valor) || 0;
+        } else {
+          parcelasPend++;
+          saldoDevedor += parseFloat(p.valor) || 0;
+          const j = calcJuros(p.valor, p.vencimento);
+          saldoComJuros += (parseFloat(p.valor) || 0) + j;
+        }
+      });
+    });
+
+    linhas.push(row([
+      c.nome, c.cpf||'', c.telefone||'', c.email||'',
+      vendasCli.length, fmtMoeda(totalGasto), fmtMoeda(ticket),
+      fmtData(primeira), fmtData(ultima),
+      credsCli.length, parcelasPagas, parcelasPend,
+      fmtMoeda(totalPago), fmtMoeda(saldoDevedor), fmtMoeda(saldoComJuros),
+      maisProd, formas.join(', ')
+    ]));
+  });
+  return linhas.join('\n');
+}
+
+// 8. PRODUTOS / ESTOQUE
+function gerarProdutos() {
+  const produtos = DB.Produtos.listar();
+
+  const headers = ['ID','Nome','Referencia','Marca','Categoria','Preco Custo (R$)','Preco Venda (R$)','Margem (%)','Estoque Total','Variacoes (Cor/Tamanho e Qtd)','Ativo'];
+  const linhas = [row(headers)];
+
+  produtos.forEach(p => {
+    const custo = parseFloat(p.precoCusto) || 0;
+    const venda = parseFloat(p.precoVenda) || 0;
+    const margem = custo > 0 ? ((venda - custo) / custo * 100) : 0;
+
+    // Estoque total
+    let estoqueTotal = 0;
+    const varStr = [];
+    if (p.variacoes) {
+      Object.entries(p.variacoes).forEach(([chave, qtd]) => {
+        const q = parseInt(qtd) || 0;
+        estoqueTotal += q;
+        if (q > 0) varStr.push(`${chave}:${q}`);
+      });
+    }
+
+    linhas.push(row([
+      p.id, p.nome||'', p.referencia||p.codigo||'',
+      p.marca||'', p.categoria||'',
+      fmtMoeda(custo), fmtMoeda(venda),
+      margem.toFixed(1).replace('.',','),
+      estoqueTotal,
+      varStr.join(' | '),
+      p.ativo === false ? 'Não' : 'Sim'
+    ]));
+  });
+  return linhas.join('\n');
+}
+
+// ─── Mapa de geradores ────────────────────────────────────────────
+const geradores = {
+  'clientes':       { fn: gerarClientes,          file: 'clientes.csv' },
+  'crediario-pend': { fn: gerarCrediarioPendente, file: 'crediario_pendente.csv' },
+  'crediario-hist': { fn: gerarCrediarioHistorico,file: 'crediario_historico.csv' },
+  'vendas':         { fn: gerarVendas,            file: 'vendas.csv' },
+  'itens':          { fn: gerarItens,             file: 'itens_vendidos.csv' },
+  'mes':            { fn: gerarVendasMes,         file: 'vendas_por_mes.csv' },
+  'relatorio':      { fn: gerarRelatorioClientes, file: 'relatorio_clientes.csv' },
+  'produtos':       { fn: gerarProdutos,          file: 'produtos_estoque.csv' }
+};
+
+function baixar(tipo) {
+  try {
+    const { fn, file } = geradores[tipo];
+    const csv = fn();
+    downloadCsv(file, csv);
+  } catch(e) {
+    log(`Erro ao gerar ${tipo}: ${e.message}`, 'err');
+    console.error(e);
+  }
+}
+
+function baixarTudo() {
+  log('Iniciando exportação completa...');
+  let i = 0;
+  const tipos = Object.keys(geradores);
+  const next = () => {
+    if (i >= tipos.length) { log('✅ Exportação completa! Todos os arquivos foram baixados.'); return; }
+    const tipo = tipos[i++];
+    baixar(tipo);
+    setTimeout(next, 600); // pequeno delay entre downloads
+  };
+  next();
+}
+
+// ─── Atualiza contadores ──────────────────────────────────────────
+function atualizarContadores() {
+  try {
+    const clientes  = DB.Clientes.listar();
+    const vendas    = DB.Vendas.listar();
+    const creds     = DB.Crediario.listar();
+    const produtos  = DB.Produtos.listar();
+
+    let parcPend = 0, totalPend = 0;
+    creds.forEach(cr => {
+      (cr.parcelas||[]).forEach(p => {
+        if (p.status !== 'pago') { parcPend++; totalPend += parseFloat(p.valor)||0; }
+      });
+    });
+
+    document.getElementById('stClientes').textContent  = clientes.length;
+    document.getElementById('stVendas').textContent    = vendas.length;
+    document.getElementById('stCrediarios').textContent = creds.length;
+    document.getElementById('stParcelas').textContent  = parcPend;
+    document.getElementById('stPendente').textContent  = 'R$ ' + fmtMoeda(totalPend);
+    document.getElementById('stProdutos').textContent  = produtos.length;
+
+    // Contadores dos cards
+    document.getElementById('cnt-clientes').textContent       = `${clientes.length} clientes`;
+    document.getElementById('cnt-crediario-pend').textContent  = `${parcPend} parcelas pendentes`;
+    document.getElementById('cnt-crediario-hist').textContent  = `${creds.length} crediários`;
+    document.getElementById('cnt-vendas').textContent         = `${vendas.length} vendas`;
+
+    const totalItens = vendas.reduce((s,v)=>s+(v.itens||[]).length, 0);
+    document.getElementById('cnt-itens').textContent          = `${totalItens} itens em ${vendas.length} vendas`;
+
+    // Meses únicos
+    const meses = new Set(vendas.filter(v=>v.criadoEm).map(v=>v.criadoEm.substring(0,7)));
+    document.getElementById('cnt-mes').textContent            = `${meses.size} meses de histórico`;
+    document.getElementById('cnt-relatorio').textContent      = `${clientes.length} clientes`;
+    document.getElementById('cnt-produtos').textContent       = `${produtos.length} produtos`;
+
+    // Habilita botões
+    const btns = document.querySelectorAll('.btn-download, #btnTudo');
+    btns.forEach(b => b.disabled = false);
+
+  } catch(e) {
+    log('Erro ao calcular estatísticas: ' + e.message, 'err');
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────
+// Carrega imediatamente do localStorage — sem esperar Firebase
+document.addEventListener('DOMContentLoaded', () => {
+  atualizarContadores();
+});
+
+// Botão opcional: sincronizar com Firebase antes de exportar
+function sincronizarFirebase() {
+  const dot = document.getElementById('syncDot');
+  const msg = document.getElementById('syncMsg');
+  const btn = document.getElementById('btnSync');
+
+  if (!DB.Sync.isConfigured()) {
+    msg.textContent = '⚠️ Firebase não está configurado neste computador.';
+    return;
+  }
+
+  dot.className = 'sync-dot pulse';
+  msg.textContent = 'Sincronizando com Firebase...';
+  btn.disabled = true;
+  btn.textContent = '⏳ Sincronizando...';
+
+  document.querySelectorAll('.btn-download, #btnTudo').forEach(b => b.disabled = true);
+
+  DB.Sync.init();
+  DB.onReady(() => {
+    dot.className = 'sync-dot ok';
+    msg.textContent = '✅ Sincronizado com Firebase — dados atualizados!';
+    btn.disabled = false;
+    btn.textContent = '🔄 Atualizar do Firebase';
+    atualizarContadores();
+    log('✅ Firebase sincronizado — dados atualizados.');
+  });
+
+  setTimeout(() => {
+    if (!dot.classList.contains('ok')) {
+      dot.className = 'sync-dot err';
+      msg.textContent = '⚠️ Firebase não respondeu — usando dados locais.';
+      btn.disabled = false;
+      btn.textContent = '🔄 Tentar novamente';
+      atualizarContadores();
+    }
+  }, 15000);
+}
+</script>
+</body>
+</html>

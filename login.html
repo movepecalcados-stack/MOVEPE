@@ -20,24 +20,50 @@
       <div class="login-logo-nome">MOVE PÉ</div>
       <div class="login-logo-sub">Gestão de Loja</div>
     </div>
-    <div id="loginErro" class="login-erro">Senha incorreta. Tente novamente.</div>
-    <div class="form-group">
-      <label class="form-label">Senha de acesso</label>
-      <input type="password" id="inputSenha" class="form-control" placeholder="Digite a senha..."
-        autofocus onkeydown="if(event.key==='Enter') Login.entrar()">
+
+    <!-- Formulário: criar senha (primeira vez) -->
+    <div id="boxCriar" style="display:none">
+      <div style="text-align:center;margin-bottom:16px;font-size:13px;color:var(--text-muted)">
+        Nenhuma senha cadastrada. Crie uma senha para proteger o sistema.
+      </div>
+      <div id="criarErro" class="login-erro">As senhas não coincidem.</div>
+      <div class="form-group">
+        <label class="form-label">Nova senha</label>
+        <input type="password" id="inputNova" class="form-control" placeholder="Digite a nova senha..."
+          onkeydown="if(event.key==='Enter') Login.criar()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmar senha</label>
+        <input type="password" id="inputConfirmar" class="form-control" placeholder="Repita a senha..."
+          onkeydown="if(event.key==='Enter') Login.criar()">
+      </div>
+      <button class="btn btn-primary btn-lg btn-full" onclick="Login.criar()" style="margin-top:8px">
+        🔒 Criar senha e entrar
+      </button>
     </div>
-    <button class="btn btn-primary btn-lg btn-full" onclick="Login.entrar()" style="margin-top:8px">
-      🔐 Entrar
-    </button>
+
+    <!-- Formulário: entrar com senha existente -->
+    <div id="boxEntrar" style="display:none">
+      <div id="loginErro" class="login-erro">Senha incorreta. Tente novamente.</div>
+      <div class="form-group">
+        <label class="form-label">Senha de acesso</label>
+        <input type="password" id="inputSenha" class="form-control" placeholder="Digite a senha..."
+          autofocus onkeydown="if(event.key==='Enter') Login.entrar()">
+      </div>
+      <button class="btn btn-primary btn-lg btn-full" onclick="Login.entrar()" style="margin-top:8px">
+        🔐 Entrar
+      </button>
+    </div>
   </div>
 
   <script src="js/db.js"></script>
   <script>
-    // Se não há senha configurada, vai direto ao dashboard
-    if (!localStorage.getItem('movePe_senha')) location.replace('dashboard.html');
-
     // Se já está autenticado, vai direto ao dashboard
     if (sessionStorage.getItem('movePe_auth')) location.replace('dashboard.html');
+
+    const temSenha = !!localStorage.getItem('movePe_senha');
+    document.getElementById(temSenha ? 'boxEntrar' : 'boxCriar').style.display = '';
+    if (!temSenha) document.getElementById('inputNova').focus();
 
     const Login = {
       entrar: () => {
@@ -51,6 +77,20 @@
           document.getElementById('inputSenha').value = '';
           document.getElementById('inputSenha').focus();
         }
+      },
+      criar: () => {
+        const nova = document.getElementById('inputNova').value.trim();
+        const confirmar = document.getElementById('inputConfirmar').value.trim();
+        if (!nova) { document.getElementById('inputNova').focus(); return; }
+        if (nova !== confirmar) {
+          document.getElementById('criarErro').style.display = '';
+          document.getElementById('inputConfirmar').value = '';
+          document.getElementById('inputConfirmar').focus();
+          return;
+        }
+        localStorage.setItem('movePe_senha', nova);
+        sessionStorage.setItem('movePe_auth', '1');
+        location.replace('dashboard.html');
       }
     };
   </script>

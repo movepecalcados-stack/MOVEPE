@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Análise de Pagamentos Crediário — MOVE PÉ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    h1 { font-size: 22px; color: #f87171; margin-bottom: 4px; }
+    .sub { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+
+    /* Banner de resumo */
+    .banner { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .bc { flex: 1; min-width: 140px; border-radius: 12px; padding: 14px 18px; }
+    .bc .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .bc .val { font-size: 28px; font-weight: 900; }
+    .bc-red    { background: #7f1d1d; border: 1px solid #b91c1c; }
+    .bc-red    .lbl { color: #fca5a5; } .bc-red    .val { color: #fff; }
+    .bc-yellow { background: #78350f; border: 1px solid #d97706; }
+    .bc-yellow .lbl { color: #fcd34d; } .bc-yellow .val { color: #fff; }
+    .bc-green  { background: #14532d; border: 1px solid #16a34a; }
+    .bc-green  .lbl { color: #86efac; } .bc-green  .val { color: #fff; }
+    .bc-blue   { background: #1e3a5f; border: 1px solid #3b82f6; }
+    .bc-blue   .lbl { color: #93c5fd; } .bc-blue   .val { color: #fff; }
+
+    /* Seção */
+    .sec { border-radius: 12px; border: 1px solid #334155; margin-bottom: 20px; overflow: hidden; }
+    .sec-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+    .sec-header:hover { filter: brightness(1.1); }
+    .sec-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .badge { display: inline-block; border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+    .badge-red    { background: #7f1d1d; color: #fca5a5; }
+    .badge-yellow { background: #78350f; color: #fcd34d; }
+    .badge-green  { background: #14532d; color: #86efac; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .sec-body { padding: 16px 18px; border-top: 1px solid #334155; }
+
+    /* Tabelas */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: #64748b; font-size: 11px; text-transform: uppercase; padding: 6px 8px;
+         border-bottom: 1px solid #334155; white-space: nowrap; }
+    td { padding: 7px 8px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr.problema td { background: #1a0a0a; }
+    tr.ok td { background: #0a1a10; }
+
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .pill-red    { background: #7f1d1d; color: #fca5a5; }
+    .pill-yellow { background: #78350f; color: #fcd34d; }
+    .pill-green  { background: #14532d; color: #86efac; }
+    .pill-blue   { background: #1e3a5f; color: #93c5fd; }
+    .pill-grey   { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+
+    .danger  { color: #f87171; font-weight: 600; }
+    .warn    { color: #fbbf24; }
+    .ok      { color: #4ade80; }
+    .muted   { color: #64748b; }
+    .mono    { font-family: monospace; font-size: 11px; color: #60a5fa; }
+
+    .note { background: #1e293b; border-left: 3px solid #334155; border-radius: 6px;
+            padding: 10px 14px; font-size: 12px; color: #94a3b8; margin-bottom: 14px; }
+    .note.alerta { border-left-color: #dc2626; color: #fca5a5; background: #1a0909; }
+    .note.ok { border-left-color: #16a34a; color: #86efac; background: #08170e; }
+
+    .empty { padding: 20px; text-align: center; color: #4ade80; font-size: 13px; }
+
+    /* Card de cliente */
+    .cli-card { border: 1px solid #334155; border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+    .cli-header { padding: 12px 16px; background: #1e293b; display: flex; align-items: center; justify-content: space-between; }
+    .cli-nome { font-weight: 700; font-size: 15px; }
+    .cli-body { padding: 14px 16px; }
+
+    /* Print */
+    @media print {
+      body { background: #fff; color: #000; }
+      .btn-area { display: none; }
+    }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 8px;
+           padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-blue { background: #2563eb; color: #fff; }
+    .btn-slate { background: #334155; color: #e2e8f0; }
+    .btn:hover { filter: brightness(1.15); }
+  </style>
+</head>
+<body>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <h1>💳 Análise de Pagamentos de Crediário</h1>
+    <div class="sub">MOVE PÉ CALÇADOS · Gerado em <span id="dataGeracao"></span> · Somente leitura — não altera dados</div>
+  </div>
+  <div class="btn-area" style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-blue" onclick="exportarJSON()">⬇ Exportar JSON</button>
+    <button class="btn btn-slate" onclick="window.print()">🖨 Imprimir / PDF</button>
+  </div>
+</div>
+
+<div id="banner" class="banner" style="display:none"></div>
+<div id="loading" style="text-align:center;padding:60px;color:#64748b">⏳ Analisando dados...</div>
+<div id="app" style="display:none"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/db.js"></script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// UTILITÁRIOS
+// ══════════════════════════════════════════════════════
+const moeda  = v => 'R$ ' + (parseFloat(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const dataFmt = iso => { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('pt-BR'); } catch(e){ return iso; } };
+const dtHrFmt = iso => { if (!iso) return '—'; try { return new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ return iso; } };
+const hoje = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let _exportData = {};
+
+// ══════════════════════════════════════════════════════
+// ANÁLISE PRINCIPAL
+// ══════════════════════════════════════════════════════
+function analisar() {
+  const crediarios  = JSON.parse(localStorage.getItem('movePe_crediario') || '[]');
+  const fluxo       = JSON.parse(localStorage.getItem('movePe_fluxo')     || '[]');
+  const vendas      = JSON.parse(localStorage.getItem('movePe_vendas')    || '[]');
+
+  // ── 1. Todos os pagamentos de crediário no FluxoCaixa ──
+  const pagamentosFluxo = fluxo.filter(f => f.categoria === 'crediario');
+  pagamentosFluxo.sort((a,b) => (a.data||'') < (b.data||'') ? -1 : 1);
+
+  // ── 2. Todas as parcelas pagas nos crediários ──
+  const parcelasPagas = [];
+  const parcelasPendentes = [];
+  crediarios.forEach(c => {
+    (c.parcelas||[]).forEach((p,idx) => {
+      const info = { cred: c, idx, parcela: p };
+      if (p.status === 'pago') parcelasPagas.push(info);
+      else parcelasPendentes.push(info);
+    });
+  });
+
+  // ── 3. Tentativa de casamento: FluxoCaixa → Parcela ──
+  // Estratégia: para cada pagamento no fluxo, tenta encontrar uma parcela
+  // do cliente correspondente que foi paga na mesma data (±1 dia) e mesmo valor
+  const casamentos = pagamentosFluxo.map(f => {
+    const descricao = f.descricao || '';
+    const valor = parseFloat(f.valor) || 0;
+    const dataFluxo = (f.data||'').substring(0,10);
+
+    // Extrai nome do cliente da descrição: "Crediário - NOME - Parcela X/Y..."
+    let clienteNome = '';
+    const match = descricao.match(/^Crediário\s*-\s*(.+?)\s*-\s*(Parcela|Quitação|Abatimento)/i);
+    if (match) clienteNome = match[1].trim();
+
+    // Extrai número da parcela: "Parcela 2/4"
+    let parcelaNum = null;
+    const mParc = descricao.match(/Parcela\s+(\d+)\/(\d+)/i);
+    if (mParc) parcelaNum = parseInt(mParc[1]);
+
+    const eQuitacao = /Quitação/i.test(descricao);
+    const eAbatimento = /Abatimento/i.test(descricao);
+
+    // Busca crediários desse cliente
+    const credsDoCliente = crediarios.filter(c =>
+      (c.clienteNome||'').toLowerCase().trim() === clienteNome.toLowerCase().trim()
+    );
+
+    // Tenta encontrar parcela correspondente (paga ou pendente)
+    let parcelaEncontrada = null;
+    let parcelaStatus = null;
+    let credInfo = null;
+
+    // Procura entre as PAGAS com data próxima e valor igual
+    for (const c of credsDoCliente) {
+      for (const [i, p] of (c.parcelas||[]).entries()) {
+        const dataP = (p.dataPagamento||'').substring(0,10);
+        const valP  = parseFloat(p.valor)||0;
+        const numP  = p.numero || (i+1);
+        const valMatch = Math.abs(valP - valor) < 0.01 || Math.abs(valP - valor) <= valor * 0.05;
+        const numMatch = parcelaNum === null || numP === parcelaNum;
+        const dataMatch = dataP === dataFluxo ||
+          (dataP && dataFluxo && Math.abs(new Date(dataP) - new Date(dataFluxo)) <= 86400000 * 2);
+
+        if (p.status === 'pago' && valMatch && numMatch && dataMatch) {
+          parcelaEncontrada = { cred: c, idx: i, parcela: p };
+          parcelaStatus = 'pago';
+          credInfo = c;
+          break;
+        }
+      }
+      if (parcelaEncontrada) break;
+    }
+
+    // Se não achou entre as pagas, procura entre PENDENTES (possível problema)
+    let candidatosPendentes = [];
+    if (!parcelaEncontrada) {
+      for (const c of credsDoCliente) {
+        for (const [i, p] of (c.parcelas||[]).entries()) {
+          if (p.status === 'pago') continue;
+          const valP  = parseFloat(p.valor)||0;
+          const numP  = p.numero || (i+1);
+          const valMatch = Math.abs(valP - valor) < 0.01 || Math.abs(valP - valor) <= valor * 0.05;
+          const numMatch = parcelaNum === null || numP === parcelaNum;
+          if (valMatch && numMatch) {
+            candidatosPendentes.push({ cred: c, idx: i, parcela: p });
+          }
+        }
+      }
+      if (candidatosPendentes.length > 0) {
+        parcelaStatus = 'pendente_suspeita';
+        parcelaEncontrada = candidatosPendentes[0];
+        credInfo = candidatosPendentes[0].cred;
+      } else {
+        parcelaStatus = 'sem_parcela';
+      }
+    }
+
+    return {
+      fluxo: f,
+      clienteNome,
+      parcelaNum,
+      eQuitacao,
+      eAbatimento,
+      valor,
+      dataFluxo,
+      parcelaEncontrada,
+      candidatosPendentes,
+      parcelaStatus,
+      credInfo
+    };
+  });
+
+  // ── 4. Categoriza resultados ──
+  const pagosCorretos   = casamentos.filter(m => m.parcelaStatus === 'pago');
+  const problemaSuspeit  = casamentos.filter(m => m.parcelaStatus === 'pendente_suspeita');
+  const semParcelaCasar  = casamentos.filter(m => m.parcelaStatus === 'sem_parcela');
+
+  // ── 5. Parcelas pendentes de clientes que TÊM pagamentos no fluxo ──
+  //    → Provável baixa não registrada
+  const clientesComPagamento = new Set(
+    casamentos.filter(m => m.clienteNome).map(m => m.clienteNome.toLowerCase().trim())
+  );
+  const parcelasComProblema = parcelasPendentes.filter(info => {
+    const nome = (info.cred.clienteNome||'').toLowerCase().trim();
+    return clientesComPagamento.has(nome);
+  });
+
+  _exportData = {
+    geradoEm: new Date().toISOString(),
+    resumo: {
+      totalPagamentosFluxo: pagamentosFluxo.length,
+      totalValorFluxo: pagamentosFluxo.reduce((s,f)=>s+(parseFloat(f.valor)||0),0),
+      pagosCorretos: pagosCorretos.length,
+      suspeitos: problemaSuspeit.length,
+      semCasamento: semParcelaCasar.length,
+      parcelasAindaPendentes: parcelasComProblema.length
+    },
+    pagamentosFluxo,
+    pagosCorretos: pagosCorretos.map(m=>({fluxo:m.fluxo,parcela:m.parcelaEncontrada?.parcela,cred:m.credInfo?.id})),
+    suspeitos: problemaSuspeit.map(m=>({fluxo:m.fluxo,candidatos:m.candidatosPendentes.map(c=>({credId:c.cred.id,parcelaIdx:c.idx,vencimento:c.parcela.vencimento,valor:c.parcela.valor}))})),
+    parcelasComProblema: parcelasComProblema.map(i=>({credId:i.cred.id,clienteNome:i.cred.clienteNome,parcelaIdx:i.idx,vencimento:i.parcela.vencimento,valor:i.parcela.valor}))
+  };
+
+  return {
+    crediarios, fluxo, vendas,
+    pagamentosFluxo, casamentos,
+    pagosCorretos, problemaSuspeit, semParcelaCasar,
+    parcelasComProblema
+  };
+}
+
+// ══════════════════════════════════════════════════════
+// RENDERIZAÇÃO
+// ══════════════════════════════════════════════════════
+function render() {
+  const {
+    pagamentosFluxo, casamentos,
+    pagosCorretos, problemaSuspeit, semParcelaCasar,
+    parcelasComProblema, crediarios
+  } = analisar();
+
+  document.getElementById('dataGeracao').textContent = new Date().toLocaleString('pt-BR');
+
+  const totalValor = pagamentosFluxo.reduce((s,f)=>s+(parseFloat(f.valor)||0), 0);
+
+  // Banner
+  document.getElementById('banner').style.display = 'flex';
+  document.getElementById('banner').innerHTML = `
+    <div class="bc ${problemaSuspeit.length > 0 ? 'bc-red' : 'bc-green'}">
+      <div class="lbl">⚠️ Pagamentos Suspeitos</div>
+      <div class="val">${problemaSuspeit.length}</div>
+    </div>
+    <div class="bc bc-yellow">
+      <div class="lbl">📋 Parcelas Afetadas</div>
+      <div class="val">${parcelasComProblema.length}</div>
+    </div>
+    <div class="bc bc-blue">
+      <div class="lbl">💰 Total no FluxoCaixa</div>
+      <div class="val" style="font-size:18px">${moeda(totalValor)}</div>
+    </div>
+    <div class="bc bc-green">
+      <div class="lbl">✅ Baixas OK</div>
+      <div class="val">${pagosCorretos.length}</div>
+    </div>`;
+
+  // Seção 1: Pagamentos suspeitos (fluxo sem baixa correspondente)
+  const htmlS1 = problemaSuspeit.length === 0
+    ? '<div class="empty">✅ Nenhum pagamento suspeito encontrado</div>'
+    : `
+    <div class="note alerta">
+      ⚠️ Esses pagamentos foram registrados no FluxoCaixa (dinheiro entrou no caixa) mas a parcela correspondente no crediário
+      ainda está como <strong>PENDENTE</strong>. Isso indica que o cliente <strong>já pagou</strong> mas a baixa não foi dada.
+    </div>
+    ${renderTabelaSuspeitos(problemaSuspeit)}`;
+
+  // Seção 2: Parcelas pendentes de clientes que têm pagamento registrado
+  const htmlS2 = parcelasComProblema.length === 0
+    ? '<div class="empty">✅ Nenhuma parcela pendente suspeita</div>'
+    : `
+    <div class="note alerta">
+      Essas parcelas ainda estão como PENDENTE mas o cliente <strong>tem pagamentos registrados</strong> no FluxoCaixa.
+      Verifique se essas parcelas já foram pagas e não tiveram a baixa registrada.
+    </div>
+    ${renderParcelasPendentes(parcelasComProblema)}`;
+
+  // Seção 3: Todo o histórico de pagamentos do FluxoCaixa
+  const htmlS3 = renderHistoricoCompleto(casamentos);
+
+  // Seção 4: Sem casamento
+  const htmlS4 = semParcelaCasar.length === 0
+    ? '<div class="empty">✅ Todos os pagamentos foram associados a um cliente</div>'
+    : `
+    <div class="note">
+      Pagamentos no FluxoCaixa com categoria "crediário" onde não foi possível encontrar
+      um cliente ou parcela correspondente nos dados do crediário.
+    </div>
+    ${renderSemCasamento(semParcelaCasar)}`;
+
+  // Seção 5: Todas as parcelas pagas — confirmação
+  const htmlS5 = renderParcelasPagas(crediarios);
+
+  document.getElementById('app').innerHTML = `
+    ${sec('s1', problemaSuspeit.length > 0 ? '#3b0e0e' : '#0f2e1a', '🚨', 'Pagamentos sem baixa registrada (CRÍTICO)', problemaSuspeit.length, problemaSuspeit.length > 0 ? 'badge-red' : 'badge-green', htmlS1)}
+    ${sec('s2', parcelasComProblema.length > 0 ? '#3b2a0e' : '#0f2e1a', '⚠️', 'Parcelas ainda pendentes de clientes com pagamento no caixa', parcelasComProblema.length, parcelasComProblema.length > 0 ? 'badge-yellow' : 'badge-green', htmlS2)}
+    ${sec('s3', '#0f1f3b', '📋', 'Histórico completo de pagamentos de crediário (FluxoCaixa)', pagamentosFluxo.length, 'badge-blue', htmlS3, true)}
+    ${sec('s4', semParcelaCasar.length > 0 ? '#3b2a0e' : '#0f2e1a', '🔍', 'Pagamentos sem parcela correspondente identificada', semParcelaCasar.length, semParcelaCasar.length > 0 ? 'badge-yellow' : 'badge-green', htmlS4)}
+    ${sec('s5', '#0f2e1a', '✅', 'Todas as parcelas pagas com confirmação', pagosCorretos.length, 'badge-green', htmlS5, true)}
+  `;
+}
+
+function sec(id, bg, icone, titulo, contagem, badgeClass, conteudo, colapsado=false) {
+  return `
+  <div class="sec" style="background:${bg}">
+    <div class="sec-header" style="background:${bg}20" onclick="toggleSec('${id}')">
+      <div class="sec-title">
+        <span>${icone}</span>
+        <span>${esc(titulo)}</span>
+        <span class="badge ${badgeClass}">${contagem} ${contagem===1?'item':'itens'}</span>
+      </div>
+      <span id="tog-${id}" style="color:#64748b;font-size:18px">${colapsado?'▶':'▼'}</span>
+    </div>
+    <div class="sec-body" id="body-${id}" style="${colapsado?'display:none':''}">
+      ${conteudo}
+    </div>
+  </div>`;
+}
+
+function toggleSec(id) {
+  const b = document.getElementById('body-'+id);
+  const t = document.getElementById('tog-'+id);
+  const vis = b.style.display !== 'none';
+  b.style.display = vis ? 'none' : '';
+  t.textContent = vis ? '▶' : '▼';
+}
+
+// ── Tabela de suspeitos ──
+function renderTabelaSuspeitos(lista) {
+  if (!lista.length) return '';
+  let html = `<table>
+    <thead><tr>
+      <th>Data do Pgto</th><th>Cliente</th><th>Parcela</th><th>Valor Pago</th>
+      <th>Forma Pgto</th><th>Descrição</th><th>Candidato (pendente)</th>
+    </tr></thead><tbody>`;
+
+  lista.forEach(m => {
+    const cand = m.candidatosPendentes[0] || {};
+    const p = cand.parcela || {};
+    const c = cand.cred || {};
+    html += `<tr class="problema">
+      <td class="danger">${dtHrFmt(m.fluxo.data)}</td>
+      <td><strong>${esc(m.clienteNome||'?')}</strong></td>
+      <td>${m.parcelaNum ? m.parcelaNum + 'ª' : m.eQuitacao ? 'Todas' : '?'}</td>
+      <td style="font-weight:700;color:#fcd34d">${moeda(m.valor)}</td>
+      <td>${esc(m.fluxo.formaPagamento||'—')}</td>
+      <td style="font-size:11px;color:#94a3b8;max-width:200px">${esc((m.fluxo.descricao||'').substring(0,60))}…</td>
+      <td>
+        ${cand.idx !== undefined ? `
+          <span class="pill pill-yellow">Parcela ${(p.numero||cand.idx+1)} — Venc ${dataFmt(p.vencimento)} — ${moeda(p.valor)}</span><br>
+          <span style="font-size:10px;color:#64748b">Cred: ${(c.id||'').substring(0,8).toUpperCase()}</span>
+        ` : '<span class="pill pill-red">Não identificado</span>'}
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+// ── Parcelas pendentes por cliente ──
+function renderParcelasPendentes(lista) {
+  if (!lista.length) return '';
+
+  // Agrupa por cliente
+  const porCliente = {};
+  lista.forEach(info => {
+    const nome = info.cred.clienteNome || '(sem nome)';
+    if (!porCliente[nome]) porCliente[nome] = [];
+    porCliente[nome].push(info);
+  });
+
+  let html = '';
+  Object.entries(porCliente).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([nome, infos]) => {
+    const totalPend = infos.reduce((s,i)=>s+(parseFloat(i.parcela.valor)||0), 0);
+    html += `
+    <div class="cli-card" style="border-color:#d97706">
+      <div class="cli-header" style="background:#3b2a0e">
+        <div>
+          <div class="cli-nome">${esc(nome)}</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px">${infos.length} parcela(s) ainda pendente(s)</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:700;color:#fcd34d;font-size:18px">${moeda(totalPend)}</div>
+          <div style="font-size:11px;color:#94a3b8">total pendente</div>
+        </div>
+      </div>
+      <div class="cli-body">
+        <table>
+          <thead><tr>
+            <th>Cred. ID</th><th>Parcela</th><th>Vencimento</th><th>Valor</th>
+            <th>Status</th><th>Dias Atraso</th>
+          </tr></thead>
+          <tbody>
+            ${infos.map(info => {
+              const p = info.parcela;
+              const diasAtraso = p.vencimento < hoje
+                ? Math.floor((new Date(hoje+'T00:00:00') - new Date(p.vencimento+'T00:00:00')) / 86400000)
+                : 0;
+              return `<tr>
+                <td><span class="mono">${(info.cred.id||'').substring(0,8).toUpperCase()}</span></td>
+                <td>${p.numero || (info.idx+1)}ª de ${info.cred.parcelas.length}</td>
+                <td>${dataFmt(p.vencimento)}</td>
+                <td class="warn">${moeda(p.valor)}</td>
+                <td><span class="pill pill-yellow">⏳ Pendente</span></td>
+                <td class="${diasAtraso > 0 ? 'danger' : 'muted'}">${diasAtraso > 0 ? diasAtraso + ' dias' : 'No prazo'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+  return html;
+}
+
+// ── Histórico completo ──
+function renderHistoricoCompleto(casamentos) {
+  if (!casamentos.length) return '<div class="empty muted">Nenhum pagamento de crediário registrado no FluxoCaixa</div>';
+
+  // Agrupa por cliente
+  const porCliente = {};
+  casamentos.forEach(m => {
+    const nome = m.clienteNome || '(não identificado)';
+    if (!porCliente[nome]) porCliente[nome] = [];
+    porCliente[nome].push(m);
+  });
+
+  let html = `
+  <div class="note">
+    Lista completa de todos os pagamentos de crediário registrados no FluxoCaixa, agrupados por cliente.
+    🟢 Verde = baixa foi dada corretamente. 🔴 Vermelho = pagamento sem baixa correspondente.
+  </div>`;
+
+  Object.entries(porCliente).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([nome, lista]) => {
+    const totalCliente = lista.reduce((s,m)=>s+m.valor, 0);
+    const temProblema = lista.some(m => m.parcelaStatus !== 'pago');
+    html += `
+    <div class="cli-card" style="${temProblema ? 'border-color:#b91c1c' : 'border-color:#16a34a'}">
+      <div class="cli-header" style="${temProblema ? 'background:#3b0e0e' : 'background:#0f2e1a'}">
+        <div>
+          <div class="cli-nome">${esc(nome)}</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px">${lista.length} pagamento(s) registrado(s)</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:700;font-size:18px;color:${temProblema?'#f87171':'#4ade80'}">${moeda(totalCliente)}</div>
+          ${temProblema ? '<div style="font-size:11px;color:#f87171">⚠️ Tem inconsistência</div>' : '<div style="font-size:11px;color:#4ade80">✅ Tudo OK</div>'}
+        </div>
+      </div>
+      <div class="cli-body">
+        <table>
+          <thead><tr>
+            <th>Data</th><th>Parcela</th><th>Valor</th><th>Forma</th><th>Status Baixa</th><th>Parcela no Sistema</th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(m => {
+              const statusHtml = m.parcelaStatus === 'pago'
+                ? '<span class="pill pill-green">✅ Baixa OK</span>'
+                : m.parcelaStatus === 'pendente_suspeita'
+                  ? '<span class="pill pill-red">🚨 SEM BAIXA</span>'
+                  : '<span class="pill pill-grey">? Não casado</span>';
+
+              const parcelaInfo = m.parcelaEncontrada
+                ? `${(m.parcelaEncontrada.parcela.numero||(m.parcelaEncontrada.idx+1))}ª — ${dataFmt(m.parcelaEncontrada.parcela.vencimento)} — ${moeda(m.parcelaEncontrada.parcela.valor)}`
+                : '—';
+
+              const rowClass = m.parcelaStatus === 'pago' ? 'ok' : m.parcelaStatus === 'pendente_suspeita' ? 'problema' : '';
+              return `<tr class="${rowClass}">
+                <td>${dtHrFmt(m.fluxo.data)}</td>
+                <td>${m.parcelaNum ? m.parcelaNum + 'ª' : m.eQuitacao ? 'Quitação' : m.eAbatimento ? 'Abatimento' : '?'}</td>
+                <td style="font-weight:700">${moeda(m.valor)}</td>
+                <td>${esc(m.fluxo.formaPagamento||'—')}</td>
+                <td>${statusHtml}</td>
+                <td style="font-size:11px;color:#94a3b8">${esc(parcelaInfo)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+
+  return html;
+}
+
+// ── Sem casamento ──
+function renderSemCasamento(lista) {
+  if (!lista.length) return '';
+  return `<table>
+    <thead><tr>
+      <th>Data</th><th>Cliente (descrição)</th><th>Valor</th><th>Forma</th><th>Descrição completa</th>
+    </tr></thead>
+    <tbody>
+      ${lista.map(m => `<tr>
+        <td>${dtHrFmt(m.fluxo.data)}</td>
+        <td>${esc(m.clienteNome||'Não identificado')}</td>
+        <td class="warn">${moeda(m.valor)}</td>
+        <td>${esc(m.fluxo.formaPagamento||'—')}</td>
+        <td style="font-size:11px;color:#64748b">${esc(m.fluxo.descricao||'')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ── Parcelas pagas ──
+function renderParcelasPagas(crediarios) {
+  const pagas = [];
+  crediarios.forEach(c => {
+    (c.parcelas||[]).forEach((p,i) => {
+      if (p.status === 'pago') pagas.push({cred:c, idx:i, parcela:p});
+    });
+  });
+
+  if (!pagas.length) return '<div class="empty muted">Nenhuma parcela paga registrada</div>';
+
+  pagas.sort((a,b) => (a.parcela.dataPagamento||'') > (b.parcela.dataPagamento||'') ? -1 : 1);
+
+  return `<table>
+    <thead><tr>
+      <th>Data Pagamento</th><th>Cliente</th><th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Cred. ID</th>
+    </tr></thead>
+    <tbody>
+      ${pagas.map(info => `<tr class="ok">
+        <td class="ok">${dtHrFmt(info.parcela.dataPagamento)}</td>
+        <td>${esc(info.cred.clienteNome||'—')}</td>
+        <td>${(info.parcela.numero||(info.idx+1))}ª de ${info.cred.parcelas.length}</td>
+        <td>${dataFmt(info.parcela.vencimento)}</td>
+        <td class="ok">${moeda(info.parcela.valor)}</td>
+        <td><span class="mono">${(info.cred.id||'').substring(0,8).toUpperCase()}</span></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ── Exportar ──
+function exportarJSON() {
+  const blob = new Blob([JSON.stringify(_exportData, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'analise_pagamentos_crediario_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Boot ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Aguarda DB estar pronto (Firebase)
+  const run = () => {
+    try {
+      render();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display = '';
+    } catch(e) {
+      document.getElementById('loading').innerHTML =
+        `<div style="color:#f87171;padding:20px">❌ Erro ao analisar:<br><pre style="color:#94a3b8;margin-top:8px;font-size:12px">${e.message}\n${e.stack}</pre></div>`;
+    }
+  };
+  if (typeof DB !== 'undefined' && DB.Sync) DB.Sync.init();
+  if (typeof DB !== 'undefined' && DB.onReady) DB.onReady(run);
+  else setTimeout(run, 800);
+});
+</script>
+</body>
+</html>

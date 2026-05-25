@@ -78,7 +78,12 @@ const DB = (() => {
         _collectionsLoaded[col] = false;
         try {
           const unsub = _fbDb.collection('movePe_' + col).onSnapshot((snap) => {
-            const docs = snap.docs.map(d => d.data());
+            const docs = snap.docs.map(d => {
+              const raw = d.data();
+              // [SOLUCAO-A] Sanitiza fotos base64 vindas do Firestore para
+              // evitar que estourem o localStorage durante reconexão
+              return Sync._sanitizeFromFirestore(col, raw);
+            });
             const local = _get(col);
 
             // Se Firestore veio vazio mas localStorage tem dados, envia local → Firestore
@@ -188,6 +193,41 @@ const DB = (() => {
         });
         s.fotosVariacoes = fv;
       }
+      return s;
+    },
+
+    // [SOLUCAO-A] Remove fotos base64 que vieram DO Firestore.
+    // Motivo: fotos base64 antigas salvas no Firestore (de versões anteriores)
+    // não devem voltar pro localStorage e estourar o limite de 5MB.
+    // Fotos válidas (URLs http/https) são preservadas normalmente.
+    _sanitizeFromFirestore: (col, item) => {
+      if (!item || col !== 'produtos') return item;
+      const s = { ...item };
+      let removidas = 0;
+
+      // Remove foto principal se for base64
+      if (s.foto && typeof s.foto === 'string' && s.foto.startsWith('data:')) {
+        delete s.foto;
+        removidas++;
+      }
+
+      // Remove fotos de variações que sejam base64
+      if (s.fotosVariacoes && typeof s.fotosVariacoes === 'object') {
+        const fv = {};
+        Object.entries(s.fotosVariacoes).forEach(([k, v]) => {
+          if (v && typeof v === 'string' && !v.startsWith('data:')) {
+            fv[k] = v;
+          } else if (v && typeof v === 'string' && v.startsWith('data:')) {
+            removidas++;
+          }
+        });
+        s.fotosVariacoes = fv;
+      }
+
+      if (removidas > 0) {
+        console.log('[SOLUCAO-A] Removidas', removidas, 'foto(s) base64 do produto', s.id || '?', 'vinda(s) do Firestore');
+      }
+
       return s;
     },
 
@@ -301,6 +341,14 @@ const DB = (() => {
           delete prod.foto;
         }
       }
+      // [WATCHDOG] Loga alerta se produto está pesado por causa de fotos
+      const _tamFotos = (prod.foto || '').length +
+                        JSON.stringify(prod.fotosVariacoes || {}).length +
+                        JSON.stringify(prod.fotos || []).length;
+      if (_tamFotos > 200000) {
+        console.warn(`[WATCHDOG] Produto "${prod.nome}" tem ${Math.round(_tamFotos / 1024)}KB de fotos — comprimir antes de salvar.`);
+      }
+
       const lista = _get('produtos');
       const idx = lista.findIndex(p => p.id === prod.id);
       prod.atualizadoEm = new Date().toISOString();
@@ -580,9 +628,21 @@ const DB = (() => {
       return true;
     },
 
+    estornarParcela: (credId, parcelaIdx) => {
+      const lista = _get('crediario');
+      const cred = lista.find(c => c.id === credId);
+      if (!cred || !cred.parcelas[parcelaIdx]) return false;
+      if (cred.parcelas[parcelaIdx].status !== 'pago') return false;
+      delete cred.parcelas[parcelaIdx].status;
+      delete cred.parcelas[parcelaIdx].dataPagamento;
+      _set('crediario', lista);
+      Sync.save('crediario', cred);
+      return true;
+    },
+
     // Retorna parcelas em atraso com dados do cliente
     inadimplentes: () => {
-      const hoje = new Date().toISOString().substring(0, 10);
+      const hoje = Utils.hoje(); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
       const clientes = _get('clientes');
       const result = [];
       Crediario.listar().forEach(cred => {
@@ -1034,7 +1094,7 @@ const DB = (() => {
   const backupAutomatico = () => {
     const hoje = typeof Utils !== 'undefined' && Utils.hoje
       ? Utils.hoje()
-      : new Date().toISOString().substring(0, 10);
+      : (() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`; })(); // [TIMEZONE-FIX] usa data local (UTC-3) em vez de UTC
     const chave = P + 'ultimo_backup_auto';
     if (localStorage.getItem(chave) === hoje) {
       console.log('[BACKUP] Backup automático já realizado hoje (' + hoje + ')');

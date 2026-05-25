@@ -60,7 +60,7 @@
 
   <!-- MODAL DEVOLUÇÃO / TROCA -->
   <div class="modal-overlay" id="modalDevTroca" style="display:none">
-    <div class="modal modal-lg" style="max-height:92vh;overflow-y:auto">
+    <div class="modal modal-lg">
       <div class="modal-header">
         <span class="modal-title">🔄 Devolução / Troca</span>
         <button class="modal-close" onclick="Utils.fecharModal('modalDevTroca')">✕</button>
@@ -70,23 +70,6 @@
 
       <div style="font-weight:600;font-size:13px;margin-bottom:8px">Selecione os itens a devolver:</div>
       <div id="devTrocaItens" style="margin-bottom:16px"></div>
-
-      <!-- Estado do produto devolvido -->
-      <div id="devTrocaEstadoSecao" style="display:none;margin-bottom:16px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--card-bg)">
-        <div style="font-weight:600;font-size:13px;margin-bottom:8px">Estado do produto devolvido:</div>
-        <div style="display:flex;gap:16px;margin-bottom:8px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-            <input type="radio" name="devTrocaEstado" value="perfeito" checked onchange="Historico.devTrocaAtualizarResumo()">
-            ✅ Perfeito (volta ao estoque)
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-            <input type="radio" name="devTrocaEstado" value="defeito" onchange="Historico.devTrocaAtualizarResumo()">
-            ⚠️ Com defeito (não volta ao estoque)
-          </label>
-        </div>
-        <input type="text" id="devTrocaEstadoObs" class="form-control" placeholder="Observação sobre o estado (opcional)"
-          style="font-size:12px" oninput="Historico.devTrocaAtualizarResumo()">
-      </div>
 
       <div class="form-group">
         <label class="form-label">Tipo</label>
@@ -103,7 +86,7 @@
       <div id="devTrocaReembolsoSecao">
         <div class="form-group">
           <label class="form-label">Forma de Reembolso</label>
-          <select id="devTrocaFormaReembolso" class="form-control" onchange="Historico.devTrocaAtualizarResumo()">
+          <select id="devTrocaFormaReembolso" class="form-control">
             <option value="dinheiro">💵 Dinheiro</option>
             <option value="pix">📱 PIX</option>
             <option value="credito_loja">🎫 Crédito na Loja</option>
@@ -125,37 +108,9 @@
           <button onclick="Historico.devTrocaLimparNovoItem()"
             style="float:right;background:none;border:none;color:var(--text-muted);cursor:pointer">✕</button>
         </div>
-
-        <!-- Forma de pagamento da diferença (troca) -->
-        <div id="devTrocaDiferencaSecao" style="display:none;margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--card-bg)">
-          <div style="font-weight:600;font-size:13px;margin-bottom:8px">Forma de pagamento da diferença:</div>
-          <select id="devTrocaFormaDiferenca" class="form-control" onchange="Historico.devTrocaFormaChanged()" style="margin-bottom:10px">
-            <option value="dinheiro">💵 Dinheiro</option>
-            <option value="pix">📱 PIX</option>
-            <option value="cartao_credito">💳 Cartão Crédito</option>
-            <option value="cartao_debito">💳 Cartão Débito</option>
-            <option value="crediario">📋 Crediário</option>
-          </select>
-          <!-- Campos crediário -->
-          <div id="devTrocaCrediarioOpts" style="display:none">
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <div class="form-group" style="margin:0;flex:1;min-width:120px">
-                <label class="form-label" style="font-size:12px">Nº de parcelas</label>
-                <input type="number" id="devTrocaCredParcelas" class="form-control" min="1" max="24" value="1"
-                  oninput="Historico.devTrocaAtualizarResumo()">
-              </div>
-              <div class="form-group" style="margin:0;flex:2;min-width:140px">
-                <label class="form-label" style="font-size:12px">Vencimento da 1ª parcela</label>
-                <input type="date" id="devTrocaCredVenc" class="form-control"
-                  oninput="Historico.devTrocaAtualizarResumo()">
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- Resumo visual -->
-      <div id="devTrocaResumo" style="padding:12px;background:var(--primary-dim);border-radius:8px;font-size:13px;margin-bottom:8px;display:none"></div>
+      <div id="devTrocaResumo" style="padding:10px;background:var(--primary-dim);border-radius:8px;font-size:13px;margin-bottom:8px;display:none"></div>
 
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="Utils.fecharModal('modalDevTroca')">Cancelar</button>

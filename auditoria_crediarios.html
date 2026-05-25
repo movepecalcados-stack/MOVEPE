@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditoria Crediários — MOVE PÉ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    h1  { font-size: 22px; color: #f87171; margin-bottom: 2px; }
+    .subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+
+    /* Topo */
+    .topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .btn { display: inline-block; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-blue   { background: #2563eb; color: #fff; }
+    .btn-blue:hover   { background: #1d4ed8; }
+    .btn-slate  { background: #334155; color: #e2e8f0; }
+    .btn-slate:hover  { background: #475569; }
+
+    /* Banner de total */
+    .banner { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .banner-card { flex: 1; min-width: 160px; border-radius: 12px; padding: 16px 20px; }
+    .banner-card .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .banner-card .val { font-size: 32px; font-weight: 900; }
+    .bc-red    { background: #7f1d1d; border: 1px solid #b91c1c; }
+    .bc-red    .lbl { color: #fca5a5; } .bc-red    .val { color: #fff; }
+    .bc-yellow { background: #78350f; border: 1px solid #d97706; }
+    .bc-yellow .lbl { color: #fcd34d; } .bc-yellow .val { color: #fff; }
+    .bc-green  { background: #14532d; border: 1px solid #16a34a; }
+    .bc-green  .lbl { color: #86efac; } .bc-green  .val { color: #fff; }
+    .bc-blue   { background: #1e3a5f; border: 1px solid #3b82f6; }
+    .bc-blue   .lbl { color: #93c5fd; } .bc-blue   .val { color: #fff; }
+
+    /* Seções */
+    .section { border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; overflow: hidden; }
+    .sec-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; cursor: pointer; user-select: none; }
+    .sec-header:hover { filter: brightness(1.1); }
+    .sec-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; }
+    .sec-badge { border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+    .sec-toggle { font-size: 18px; color: #64748b; }
+    .sec-body { padding: 16px 18px; border-top: 1px solid #334155; }
+
+    .sh-red    { background: #3b0e0e; }
+    .sh-yellow { background: #3b2a0e; }
+    .sh-green  { background: #0f2e1a; }
+    .sh-blue   { background: #0f1f3b; }
+    .sb-red    { background: #1a0909; }
+    .sb-yellow { background: #1a1408; }
+    .sb-green  { background: #08170e; }
+    .sb-blue   { background: #090f1e; }
+
+    .badge-red    { background: #7f1d1d; color: #fca5a5; }
+    .badge-yellow { background: #78350f; color: #fcd34d; }
+    .badge-green  { background: #14532d; color: #86efac; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+
+    /* Tabelas */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; color: #64748b; font-size: 11px; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid #334155; white-space: nowrap; }
+    td { padding: 7px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1c2a3a; }
+
+    .mono { font-family: monospace; font-size: 11px; color: #60a5fa; }
+    .danger  { color: #f87171; font-weight: 600; }
+    .warn    { color: #fbbf24; font-weight: 600; }
+    .ok      { color: #4ade80; }
+    .muted   { color: #64748b; }
+
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .pill-red    { background: #7f1d1d; color: #fca5a5; }
+    .pill-yellow { background: #78350f; color: #fcd34d; }
+    .pill-green  { background: #14532d; color: #86efac; }
+    .pill-blue   { background: #1e3a5f; color: #93c5fd; }
+    .pill-grey   { background: #1e293b; color: #94a3b8; }
+
+    .empty { padding: 20px; text-align: center; color: #4ade80; font-size: 13px; }
+    .note  { font-size: 12px; color: #94a3b8; margin-bottom: 10px; padding: 10px 12px; background: #1e293b; border-radius: 6px; border-left: 3px solid #334155; }
+
+    /* Resumo financeiro */
+    .fin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .fin-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; }
+    .fin-card .lbl { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+    .fin-card .val { font-size: 20px; font-weight: 800; }
+    .fin-card .sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+    @media (max-width: 600px) { .banner { flex-direction: column; } }
+  </style>
+</head>
+<body>
+
+<div id="loading" style="text-align:center;padding:60px;color:#64748b">⏳ Executando auditoria...</div>
+<div id="app" style="display:none"></div>
+
+<script>
+// ─── Leitura do localStorage ────────────────────────────────────
+const P = 'movePe_';
+const _get = k => { try { return JSON.parse(localStorage.getItem(P + k) || '[]'); } catch(e) { return []; } };
+const _cfg = (k, d) => { try { return JSON.parse(localStorage.getItem(P + 'config') || '{}')[k] ?? d; } catch(e) { return d; } };
+
+// ─── Utilitários ────────────────────────────────────────────────
+const moeda = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dataFmt = iso => { if (!iso) return '—'; try { const d = new Date(iso); return d.toLocaleDateString('pt-BR'); } catch(e) { return iso; } };
+const dataHoraFmt = iso => { if (!iso) return '—'; try { const d = new Date(iso); return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) { return iso; } };
+const hoje = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+const hojeMs = new Date(hoje + 'T00:00:00').getTime();
+const hojeISO = new Date().toISOString();
+const idCurto = id => (id || '').toUpperCase().substring(0, 8);
+
+let _resultados = {}; // guardado para export JSON
+
+// ─── AUDIT ──────────────────────────────────────────────────────
+function executarAuditoria() {
+  const crediarios  = _get('crediario');
+  const vendas      = _get('vendas');
+  const clientes    = _get('clientes');
+  const taxa        = parseFloat(_cfg('taxaCrediario', 10)) || 10;
+
+  // ── S1: Crediários com total = 0 ou null ──
+  const s1 = crediarios.filter(c => !c.total || parseFloat(c.total) === 0);
+
+  // ── S2: Parcelas pagas com data suspeita ──
+  const s2 = [];
+  crediarios.forEach(c => {
+    (c.parcelas || []).forEach((p, idx) => {
+      if (p.status !== 'pago') return;
+      const venc = p.vencimento || '';
+      const pago = p.dataPagamento || '';
+      const motivos = [];
+
+      if (venc && venc > hoje)                  motivos.push('vencimento no futuro');
+      if (pago && pago > hojeISO)               motivos.push('dataPagamento no futuro');
+      if (pago && venc && pago.substring(0,10) < new Date(new Date(venc + 'T00:00:00').getTime() - 7 * 86400000).toISOString().substring(0,10))
+                                                 motivos.push('pago 7+ dias antes do vencimento (suspeito)');
+
+      if (motivos.length > 0) {
+        s2.push({ cred: c, idx, parcela: p, motivos });
+      }
+    });
+  });
+
+  // ── S3: Parcelas pagas sem dataPagamento ──
+  const s3 = [];
+  crediarios.forEach(c => {
+    (c.parcelas || []).forEach((p, idx) => {
+      if (p.status === 'pago' && !p.dataPagamento) {
+        s3.push({ cred: c, idx, parcela: p });
+      }
+    });
+  });
+
+  // ── S4: Crediários com mesmo vendaId ──
+  const porVenda = {};
+  crediarios.forEach(c => {
+    if (!c.vendaId) return;
+    if (!porVenda[c.vendaId]) porVenda[c.vendaId] = [];
+    porVenda[c.vendaId].push(c);
+  });
+  const s4 = Object.entries(porVenda)
+    .filter(([, lista]) => lista.length > 1)
+    .map(([vendaId, lista]) => {
+      const melhor = lista.reduce((m, c) => {
+        const p = (c.parcelas || []).filter(p => p.status === 'pago').length;
+        return p > ((m.parcelas || []).filter(p => p.status === 'pago').length) ? c : m;
+      }, lista[0]);
+      return { vendaId, lista, melhorId: melhor.id };
+    });
+
+  // ── S5: Vendas crediário sem registro em crediarios ──
+  const vendaIdsCrediario = new Set(crediarios.map(c => c.vendaId).filter(Boolean));
+  const s5 = vendas.filter(v => v.formaPagamento === 'crediario' && v.id && !vendaIdsCrediario.has(v.id));
+
+  // ── S6: Crediários órfãos ──
+  const vendaIds = new Set(vendas.map(v => v.id).filter(Boolean));
+  const s6 = crediarios.filter(c => c.vendaId && !vendaIds.has(c.vendaId));
+
+  // ── S7: Soma de parcelas ≠ total ──
+  const s7 = [];
+  crediarios.forEach(c => {
+    if (!c.parcelas || !c.parcelas.length) return;
+    const soma = c.parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    const diff = Math.abs(soma - (parseFloat(c.total) || 0));
+    if (diff > 0.01) s7.push({ cred: c, soma, total: parseFloat(c.total) || 0, diff });
+  });
+
+  // ── S8: Resumo financeiro ──
+  let totalParcs = 0, qtdPagas = 0, valPagas = 0, qtdPend = 0, valPend = 0, qtdVenc = 0, valVenc = 0;
+  crediarios.forEach(c => {
+    (c.parcelas || []).forEach(p => {
+      totalParcs++;
+      const val = parseFloat(p.valor) || 0;
+      if (p.status === 'pago') { qtdPagas++; valPagas += val; }
+      else {
+        qtdPend++; valPend += val;
+        if ((p.vencimento || '') < hoje) { qtdVenc++; valVenc += val; }
+      }
+    });
+  });
+  const valSuspeito = s2.reduce((s, i) => s + (parseFloat(i.parcela.valor) || 0), 0)
+                    + s3.reduce((s, i) => s + (parseFloat(i.parcela.valor) || 0), 0);
+
+  // ── Totais de inconsistências ──
+  const totalInconsistencias = s1.length + s2.length + s3.length + s4.length + s5.length + s6.length + s7.length;
+
+  _resultados = { geradoEm: new Date().toISOString(), hoje, taxa, s1, s2, s3, s4, s5, s6, s7,
+    resumo: { totalCrediarios: crediarios.length, totalParcelas: totalParcs, qtdPagas, valPagas, qtdPend, valPend, qtdVenc, valVenc, valSuspeito } };
+
+  return { crediarios, vendas, clientes, s1, s2, s3, s4, s5, s6, s7, totalInconsistencias,
+    resumo: _resultados.resumo };
+}
+
+// ─── RENDERIZAÇÃO ───────────────────────────────────────────────
+function secao(id, corSH, corSB, corBadge, icone, titulo, contagem, conteudo) {
+  const zero = contagem === 0;
+  return `
+  <div class="section">
+    <div class="sec-header ${zero ? 'sh-green' : corSH}" onclick="toggleSec('${id}')">
+      <div class="sec-title">
+        <span>${icone}</span>
+        <span>${titulo}</span>
+        <span class="sec-badge ${zero ? 'badge-green' : corBadge}">${contagem} ${contagem === 1 ? 'item' : 'itens'}</span>
+      </div>
+      <span class="sec-toggle" id="tog-${id}">▼</span>
+    </div>
+    <div class="sec-body ${zero ? 'sb-green' : corSB}" id="body-${id}">${conteudo}</div>
+  </div>`;
+}
+
+function toggleSec(id) {
+  const body = document.getElementById('body-' + id);
+  const tog  = document.getElementById('tog-' + id);
+  const vis  = body.style.display !== 'none';
+  body.style.display = vis ? 'none' : '';
+  tog.textContent    = vis ? '▶' : '▼';
+}
+
+function render() {
+  const { crediarios, s1, s2, s3, s4, s5, s6, s7, totalInconsistencias, resumo } = executarAuditoria();
+
+  // ── Banner ──
+  const bannerHtml = `
+  <div class="banner">
+    <div class="banner-card ${totalInconsistencias > 0 ? 'bc-red' : 'bc-green'}">
+      <div class="lbl">🔍 Total de inconsistências</div>
+      <div class="val">${totalInconsistencias}</div>
+    </div>
+    <div class="banner-card bc-blue">
+      <div class="lbl">📋 Crediários</div>
+      <div class="val">${crediarios.length}</div>
+    </div>
+    <div class="banner-card bc-yellow">
+      <div class="lbl">⏳ A receber</div>
+      <div class="val" style="font-size:22px">${moeda(resumo.valPend)}</div>
+    </div>
+    <div class="banner-card bc-green">
+      <div class="lbl">✅ Recebido</div>
+      <div class="val" style="font-size:22px">${moeda(resumo.valPagas)}</div>
+    </div>
+  </div>`;
+
+  // ── S1 ──
+  const htmlS1 = s1.length === 0
+    ? '<div class="empty">✅ Nenhum crediário com valor zerado</div>'
+    : `<table>
+        <thead><tr><th>ID</th><th>Cliente</th><th>Criado em</th><th>Parcelas</th><th>Status parcelas</th></tr></thead>
+        <tbody>${s1.map(c => {
+          const pagas = (c.parcelas||[]).filter(p=>p.status==='pago').length;
+          const pend  = (c.parcelas||[]).filter(p=>p.status!=='pago').length;
+          return `<tr>
+            <td><span class="mono">${idCurto(c.id)}</span></td>
+            <td>${c.clienteNome || '<span class="muted">—</span>'}</td>
+            <td>${dataFmt(c.criadoEm)}</td>
+            <td>${(c.parcelas||[]).length}</td>
+            <td><span class="pill pill-green">${pagas} pagas</span> <span class="pill pill-yellow">${pend} pend.</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+
+  // ── S2 ──
+  const htmlS2 = s2.length === 0
+    ? '<div class="empty">✅ Nenhuma parcela paga com data suspeita</div>'
+    : `<div class="note">Parcelas marcadas como pagas cujas datas são inconsistentes: vencimento futuro, data de pagamento futura, ou pagamento muito antecipado (7+ dias antes do vencimento).</div>
+      <table>
+        <thead><tr><th>Cliente</th><th>Cred. ID</th><th>Parcela</th><th>Vencimento</th><th>Data Pagamento</th><th>Valor</th><th>Motivo</th></tr></thead>
+        <tbody>${s2.map(({cred, idx, parcela, motivos}) => `<tr>
+          <td>${cred.clienteNome || '<span class="muted">—</span>'}</td>
+          <td><span class="mono">${idCurto(cred.id)}</span></td>
+          <td>${parcela.numero || idx+1}/${(cred.parcelas||[]).length}</td>
+          <td class="${parcela.vencimento > hoje ? 'danger' : ''}">${dataFmt(parcela.vencimento)}</td>
+          <td class="${parcela.dataPagamento > hojeISO ? 'danger' : 'warn'}">${dataHoraFmt(parcela.dataPagamento)}</td>
+          <td>${moeda(parcela.valor)}</td>
+          <td>${motivos.map(m => `<span class="pill pill-red">${m}</span>`).join(' ')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+
+  // ── S3 ──
+  const htmlS3 = s3.length === 0
+    ? '<div class="empty">✅ Todas as parcelas pagas têm dataPagamento registrada</div>'
+    : `<div class="note">Parcelas com status = "pago" mas sem dataPagamento. Indica que o status foi alterado diretamente, sem passar pela função pagarParcela().</div>
+      <table>
+        <thead><tr><th>Cliente</th><th>Cred. ID</th><th>Venda ID</th><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr></thead>
+        <tbody>${s3.map(({cred, idx, parcela}) => `<tr>
+          <td>${cred.clienteNome || '<span class="muted">—</span>'}</td>
+          <td><span class="mono">${idCurto(cred.id)}</span></td>
+          <td><span class="mono">${idCurto(cred.vendaId)}</span></td>
+          <td>${parcela.numero || idx+1}/${(cred.parcelas||[]).length}</td>
+          <td>${dataFmt(parcela.vencimento)}</td>
+          <td class="warn">${moeda(parcela.valor)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+
+  // ── S4 ──
+  const htmlS4 = s4.length === 0
+    ? '<div class="empty">✅ Nenhum crediário duplicado por vendaId</div>'
+    : `<div class="note">Múltiplos registros de crediário apontando para a mesma venda. O sistema já faz dedup na listagem, mas os dados duplicados ainda existem no localStorage e podem causar problemas.</div>
+      ${s4.map(({vendaId, lista, melhorId}) => `
+        <div style="background:#1e293b;border-radius:8px;padding:12px;margin-bottom:10px">
+          <div style="margin-bottom:8px;font-size:12px">
+            <strong>Venda:</strong> <span class="mono">${idCurto(vendaId)}</span>
+            &nbsp;·&nbsp; ${lista.length} registros duplicados
+            &nbsp;·&nbsp; <span class="ok">Melhor ID (mais parcelas pagas): <span class="mono">${idCurto(melhorId)}</span></span>
+          </div>
+          <table>
+            <thead><tr><th>ID Crediário</th><th>Cliente</th><th>Criado em</th><th>Total</th><th>Parcelas</th><th>Pagas</th><th>Status</th></tr></thead>
+            <tbody>${lista.map(c => {
+              const pagas = (c.parcelas||[]).filter(p=>p.status==='pago').length;
+              const isMelhor = c.id === melhorId;
+              return `<tr>
+                <td><span class="mono">${idCurto(c.id)}</span> ${isMelhor ? '<span class="pill pill-green">MANTER</span>' : '<span class="pill pill-red">DUPLICADO</span>'}</td>
+                <td>${c.clienteNome || '—'}</td>
+                <td>${dataFmt(c.criadoEm)}</td>
+                <td>${moeda(c.total)}</td>
+                <td>${(c.parcelas||[]).length}</td>
+                <td>${pagas}</td>
+                <td>${pagas === (c.parcelas||[]).length ? '<span class="pill pill-green">Quitado</span>' : '<span class="pill pill-yellow">Aberto</span>'}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>`).join('')}`;
+
+  // ── S5 ──
+  const htmlS5 = s5.length === 0
+    ? '<div class="empty">✅ Todas as vendas de crediário têm registro associado</div>'
+    : `<div class="note">Vendas com formaPagamento = "crediario" que não possuem crediário correspondente. O cliente pode ter ficado sem parcelas registradas.</div>
+      <table>
+        <thead><tr><th>Venda ID</th><th>Cliente</th><th>Data</th><th>Total</th><th>Acréscimo</th></tr></thead>
+        <tbody>${s5.map(v => `<tr>
+          <td><span class="mono">${idCurto(v.id)}</span></td>
+          <td>${v.clienteNome || '<span class="muted">Sem cliente</span>'}</td>
+          <td>${dataFmt(v.criadoEm)}</td>
+          <td class="danger">${moeda(v.total)}</td>
+          <td>${v.acrescimoCrediario ? moeda(v.acrescimoCrediario.valor) + ' (' + (v.acrescimoCrediario.pct||10) + '%)' : '<span class="muted">—</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+
+  // ── S6 ──
+  const htmlS6 = s6.length === 0
+    ? '<div class="empty">✅ Nenhum crediário órfão encontrado</div>'
+    : `<div class="note">Crediários cujo vendaId não corresponde a nenhuma venda existente. A venda pode ter sido excluída ou o ID pode estar incorreto.</div>
+      <table>
+        <thead><tr><th>Cred. ID</th><th>vendaId (inexistente)</th><th>Cliente</th><th>Criado em</th><th>Total</th><th>Parcelas</th><th>Pagas</th></tr></thead>
+        <tbody>${s6.map(c => {
+          const pagas = (c.parcelas||[]).filter(p=>p.status==='pago').length;
+          return `<tr>
+            <td><span class="mono">${idCurto(c.id)}</span></td>
+            <td><span class="mono danger">${idCurto(c.vendaId)}</span></td>
+            <td>${c.clienteNome || '—'}</td>
+            <td>${dataFmt(c.criadoEm)}</td>
+            <td>${moeda(c.total)}</td>
+            <td>${(c.parcelas||[]).length}</td>
+            <td>${pagas}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+
+  // ── S7 ──
+  const htmlS7 = s7.length === 0
+    ? '<div class="empty">✅ Todos os crediários têm soma de parcelas coerente com o total</div>'
+    : `<div class="note">A soma dos valores das parcelas difere do campo "total" do crediário em mais de R$ 0,01. Pode indicar edição manual ou bug de arredondamento.</div>
+      <table>
+        <thead><tr><th>Cred. ID</th><th>Cliente</th><th>Total declarado</th><th>Soma das parcelas</th><th>Diferença</th><th>Parcelas</th></tr></thead>
+        <tbody>${s7.map(({cred, soma, total, diff}) => `<tr>
+          <td><span class="mono">${idCurto(cred.id)}</span></td>
+          <td>${cred.clienteNome || '—'}</td>
+          <td>${moeda(total)}</td>
+          <td>${moeda(soma)}</td>
+          <td class="${diff > 1 ? 'danger' : 'warn'}">${moeda(diff)}</td>
+          <td>${(cred.parcelas||[]).length}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+
+  // ── S8 Resumo financeiro ──
+  const htmlS8 = `
+    <div class="fin-grid">
+      <div class="fin-card">
+        <div class="lbl">Total de crediários</div>
+        <div class="val" style="color:#60a5fa">${crediarios.length}</div>
+      </div>
+      <div class="fin-card">
+        <div class="lbl">Total de parcelas</div>
+        <div class="val" style="color:#60a5fa">${resumo.totalParcelas}</div>
+      </div>
+      <div class="fin-card">
+        <div class="lbl">✅ Pagas</div>
+        <div class="val" style="color:#4ade80">${moeda(resumo.valPagas)}</div>
+        <div class="sub">${resumo.qtdPagas} parcelas</div>
+      </div>
+      <div class="fin-card">
+        <div class="lbl">⏳ Pendentes</div>
+        <div class="val" style="color:#fbbf24">${moeda(resumo.valPend)}</div>
+        <div class="sub">${resumo.qtdPend} parcelas</div>
+      </div>
+      <div class="fin-card">
+        <div class="lbl">🔴 Vencidas</div>
+        <div class="val" style="color:#f87171">${moeda(resumo.valVenc)}</div>
+        <div class="sub">${resumo.qtdVenc} parcelas em atraso</div>
+      </div>
+      <div class="fin-card" style="border-color:${resumo.valSuspeito > 0 ? '#b91c1c' : '#334155'}">
+        <div class="lbl">⚠️ Valor suspeito (S2+S3)</div>
+        <div class="val" style="color:${resumo.valSuspeito > 0 ? '#f87171' : '#4ade80'}">${moeda(resumo.valSuspeito)}</div>
+        <div class="sub">${s2.length + s3.length} parcelas suspeitas</div>
+      </div>
+    </div>`;
+
+  // ── Monta página ──
+  document.getElementById('app').innerHTML = `
+    <div class="topbar">
+      <div>
+        <h1>🔍 Auditoria de Crediários</h1>
+        <div class="subtitle">MOVE PÉ CALÇADOS &nbsp;·&nbsp; Gerado em ${new Date().toLocaleString('pt-BR')} &nbsp;·&nbsp; NÃO MODIFICA DADOS</div>
+      </div>
+      <div>
+        <button class="btn btn-blue" onclick="exportarJSON()">⬇ Exportar JSON</button>
+        <button class="btn btn-slate" onclick="window.print()">🖨 Imprimir / PDF</button>
+      </div>
+    </div>
+
+    ${bannerHtml}
+
+    ${secao('s1','sh-red','sb-red','badge-red','🚫','Crediários com total R$ 0,00 ou nulo', s1.length, htmlS1)}
+    ${secao('s2','sh-red','sb-red','badge-red','📅','Parcelas pagas com data suspeita', s2.length, htmlS2)}
+    ${secao('s3','sh-yellow','sb-yellow','badge-yellow','🕳','Parcelas pagas sem dataPagamento', s3.length, htmlS3)}
+    ${secao('s4','sh-yellow','sb-yellow','badge-yellow','🔁','Crediários duplicados (mesmo vendaId)', s4.length, htmlS4)}
+    ${secao('s5','sh-red','sb-red','badge-red','🔗','Vendas crediário sem registro de parcelas', s5.length, htmlS5)}
+    ${secao('s6','sh-yellow','sb-yellow','badge-yellow','👻','Crediários órfãos (venda inexistente)', s6.length, htmlS6)}
+    ${secao('s7','sh-yellow','sb-yellow','badge-yellow','⚖️','Soma de parcelas ≠ total declarado', s7.length, htmlS7)}
+    ${secao('s8','sh-blue','sb-blue','badge-blue','💰','Resumo financeiro geral', crediarios.length, htmlS8)}
+  `;
+
+  // Colapsa seções sem problema por padrão
+  ['s1','s2','s3','s4','s5','s6','s7'].forEach(id => {
+    const r = _resultados;
+    const contagem = {s1:s1.length,s2:s2.length,s3:s3.length,s4:s4.length,s5:s5.length,s6:s6.length,s7:s7.length}[id];
+    if (contagem === 0) toggleSec(id); // colapsa seções OK
+  });
+}
+
+function exportarJSON() {
+  const blob = new Blob([JSON.stringify(_resultados, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const d    = new Date();
+  a.href     = url;
+  a.download = `auditoria_crediarios_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Boot ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    try {
+      render();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display     = '';
+    } catch(e) {
+      document.getElementById('loading').innerHTML =
+        `<div style="color:#f87171;font-size:14px">❌ Erro ao executar auditoria:<br><pre style="color:#94a3b8;margin-top:8px">${e.message}\n${e.stack}</pre></div>`;
+    }
+  }, 100);
+});
+</script>
+
+<style>
+@media print {
+  .btn { display: none !important; }
+  body { background: #fff; color: #000; }
+  .section { border: 1px solid #ccc; }
+  .sec-body { display: block !important; }
+}
+</style>
+</body>
+</html>
