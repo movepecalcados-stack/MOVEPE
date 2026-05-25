@@ -4,76 +4,82 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Exportar Dados — Move Pé</title>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-
   header {
     background: linear-gradient(135deg, #1e3a5f, #2563eb);
-    padding: 20px 30px;
-    display: flex; align-items: center; gap: 15px;
+    padding: 20px 30px; display: flex; align-items: center; gap: 15px;
   }
   header h1 { font-size: 1.4rem; color: #fff; }
-  header p { font-size: 0.85rem; color: #93c5fd; margin-top: 2px; }
+  header p  { font-size: 0.85rem; color: #93c5fd; margin-top: 2px; }
   .back-btn {
     background: rgba(255,255,255,0.15); border: none; color: #fff;
     padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
     text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
   }
-  .back-btn:hover { background: rgba(255,255,255,0.25); }
-
   .container { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
 
+  /* ── Loading ── */
+  #loading {
+    background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+    padding: 40px; text-align: center;
+  }
+  .spinner {
+    width: 48px; height: 48px; border: 4px solid #334155;
+    border-top-color: #2563eb; border-radius: 50%;
+    animation: spin 0.9s linear infinite; margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadMsg { font-size: 1rem; color: #94a3b8; }
+  #loadSub  { font-size: 0.8rem; color: #475569; margin-top: 8px; }
+  #loadBar  { width: 100%; background: #334155; border-radius: 99px; height: 6px; margin-top: 20px; overflow: hidden; }
+  #loadFill { height: 100%; background: #2563eb; border-radius: 99px; width: 0%; transition: width 0.4s; }
+
+  /* ── Conteúdo principal ── */
+  #main { display: none; }
   .info-box {
     background: #0c2340; border: 1px solid #1e40af; border-radius: 10px;
     padding: 14px 18px; margin-bottom: 24px; font-size: 0.85rem; color: #93c5fd; line-height: 1.8;
   }
   .info-box strong { color: #60a5fa; }
-
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 28px; }
-  .stat-item {
-    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
-    padding: 14px; text-align: center;
-  }
-  .stat-num { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
-  .stat-label { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
-
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .stat-item { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; text-align: center; }
+  .stat-num  { font-size: 1.6rem; font-weight: 700; color: #60a5fa; }
+  .stat-lbl  { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
   .btn-all {
     background: linear-gradient(135deg, #059669, #047857);
     border: none; color: #fff; padding: 14px 28px; border-radius: 10px;
     cursor: pointer; font-size: 1rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    margin: 0 auto 28px; transition: all 0.2s; width: 100%; max-width: 400px;
+    margin: 0 auto 28px; width: 100%; max-width: 400px; transition: all 0.2s;
   }
-  .btn-all:hover { background: linear-gradient(135deg, #047857, #065f46); }
-
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px; }
+  .btn-all:hover { opacity: 0.9; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
   .card {
     background: #1e293b; border: 1px solid #334155; border-radius: 14px;
     padding: 20px; display: flex; flex-direction: column; gap: 10px;
   }
   .card-head { display: flex; align-items: center; gap: 10px; }
-  .card-icon { font-size: 1.5rem; }
+  .card-icon { font-size: 1.4rem; }
   .card-title { font-size: 0.95rem; font-weight: 600; color: #f1f5f9; }
-  .card-desc { font-size: 0.8rem; color: #64748b; line-height: 1.5; }
+  .card-desc  { font-size: 0.8rem; color: #64748b; line-height: 1.5; }
   .card-count { font-size: 0.78rem; color: #38bdf8; background: #0c2340; padding: 3px 8px; border-radius: 6px; display: inline-block; }
   .btn-dl {
     background: linear-gradient(135deg, #2563eb, #1d4ed8);
     border: none; color: #fff; padding: 10px 16px; border-radius: 8px;
-    cursor: pointer; font-size: 0.85rem; font-weight: 600;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: all 0.2s; margin-top: auto;
+    cursor: pointer; font-size: 0.85rem; font-weight: 600; margin-top: auto;
+    display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity 0.2s;
   }
-  .btn-dl:hover { background: linear-gradient(135deg, #1d4ed8, #1e40af); }
-  .btn-dl:active { transform: scale(0.97); }
-
-  #status {
-    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
-    padding: 12px 16px; font-size: 0.82rem; color: #4ade80;
-    font-family: monospace; margin-top: 20px; display: none;
-    max-height: 160px; overflow-y: auto;
+  .btn-dl:hover { opacity: 0.85; }
+  #logBox {
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 10px;
+    padding: 12px; font-family: monospace; font-size: 0.8rem; color: #4ade80;
+    max-height: 160px; overflow-y: auto; display: none; margin-top: 16px;
   }
-  .err { color: #f87171 !important; }
+  .logErr { color: #f87171; }
 </style>
 </head>
 <body>
@@ -82,129 +88,140 @@
   <a href="dashboard.html" class="back-btn">← Voltar</a>
   <div>
     <h1>📤 Exportar Dados — Move Pé Calçados</h1>
-    <p>Arquivos CSV separados por ponto-e-vírgula (;) · Abre direto no Excel</p>
+    <p>Arquivos CSV separados por ; (ponto-e-vírgula) · Abre direto no Excel</p>
   </div>
 </header>
 
 <div class="container">
 
-  <div class="info-box">
-    <strong>Como usar:</strong> Clique em <strong>"Baixar Tudo"</strong> para exportar todos os arquivos de uma vez,
-    ou clique em cada botão individualmente.<br>
-    <strong>Excel:</strong> Dê dois cliques no arquivo CSV baixado — os acentos aparecem corretamente.
+  <!-- Tela de carregamento -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loadMsg">Carregando dados do Firebase...</div>
+    <div id="loadSub">Aguarde, buscando clientes, vendas, crediários e produtos</div>
+    <div id="loadBar"><div id="loadFill"></div></div>
   </div>
 
-  <div class="stats-grid">
-    <div class="stat-item"><div class="stat-num" id="sClientes">—</div><div class="stat-label">Clientes</div></div>
-    <div class="stat-item"><div class="stat-num" id="sVendas">—</div><div class="stat-label">Vendas</div></div>
-    <div class="stat-item"><div class="stat-num" id="sCrediarios">—</div><div class="stat-label">Crediários</div></div>
-    <div class="stat-item"><div class="stat-num" id="sPendentes">—</div><div class="stat-label">Parcelas Pendentes</div></div>
-    <div class="stat-item"><div class="stat-num" id="sValorPend">—</div><div class="stat-label">Valor Pendente</div></div>
-    <div class="stat-item"><div class="stat-num" id="sProdutos">—</div><div class="stat-label">Produtos</div></div>
+  <!-- Conteúdo principal (aparece após carregar) -->
+  <div id="main">
+    <div class="info-box">
+      <strong>Como usar:</strong> Clique em <strong>"📦 Baixar Tudo"</strong> para exportar todos os arquivos de uma vez,
+      ou clique nos botões individuais.<br>
+      <strong>Excel:</strong> Dê dois cliques no arquivo CSV — os acentos aparecem corretamente.
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-item"><div class="stat-num" id="sClientes">0</div><div class="stat-lbl">Clientes</div></div>
+      <div class="stat-item"><div class="stat-num" id="sVendas">0</div><div class="stat-lbl">Vendas</div></div>
+      <div class="stat-item"><div class="stat-num" id="sCrediarios">0</div><div class="stat-lbl">Crediários</div></div>
+      <div class="stat-item"><div class="stat-num" id="sPendentes">0</div><div class="stat-lbl">Parcelas Pendentes</div></div>
+      <div class="stat-item"><div class="stat-num" id="sValorPend">R$ 0</div><div class="stat-lbl">Valor Pendente</div></div>
+      <div class="stat-item"><div class="stat-num" id="sProdutos">0</div><div class="stat-lbl">Produtos</div></div>
+    </div>
+
+    <button class="btn-all" onclick="baixarTudo()">📦 Baixar Tudo (todos os CSVs)</button>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-head"><span class="card-icon">👥</span><span class="card-title">Clientes</span></div>
+        <div class="card-desc">Nome, CPF, telefone, e-mail, endereço, total gasto, nº de compras e saldo devedor.</div>
+        <span class="card-count" id="c1">—</span>
+        <button class="btn-dl" onclick="baixar('clientes')">⬇ clientes.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">💳</span><span class="card-title">Crediário Pendente</span></div>
+        <div class="card-desc">Somente parcelas em aberto ou atrasadas, com vencimento e juros calculados.</div>
+        <span class="card-count" id="c2">—</span>
+        <button class="btn-dl" onclick="baixar('cred_pend')">⬇ crediario_pendente.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">📋</span><span class="card-title">Histórico Crediário Completo</span></div>
+        <div class="card-desc">Todas as parcelas (pagas e pendentes) com data de pagamento.</div>
+        <span class="card-count" id="c3">—</span>
+        <button class="btn-dl" onclick="baixar('cred_hist')">⬇ crediario_historico.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">🛒</span><span class="card-title">Vendas</span></div>
+        <div class="card-desc">Cada venda: data, cliente, forma de pagamento e total.</div>
+        <span class="card-count" id="c4">—</span>
+        <button class="btn-dl" onclick="baixar('vendas')">⬇ vendas.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">👟</span><span class="card-title">Itens Vendidos</span></div>
+        <div class="card-desc">Um produto por linha: produto, cor, tamanho, quantidade, preço.</div>
+        <span class="card-count" id="c5">—</span>
+        <button class="btn-dl" onclick="baixar('itens')">⬇ itens_vendidos.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">📅</span><span class="card-title">Vendas por Mês</span></div>
+        <div class="card-desc">Resumo mensal por forma de pagamento (dinheiro, PIX, cartão, crediário).</div>
+        <span class="card-count" id="c6">—</span>
+        <button class="btn-dl" onclick="baixar('por_mes')">⬇ vendas_por_mes.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">🧾</span><span class="card-title">Relatório por Cliente</span></div>
+        <div class="card-desc">Compras, ticket médio, crediário e produto favorito de cada cliente.</div>
+        <span class="card-count" id="c7">—</span>
+        <button class="btn-dl" onclick="baixar('rel_cliente')">⬇ relatorio_clientes.csv</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-icon">📦</span><span class="card-title">Produtos / Estoque</span></div>
+        <div class="card-desc">Preço de custo, venda, margem e estoque por cor/tamanho.</div>
+        <span class="card-count" id="c8">—</span>
+        <button class="btn-dl" onclick="baixar('produtos')">⬇ produtos_estoque.csv</button>
+      </div>
+    </div>
+
+    <div id="logBox"></div>
   </div>
-
-  <button class="btn-all" onclick="baixarTudo()">📦 Baixar Tudo (todos os CSVs)</button>
-
-  <div class="cards">
-    <div class="card">
-      <div class="card-head"><span class="card-icon">👥</span><span class="card-title">Clientes</span></div>
-      <div class="card-desc">Nome, CPF, telefone, e-mail, endereço, total gasto, nº de compras e saldo devedor.</div>
-      <span class="card-count" id="c1">—</span>
-      <button class="btn-dl" onclick="baixar('clientes')">⬇ clientes.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">💳</span><span class="card-title">Crediário Pendente</span></div>
-      <div class="card-desc">Somente parcelas em aberto ou atrasadas, com vencimento e juros calculados.</div>
-      <span class="card-count" id="c2">—</span>
-      <button class="btn-dl" onclick="baixar('cred_pend')">⬇ crediario_pendente.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">📋</span><span class="card-title">Histórico Crediário Completo</span></div>
-      <div class="card-desc">Todas as parcelas (pagas e pendentes) com data de pagamento.</div>
-      <span class="card-count" id="c3">—</span>
-      <button class="btn-dl" onclick="baixar('cred_hist')">⬇ crediario_historico.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">🛒</span><span class="card-title">Vendas</span></div>
-      <div class="card-desc">Cada venda: data, cliente, forma de pagamento e total.</div>
-      <span class="card-count" id="c4">—</span>
-      <button class="btn-dl" onclick="baixar('vendas')">⬇ vendas.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">👟</span><span class="card-title">Itens Vendidos</span></div>
-      <div class="card-desc">Um produto por linha: produto, cor, tamanho, quantidade, preço.</div>
-      <span class="card-count" id="c5">—</span>
-      <button class="btn-dl" onclick="baixar('itens')">⬇ itens_vendidos.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">📅</span><span class="card-title">Vendas por Mês</span></div>
-      <div class="card-desc">Resumo mensal por forma de pagamento (dinheiro, PIX, cartão, crediário).</div>
-      <span class="card-count" id="c6">—</span>
-      <button class="btn-dl" onclick="baixar('por_mes')">⬇ vendas_por_mes.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">🧾</span><span class="card-title">Relatório por Cliente</span></div>
-      <div class="card-desc">Compras, ticket médio, crediário e produto favorito de cada cliente.</div>
-      <span class="card-count" id="c7">—</span>
-      <button class="btn-dl" onclick="baixar('rel_cliente')">⬇ relatorio_clientes.csv</button>
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-icon">📦</span><span class="card-title">Produtos / Estoque</span></div>
-      <div class="card-desc">Preço de custo, venda, margem e estoque por cor/tamanho.</div>
-      <span class="card-count" id="c8">—</span>
-      <button class="btn-dl" onclick="baixar('produtos')">⬇ produtos_estoque.csv</button>
-    </div>
-  </div>
-
-  <div id="status"></div>
 </div>
 
 <script>
-// ── Leitura direta do localStorage (sem dependências externas) ─────
-const LS = {
-  get: key => { try { return JSON.parse(localStorage.getItem('movePe_' + key) || '[]'); } catch(e) { return []; } }
-};
+// ═══════════════════════════════════════════════════════════════
+// DADOS — carregados do Firebase ou localStorage
+// ═══════════════════════════════════════════════════════════════
+let DADOS = { clientes:[], vendas:[], crediario:[], produtos:[] };
 
-// ── Formatações ───────────────────────────────────────────────────
+// ─── Utilidades CSV ────────────────────────────────────────────
+const esc = v => {
+  const s = (v === null || v === undefined) ? '' : String(v);
+  return (s.includes(';') || s.includes('"') || s.includes('\n'))
+    ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const linha = arr => arr.map(esc).join(';');
+
 const fmtData = iso => {
   if (!iso) return '';
   try {
     const d = new Date(iso);
+    if (isNaN(d)) return '';
     return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
   } catch(e) { return ''; }
 };
 const fmtMoeda = v => (parseFloat(v) || 0).toFixed(2).replace('.', ',');
-const esc = v => {
-  const s = (v === null || v === undefined) ? '' : String(v);
-  return (s.includes(';') || s.includes('"') || s.includes('\n'))
-    ? '"' + s.replace(/"/g, '""') + '"'
-    : s;
-};
-const linha = arr => arr.map(esc).join(';');
 const formaLabel = f => ({ dinheiro:'Dinheiro', pix:'PIX', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', crediario:'Crediário' }[f] || f || '');
-
 const calcJuros = (valor, venc) => {
-  const dias = Math.floor((new Date() - new Date(venc + 'T00:00:00')) / 86400000);
+  if (!venc) return 0;
+  const dias = Math.floor((Date.now() - new Date(venc + 'T00:00:00').getTime()) / 86400000);
   if (dias <= 5) return 0;
   return (parseFloat(valor) || 0) * 0.004 * (dias - 5);
 };
 
-// ── Log ────────────────────────────────────────────────────────────
+// ─── Log ───────────────────────────────────────────────────────
 const log = (msg, err) => {
-  const el = document.getElementById('status');
+  const el = document.getElementById('logBox');
   el.style.display = 'block';
   const d = document.createElement('div');
   d.textContent = msg;
-  if (err) d.classList.add('err');
+  if (err) d.classList.add('logErr');
   el.appendChild(d);
   el.scrollTop = el.scrollHeight;
 };
 
-// ── Download CSV ───────────────────────────────────────────────────
+// ─── Download CSV ──────────────────────────────────────────────
 const baixarCsv = (nome, conteudo) => {
   try {
-    const BOM = '﻿';
-    const blob = new Blob([BOM + conteudo], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['﻿' + conteudo], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -212,71 +229,66 @@ const baixarCsv = (nome, conteudo) => {
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 3000);
     log('✅ Baixado: ' + nome);
   } catch(e) {
-    log('❌ Erro ao baixar ' + nome + ': ' + e.message, true);
+    log('❌ Erro: ' + e.message, true);
   }
 };
 
-// ── Geradores ──────────────────────────────────────────────────────
-
+// ═══════════════════════════════════════════════════════════════
+// GERADORES DE CSV
+// ═══════════════════════════════════════════════════════════════
 function csvClientes() {
-  const clientes = LS.get('clientes');
-  const vendas   = LS.get('vendas');
-  const creds    = LS.get('crediario');
+  const { clientes, vendas, crediario } = DADOS;
   const cab = ['ID','Nome','CPF','Telefone','Email','Endereco','Bairro','Cidade','Estado','CEP','Data Cadastro','Num Compras','Total Compras R$','Ultima Compra','Saldo Devedor R$'];
   const rows = [linha(cab)];
   clientes.forEach(c => {
     const vc = vendas.filter(v => v.clienteId === c.id);
-    const total = vc.reduce((s,v)=>s+(parseFloat(v.total)||0),0);
-    const ultima = vc.sort((a,b)=>b.criadoEm>a.criadoEm?1:-1)[0]?.criadoEm || '';
+    const total = vc.reduce((s,v)=>s+(parseFloat(v.total)||0), 0);
+    const ultima = vc.length ? [...vc].sort((a,b)=>b.criadoEm>a.criadoEm?1:-1)[0].criadoEm : '';
     let saldo = 0;
-    creds.filter(cr=>cr.clienteId===c.id).forEach(cr=>(cr.parcelas||[]).forEach(p=>{ if(p.status!=='pago') saldo+=parseFloat(p.valor)||0; }));
-    rows.push(linha([c.id,c.nome,c.cpf||'',c.telefone||'',c.email||'',c.endereco||'',c.bairro||'',c.cidade||'',c.estado||'',c.cep||'',fmtData(c.criadoEm),vc.length,fmtMoeda(total),fmtData(ultima),fmtMoeda(saldo)]));
+    crediario.filter(cr=>cr.clienteId===c.id).forEach(cr=>(cr.parcelas||[]).forEach(p=>{ if(p.status!=='pago') saldo+=parseFloat(p.valor)||0; }));
+    rows.push(linha([c.id,c.nome||'',c.cpf||'',c.telefone||'',c.email||'',c.endereco||'',c.bairro||'',c.cidade||'',c.estado||'',c.cep||'',fmtData(c.criadoEm),vc.length,fmtMoeda(total),fmtData(ultima),fmtMoeda(saldo)]));
   });
   return rows.join('\n');
 }
 
-function csvCrediarioPendente() {
-  const creds   = LS.get('crediario');
-  const clientes = LS.get('clientes');
+function csvCredPendente() {
+  const { crediario, clientes } = DADOS;
   const hoje = new Date().toISOString().split('T')[0];
   const cab = ['ID Crediario','Cliente','CPF','Telefone','Data Venda','Total Venda R$','Parcela','Total Parcelas','Vencimento','Dias Atraso','Valor Original R$','Juros R$','Valor Atualizado R$','Status'];
   const rows = [linha(cab)];
-  creds.forEach(cr => {
+  crediario.forEach(cr => {
     const cli = clientes.find(c=>c.id===cr.clienteId);
     const np = (cr.parcelas||[]).length;
     (cr.parcelas||[]).forEach((p,i) => {
       if (p.status==='pago') return;
-      const dias = p.vencimento < hoje ? Math.floor((new Date()-new Date(p.vencimento+'T00:00:00'))/86400000) : 0;
+      const dias = p.vencimento && p.vencimento < hoje ? Math.floor((Date.now()-new Date(p.vencimento+'T00:00:00').getTime())/86400000) : 0;
       const j = calcJuros(p.valor, p.vencimento);
       const st = dias===0?'A vencer':dias<=5?'Carência':'Atrasada';
-      rows.push(linha([cr.id,cli?cli.nome:(cr.clienteNome||''),cli?(cli.cpf||''):'',cli?(cli.telefone||''):'',fmtData(cr.criadoEm),fmtMoeda(cr.total),i+1,np,fmtData(p.vencimento+'T00:00:00'),dias,fmtMoeda(p.valor),fmtMoeda(j),fmtMoeda((parseFloat(p.valor)||0)+j),st]));
+      rows.push(linha([cr.id,cli?cli.nome:(cr.clienteNome||''),cli?(cli.cpf||''):'',cli?(cli.telefone||''):'',fmtData(cr.criadoEm),fmtMoeda(cr.total),i+1,np,p.vencimento?fmtData(p.vencimento+'T00:00:00'):'',dias,fmtMoeda(p.valor),fmtMoeda(j),fmtMoeda((parseFloat(p.valor)||0)+j),st]));
     });
   });
   return rows.join('\n');
 }
 
-function csvCrediarioHistorico() {
-  const creds   = LS.get('crediario');
-  const clientes = LS.get('clientes');
+function csvCredHistorico() {
+  const { crediario, clientes } = DADOS;
   const cab = ['ID Crediario','ID Venda','Cliente','CPF','Telefone','Data Crediario','Total R$','Parcela','Total Parcelas','Vencimento','Status','Data Pagamento','Valor R$'];
   const rows = [linha(cab)];
-  creds.forEach(cr => {
+  crediario.forEach(cr => {
     const cli = clientes.find(c=>c.id===cr.clienteId);
     const np = (cr.parcelas||[]).length;
     (cr.parcelas||[]).forEach((p,i) => {
-      rows.push(linha([cr.id,cr.vendaId||'',cli?cli.nome:(cr.clienteNome||''),cli?(cli.cpf||''):'',cli?(cli.telefone||''):'',fmtData(cr.criadoEm),fmtMoeda(cr.total),i+1,np,fmtData(p.vencimento+'T00:00:00'),p.status==='pago'?'Pago':'Pendente',p.dataPagamento?fmtData(p.dataPagamento):'',fmtMoeda(p.valor)]));
+      rows.push(linha([cr.id,cr.vendaId||'',cli?cli.nome:(cr.clienteNome||''),cli?(cli.cpf||''):'',cli?(cli.telefone||''):'',fmtData(cr.criadoEm),fmtMoeda(cr.total),i+1,np,p.vencimento?fmtData(p.vencimento+'T00:00:00'):'',p.status==='pago'?'Pago':'Pendente',p.dataPagamento?fmtData(p.dataPagamento):'',fmtMoeda(p.valor)]));
     });
   });
   return rows.join('\n');
 }
 
 function csvVendas() {
-  const vendas  = LS.get('vendas');
-  const clientes = LS.get('clientes');
+  const { vendas, clientes } = DADOS;
   const cab = ['ID Venda','Data','Cliente','CPF','Forma Pagamento','Subtotal R$','Desconto R$','Total R$','Num Itens'];
   const rows = [linha(cab)];
   [...vendas].sort((a,b)=>b.criadoEm>a.criadoEm?1:-1).forEach(v => {
@@ -288,9 +300,7 @@ function csvVendas() {
 }
 
 function csvItens() {
-  const vendas  = LS.get('vendas');
-  const clientes = LS.get('clientes');
-  const produtos = LS.get('produtos');
+  const { vendas, clientes, produtos } = DADOS;
   const cab = ['ID Venda','Data','Cliente','Produto','Referencia','Cor','Tamanho','Quantidade','Preco Unit R$','Subtotal R$','Forma Pagamento'];
   const rows = [linha(cab)];
   [...vendas].sort((a,b)=>b.criadoEm>a.criadoEm?1:-1).forEach(v => {
@@ -298,7 +308,7 @@ function csvItens() {
     (v.itens||[]).forEach(it => {
       const prod = produtos.find(p=>p.id===it.produtoId);
       const qtd = parseInt(it.quantidade)||1;
-      const pu = parseFloat(it.precoUnitario||it.preco||0);
+      const pu  = parseFloat(it.precoUnitario||it.preco||0);
       rows.push(linha([v.id,fmtData(v.criadoEm),cli?cli.nome:(v.clienteNome||'Sem cliente'),prod?prod.nome:(it.nome||it.produtoNome||''),prod?(prod.referencia||prod.codigo||''):'',it.cor||'',it.tamanho||'',qtd,fmtMoeda(pu),fmtMoeda(pu*qtd),formaLabel(v.formaPagamento)]));
     });
   });
@@ -306,58 +316,56 @@ function csvItens() {
 }
 
 function csvPorMes() {
-  const vendas = LS.get('vendas');
+  const { vendas } = DADOS;
   const mapa = {};
+  const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   vendas.forEach(v => {
     if (!v.criadoEm) return;
     const d = new Date(v.criadoEm);
     const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    if (!mapa[k]) mapa[k] = {label:`${meses[d.getMonth()]} ${d.getFullYear()}`,mes:d.getMonth()+1,ano:d.getFullYear(),n:0,total:0,dinheiro:0,pix:0,cartao_debito:0,cartao_credito:0,crediario:0,outros:0};
-    const m = mapa[k];
-    m.n++; m.total+=parseFloat(v.total)||0;
+    if (!mapa[k]) mapa[k] = {label:`${MESES[d.getMonth()]} ${d.getFullYear()}`,mes:d.getMonth()+1,ano:d.getFullYear(),n:0,total:0,dinheiro:0,pix:0,cartao_debito:0,cartao_credito:0,crediario:0,outros:0};
+    const m=mapa[k]; m.n++; m.total+=parseFloat(v.total)||0;
     const fp=v.formaPagamento||'outros';
     if(fp in m) m[fp]+=parseFloat(v.total)||0; else m.outros+=parseFloat(v.total)||0;
   });
   const cab = ['Mes','Num Mes','Ano','Num Vendas','Total R$','Dinheiro R$','PIX R$','Cartao Debito R$','Cartao Credito R$','Crediario R$','Outros R$'];
   const rows = [linha(cab)];
-  Object.keys(mapa).sort().forEach(k=>{const m=mapa[k];rows.push(linha([m.label,m.mes,m.ano,m.n,fmtMoeda(m.total),fmtMoeda(m.dinheiro),fmtMoeda(m.pix),fmtMoeda(m.cartao_debito),fmtMoeda(m.cartao_credito),fmtMoeda(m.crediario),fmtMoeda(m.outros)]));});
+  Object.keys(mapa).sort().forEach(k => {
+    const m=mapa[k];
+    rows.push(linha([m.label,m.mes,m.ano,m.n,fmtMoeda(m.total),fmtMoeda(m.dinheiro),fmtMoeda(m.pix),fmtMoeda(m.cartao_debito),fmtMoeda(m.cartao_credito),fmtMoeda(m.crediario),fmtMoeda(m.outros)]));
+  });
   return rows.join('\n');
 }
 
-function csvRelatorioClientes() {
-  const clientes = LS.get('clientes');
-  const vendas   = LS.get('vendas');
-  const creds    = LS.get('crediario');
-  const cab = ['Cliente','CPF','Telefone','Email','Num Compras','Total Compras R$','Ticket Medio R$','Primeira Compra','Ultima Compra','Num Crediarios','Parcelas Pagas','Parcelas Pendentes','Total Pago Crediario R$','Saldo Devedor R$','Saldo com Juros R$','Produto Mais Comprado','Formas Pagamento'];
+function csvRelClientes() {
+  const { clientes, vendas, crediario } = DADOS;
+  const cab = ['Cliente','CPF','Telefone','Email','Num Compras','Total Compras R$','Ticket Medio R$','Primeira Compra','Ultima Compra','Num Crediarios','Parc Pagas','Parc Pendentes','Total Pago R$','Saldo Devedor R$','Saldo com Juros R$','Produto Favorito','Formas Pagamento'];
   const rows = [linha(cab)];
   clientes.forEach(c => {
-    const vc = vendas.filter(v=>v.clienteId===c.id);
-    const total = vc.reduce((s,v)=>s+(parseFloat(v.total)||0),0);
-    const tick  = vc.length ? total/vc.length : 0;
-    const sorted = [...vc].sort((a,b)=>a.criadoEm<b.criadoEm?-1:1);
-    const prim = sorted[0]?.criadoEm||'';
-    const ult  = sorted[sorted.length-1]?.criadoEm||'';
-    const contaProd={};
-    vc.forEach(v=>(v.itens||[]).forEach(it=>{const n=it.nome||it.produtoNome||'';if(n)contaProd[n]=(contaProd[n]||0)+(parseInt(it.quantidade)||1);}));
-    let maisProd='',maxQ=0;
-    Object.entries(contaProd).forEach(([n,q])=>{if(q>maxQ){maxQ=q;maisProd=n;}});
+    const vc=vendas.filter(v=>v.clienteId===c.id);
+    const total=vc.reduce((s,v)=>s+(parseFloat(v.total)||0),0);
+    const tick=vc.length?total/vc.length:0;
+    const sorted=[...vc].sort((a,b)=>a.criadoEm<b.criadoEm?-1:1);
+    const prim=sorted[0]?.criadoEm||'', ult=sorted[sorted.length-1]?.criadoEm||'';
+    const cp={};
+    vc.forEach(v=>(v.itens||[]).forEach(it=>{const n=it.nome||it.produtoNome||'';if(n)cp[n]=(cp[n]||0)+(parseInt(it.quantidade)||1);}));
+    let mp='',mq=0; Object.entries(cp).forEach(([n,q])=>{if(q>mq){mq=q;mp=n;}});
     const formas=[...new Set(vc.map(v=>formaLabel(v.formaPagamento)).filter(Boolean))].join(', ');
-    const credsCli=creds.filter(cr=>cr.clienteId===c.id);
-    let pp=0,pn=0,tPago=0,saldo=0,saldoJ=0;
-    credsCli.forEach(cr=>(cr.parcelas||[]).forEach(p=>{if(p.status==='pago'){pp++;tPago+=parseFloat(p.valor)||0;}else{pn++;const v=parseFloat(p.valor)||0;const j=calcJuros(p.valor,p.vencimento);saldo+=v;saldoJ+=v+j;}}));
-    rows.push(linha([c.nome,c.cpf||'',c.telefone||'',c.email||'',vc.length,fmtMoeda(total),fmtMoeda(tick),fmtData(prim),fmtData(ult),credsCli.length,pp,pn,fmtMoeda(tPago),fmtMoeda(saldo),fmtMoeda(saldoJ),maisProd,formas]));
+    const cc=crediario.filter(cr=>cr.clienteId===c.id);
+    let pp=0,pn=0,tp=0,sd=0,sj=0;
+    cc.forEach(cr=>(cr.parcelas||[]).forEach(p=>{if(p.status==='pago'){pp++;tp+=parseFloat(p.valor)||0;}else{pn++;const vv=parseFloat(p.valor)||0;sd+=vv;sj+=vv+calcJuros(p.valor,p.vencimento);}}));
+    rows.push(linha([c.nome||'',c.cpf||'',c.telefone||'',c.email||'',vc.length,fmtMoeda(total),fmtMoeda(tick),fmtData(prim),fmtData(ult),cc.length,pp,pn,fmtMoeda(tp),fmtMoeda(sd),fmtMoeda(sj),mp,formas]));
   });
   return rows.join('\n');
 }
 
 function csvProdutos() {
-  const produtos = LS.get('produtos');
-  const cab = ['ID','Nome','Referencia','Marca','Categoria','Preco Custo R$','Preco Venda R$','Margem %','Estoque Total','Variacoes (Cor;Tam:Qtd)','Ativo'];
+  const { produtos } = DADOS;
+  const cab = ['ID','Nome','Referencia','Marca','Categoria','Preco Custo R$','Preco Venda R$','Margem %','Estoque Total','Variacoes','Ativo'];
   const rows = [linha(cab)];
   produtos.forEach(p => {
     const custo=parseFloat(p.precoCusto)||0, venda=parseFloat(p.precoVenda)||0;
-    const mg = custo>0 ? ((venda-custo)/custo*100).toFixed(1).replace('.',',') : '0,0';
+    const mg=custo>0?((venda-custo)/custo*100).toFixed(1).replace('.',','):'0,0';
     let est=0; const vars=[];
     if(p.variacoes) Object.entries(p.variacoes).forEach(([k,q])=>{const n=parseInt(q)||0;est+=n;if(n>0)vars.push(`${k}:${n}`);});
     rows.push(linha([p.id,p.nome||'',p.referencia||p.codigo||'',p.marca||'',p.categoria||'',fmtMoeda(custo),fmtMoeda(venda),mg,est,vars.join(' | '),p.ativo===false?'Não':'Sim']));
@@ -365,70 +373,122 @@ function csvProdutos() {
   return rows.join('\n');
 }
 
-// ── Mapa ───────────────────────────────────────────────────────────
+// ─── Mapa ──────────────────────────────────────────────────────
 const ARQUIVOS = {
-  clientes:    { fn: csvClientes,          nome: 'clientes.csv' },
-  cred_pend:   { fn: csvCrediarioPendente, nome: 'crediario_pendente.csv' },
-  cred_hist:   { fn: csvCrediarioHistorico,nome: 'crediario_historico.csv' },
-  vendas:      { fn: csvVendas,            nome: 'vendas.csv' },
-  itens:       { fn: csvItens,             nome: 'itens_vendidos.csv' },
-  por_mes:     { fn: csvPorMes,            nome: 'vendas_por_mes.csv' },
-  rel_cliente: { fn: csvRelatorioClientes, nome: 'relatorio_clientes.csv' },
-  produtos:    { fn: csvProdutos,          nome: 'produtos_estoque.csv' }
+  clientes:    { fn: csvClientes,      nome: 'clientes.csv' },
+  cred_pend:   { fn: csvCredPendente,  nome: 'crediario_pendente.csv' },
+  cred_hist:   { fn: csvCredHistorico, nome: 'crediario_historico.csv' },
+  vendas:      { fn: csvVendas,        nome: 'vendas.csv' },
+  itens:       { fn: csvItens,         nome: 'itens_vendidos.csv' },
+  por_mes:     { fn: csvPorMes,        nome: 'vendas_por_mes.csv' },
+  rel_cliente: { fn: csvRelClientes,   nome: 'relatorio_clientes.csv' },
+  produtos:    { fn: csvProdutos,      nome: 'produtos_estoque.csv' }
 };
 
 function baixar(tipo) {
+  try { baixarCsv(ARQUIVOS[tipo].nome, ARQUIVOS[tipo].fn()); }
+  catch(e) { log('❌ Erro em ' + tipo + ': ' + e.message, true); console.error(e); }
+}
+function baixarTudo() {
+  log('📦 Exportando todos os arquivos...');
+  const tipos = Object.keys(ARQUIVOS);
+  let i = 0;
+  const next = () => { if(i>=tipos.length){log('✅ Concluído! Todos os arquivos baixados.');return;} baixar(tipos[i++]); setTimeout(next,900); };
+  next();
+}
+
+// ─── Estatísticas ──────────────────────────────────────────────
+function mostrarStats() {
+  const { clientes, vendas, crediario, produtos } = DADOS;
+  let pp=0, vp=0;
+  crediario.forEach(c=>(c.parcelas||[]).forEach(p=>{ if(p.status!=='pago'){pp++;vp+=parseFloat(p.valor)||0;} }));
+  const totalItens=vendas.reduce((s,v)=>s+(v.itens||[]).length,0);
+  const meses=new Set(vendas.filter(v=>v.criadoEm).map(v=>v.criadoEm.substring(0,7)));
+  document.getElementById('sClientes').textContent  = clientes.length;
+  document.getElementById('sVendas').textContent    = vendas.length;
+  document.getElementById('sCrediarios').textContent = crediario.length;
+  document.getElementById('sPendentes').textContent  = pp;
+  document.getElementById('sValorPend').textContent  = 'R$ '+fmtMoeda(vp);
+  document.getElementById('sProdutos').textContent   = produtos.length;
+  document.getElementById('c1').textContent = clientes.length+' clientes';
+  document.getElementById('c2').textContent = pp+' parcelas pendentes';
+  document.getElementById('c3').textContent = crediario.length+' crediários';
+  document.getElementById('c4').textContent = vendas.length+' vendas';
+  document.getElementById('c5').textContent = totalItens+' itens';
+  document.getElementById('c6').textContent = meses.size+' meses de histórico';
+  document.getElementById('c7').textContent = clientes.length+' clientes';
+  document.getElementById('c8').textContent = produtos.length+' produtos';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CARREGAMENTO — localStorage primeiro, Firebase como fallback
+// ═══════════════════════════════════════════════════════════════
+function setProgresso(pct, msg) {
+  document.getElementById('loadFill').style.width = pct + '%';
+  if (msg) document.getElementById('loadMsg').textContent = msg;
+}
+
+function carregarDoLocalStorage() {
   try {
-    const { fn, nome } = ARQUIVOS[tipo];
-    baixarCsv(nome, fn());
+    const ls = k => { try { return JSON.parse(localStorage.getItem('movePe_'+k)||'[]'); } catch(e){ return []; } };
+    DADOS.clientes  = ls('clientes');
+    DADOS.vendas    = ls('vendas');
+    DADOS.crediario = ls('crediario');
+    DADOS.produtos  = ls('produtos');
+    return DADOS.clientes.length + DADOS.vendas.length + DADOS.crediario.length > 0;
+  } catch(e) { return false; }
+}
+
+async function carregarDoFirebase(cfg) {
+  setProgresso(10, 'Conectando ao Firebase...');
+  if (firebase.apps.length === 0) firebase.initializeApp(cfg);
+  const db = firebase.firestore();
+
+  const cols = ['clientes','vendas','crediario','produtos'];
+  const total = cols.length;
+  let done = 0;
+
+  for (const col of cols) {
+    setProgresso(10 + (done/total)*80, `Carregando ${col}...`);
+    const snap = await db.collection('movePe_'+col).get();
+    DADOS[col] = snap.docs.map(d => d.data());
+    done++;
+  }
+  setProgresso(100, 'Concluído!');
+}
+
+async function iniciar() {
+  // 1. Tenta localStorage primeiro (instantâneo)
+  setProgresso(20, 'Verificando dados locais...');
+  const temLocal = carregarDoLocalStorage();
+
+  if (temLocal) {
+    setProgresso(100, 'Dados carregados!');
+    mostrarStats();
+    return;
+  }
+
+  // 2. Se localStorage vazio, tenta Firebase
+  setProgresso(30, 'Dados locais vazios — conectando ao Firebase...');
+  try {
+    const cfg = JSON.parse(localStorage.getItem('movePe_fb_config') || 'null');
+    if (!cfg || !cfg.apiKey) {
+      document.getElementById('loadMsg').textContent = '⚠️ Firebase não configurado e dados locais vazios.';
+      document.getElementById('loadSub').textContent = 'Abra o sistema normalmente primeiro para carregar os dados.';
+      return;
+    }
+    await carregarDoFirebase(cfg);
+    mostrarStats();
   } catch(e) {
-    log('❌ Erro em ' + tipo + ': ' + e.message, true);
+    document.getElementById('loadMsg').textContent = '❌ Erro ao carregar: ' + e.message;
+    document.getElementById('loadSub').textContent = 'Tente abrir o dashboard do sistema e volte aqui.';
     console.error(e);
   }
 }
 
-function baixarTudo() {
-  log('📦 Iniciando exportação de todos os arquivos...');
-  const tipos = Object.keys(ARQUIVOS);
-  let i = 0;
-  const next = () => {
-    if (i >= tipos.length) { log('✅ Todos os arquivos foram baixados!'); return; }
-    baixar(tipos[i++]);
-    setTimeout(next, 800);
-  };
-  next();
-}
-
-// ── Estatísticas ───────────────────────────────────────────────────
-function carregarStats() {
-  const cl = LS.get('clientes');
-  const vd = LS.get('vendas');
-  const cr = LS.get('crediario');
-  const pr = LS.get('produtos');
-  let pp=0, vp=0;
-  cr.forEach(c=>(c.parcelas||[]).forEach(p=>{ if(p.status!=='pago'){pp++;vp+=parseFloat(p.valor)||0;} }));
-  const totalItens = vd.reduce((s,v)=>s+(v.itens||[]).length,0);
-  const meses = new Set(vd.filter(v=>v.criadoEm).map(v=>v.criadoEm.substring(0,7)));
-
-  document.getElementById('sClientes').textContent  = cl.length;
-  document.getElementById('sVendas').textContent    = vd.length;
-  document.getElementById('sCrediarios').textContent = cr.length;
-  document.getElementById('sPendentes').textContent  = pp;
-  document.getElementById('sValorPend').textContent  = 'R$ ' + fmtMoeda(vp);
-  document.getElementById('sProdutos').textContent   = pr.length;
-
-  document.getElementById('c1').textContent = cl.length + ' clientes';
-  document.getElementById('c2').textContent = pp + ' parcelas pendentes';
-  document.getElementById('c3').textContent = cr.length + ' crediários';
-  document.getElementById('c4').textContent = vd.length + ' vendas';
-  document.getElementById('c5').textContent = totalItens + ' itens';
-  document.getElementById('c6').textContent = meses.size + ' meses de histórico';
-  document.getElementById('c7').textContent = cl.length + ' clientes';
-  document.getElementById('c8').textContent = pr.length + ' produtos';
-}
-
-// ── Inicializa ─────────────────────────────────────────────────────
-carregarStats();
+iniciar();
 </script>
 </body>
 </html>
